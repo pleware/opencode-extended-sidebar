@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
-/** Shared sidebar chrome: theme colours, fold headers, diff stats, kv persistence. */
-import { Show, type JSX } from "solid-js"
+/** Shared sidebar chrome: brand tabs, theme colours, fold headers, diff stats, kv persistence. */
+import { For, Show, type JSX } from "solid-js"
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 
 export type ThemeColors = {
@@ -105,7 +105,9 @@ export function FoldHeader(props: {
     Boolean(props.diff && (props.diff.additions > 0 || props.diff.deletions > 0))
   return (
     <box flexDirection="row" onMouseUp={props.onToggle}>
-      <text fg={props.colors.text}>{label()}</text>
+      <text fg={props.colors.text} underline>
+        {label()}
+      </text>
       <Show when={hasDiff()}>
         <text> </text>
         <DiffStat
@@ -114,6 +116,37 @@ export function FoldHeader(props: {
           colors={props.colors}
         />
       </Show>
+    </box>
+  )
+}
+
+/** Brand + clickable tabs. Active tab is bold + primary; every tab is underlined. */
+export function BrandTabs(props: {
+  brand: string
+  tabs: readonly string[]
+  labels: Record<string, string>
+  active: string | null
+  colors: ThemeColors
+  onPick: (tab: string) => void
+}): JSX.Element {
+  const brand = () => props.colors.primary || props.colors.text
+  const tabFg = (tab: string) =>
+    props.active === tab ? props.colors.primary || props.colors.text : props.colors.textMuted
+  return (
+    <box flexDirection="row" gap={1}>
+      <text fg={brand()} bold>
+        {props.brand}
+      </text>
+      <For each={props.tabs}>
+        {(tab: string) => (
+          <box flexDirection="row" gap={1} onMouseUp={() => props.onPick(tab)}>
+            <text fg={props.colors.textMuted}>|</text>
+            <text fg={tabFg(tab)} bold={props.active === tab} underline>
+              {props.labels[tab] ?? tab}
+            </text>
+          </box>
+        )}
+      </For>
     </box>
   )
 }

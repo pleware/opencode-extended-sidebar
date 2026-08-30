@@ -1,5 +1,5 @@
 /**
- * Read-only oh-my-openagent helpers (boulder + plan + config).
+ * Read-only oh-my-openagent helpers (boulder + plans + delegates + config).
  * Zero deps — only node:fs / node:path / os.
  */
 import fs from "node:fs"
@@ -19,6 +19,15 @@ export type Delegate = {
   updatedAt: number | null
 }
 
+export type PlanView = {
+  id: string
+  name: string
+  status: string
+  sessionId: string | null
+  updatedAt: number | null
+  current: boolean
+}
+
 export type OmoSnapshot = {
   present: boolean
   boulderPath: string | null
@@ -27,6 +36,7 @@ export type OmoSnapshot = {
   agent: string | null
   planName: string | null
   plan: { total: number; completed: number; percent: number; steps: PlanStep[] }
+  plans: PlanView[]
   delegates: Delegate[]
   stamp: string
 }
@@ -57,23 +67,20 @@ function parseStamp(v: string | number | undefined): number | null {
   return null
 }
 
-type RawBoulder = {
+type RawWork = {
   plan_name?: string
   active_plan?: string
-  active_work_id?: string
   agent?: string
   status?: string
+  updated_at?: string | number
+  started_at?: string | number
+  session_ids?: string[]
   task_sessions?: Record<string, RawTask>
-  works?: Record<
-    string,
-    {
-      plan_name?: string
-      active_plan?: string
-      agent?: string
-      status?: string
-      task_sessions?: Record<string, RawTask>
-    }
-  >
+}
+
+type RawBoulder = RawWork & {
+  active_work_id?: string
+  works?: Record<string, RawWork>
 }
 
 function stripSessionPrefix(id: string | null | undefined): string | null {
@@ -81,6 +88,82 @@ function stripSessionPrefix(id: string | null | undefined): string | null {
   const s = id.trim()
   if (!s) return null
   return s.startsWith("opencode:") ? s.slice("opencode:".length) : s
+}
+
+function lastSessionId(ids: string[] | undefined): string | null {
+  if (!ids?.length) return null
+  for (let i = ids.length - 1; i >= 0; i--) {
+    const id = stripSessionPrefix(ids[i])
+    if (id) return id
+  }
+  return null
+}
+
+function planLabel(name: string | null | undefined, activePlan: string | null | undefined): string {
+  const n = typeof name === "string" ? name.trim() : ""
+  if (n) return n
+  if (activePlan && typeof activePlan === "string") {
+    const base = path.basename(activePlan.replace(/\\/g, "/")).replace(/\.md$/i, "")
+    if (base) return base
+  }
+  return "plan"
+}
+
+/** Short status for the Plans row suffix — no full paths, no checklist text. */
+export function planStatusLabel(status: string): string {
+  const s = status.toLowerCase()
+  if (s === "in_progress" || s === "active") return "running"
+  if (s === "completed") return "done"
+  if (s === "failed") return "error"
+  if (s === "queued") return "pending"
+  return s
+}
+
+function asPlan(id: string, w: RawWork, current: boolean): PlanView {
+  return {
+    id,
+    name: planLabel(w.plan_name, w.active_plan),
+    status: (w.status || "unknown").toLowerCase(),
+    sessionId: lastSessionId(w.session_ids),
+    updatedAt: parseStamp(w.updated_at) ?? parseStamp(w.started_at),
+    current,
+  }
+}
+
+/** Recent boulder works + the top-level plan, active first then newest. */
+function collectPlans(raw: RawBoulder): PlanView[] {
+  const out: PlanView[] = []
+  const seen = new Set<string>()
+  const push = (p: PlanView) => {
+    const key = p.name.toLowerCase() === "plan" ? p.id : p.name.toLowerCase()
+    if (seen.has(key)) {
+      const prev = out.find((x) => (x.name.toLowerCase() === "plan" ? x.id : x.name.toLowerCase()) === key)
+      if (prev && p.current) prev.current = true
+      return
+    }
+    seen.add(key)
+    out.push(p)
+  }
+
+  const workId = raw.active_work_id ?? null
+  if (raw.works) {
+    for (const [id, w] of Object.entries(raw.works)) {
+      if (!w || typeof w !== "object") continue
+      if (!(w.plan_name || w.active_plan || w.status)) continue
+      push(asPlan(id, w, Boolean(workId && id === workId)))
+    }
+  }
+
+  if (raw.plan_name || raw.active_plan) {
+    const current = !workId || !raw.works?.[workId]
+    push(asPlan("active", raw, current))
+  }
+
+  out.sort((a, b) => {
+    if (a.current !== b.current) return a.current ? -1 : 1
+    return (b.updatedAt ?? 0) - (a.updatedAt ?? 0)
+  })
+  return out.slice(0, 20)
 }
 
 /** Boulder + plan mtimes only — no JSON parse. */
@@ -179,6 +262,7 @@ export function emptyOmo(): OmoSnapshot {
     agent: null,
     planName: null,
     plan: { total: 0, completed: 0, percent: 0, steps: [] },
+    plans: [],
     delegates: [],
     stamp: "0",
   }
@@ -231,6 +315,7 @@ export function readOmo(projectRoot: string | null | undefined): OmoSnapshot {
       percent: total ? Math.round((completed / total) * 100) : 0,
       steps,
     },
+    plans: collectPlans(raw),
     delegates: normalizeDelegates(tasks),
     stamp: `${fileStamp(boulderPath)}|${fileStamp(planPath)}`,
   }

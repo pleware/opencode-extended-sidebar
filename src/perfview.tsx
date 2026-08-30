@@ -70,7 +70,7 @@ function MetricRow(props: {
   return (
     <box flexDirection="row" onMouseUp={props.onSelect}>
       <text fg={props.glyphFg}>{`${props.glyph} `}</text>
-      <text fg={props.nameFg} bold={Boolean(props.bold)}>
+      <text fg={props.nameFg} bold={Boolean(props.bold)} underline={Boolean(props.onSelect)}>
         {body().name}
       </text>
       <For each={body().chips}>

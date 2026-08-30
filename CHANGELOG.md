@@ -1,5 +1,6 @@
 # Changelog
 
+- **0.2.3** (2026-08-30) Add an OMO Plans tab, underline clickable chrome, and label task tools by their short description.
 - **0.2.2** (2026-08-30) Speed up large-tree refresh and mark thinking with a therefore sign instead of a star.
 - **0.2.1** (2026-08-30) Initial public release of the OpenCode Extended Sidebar TUI plugin.
 One sentence per commit. The `commit-msg` hook bumps the patch in `package.json` and prepends a line here.

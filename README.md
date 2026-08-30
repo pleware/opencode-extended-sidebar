@@ -36,7 +36,7 @@ Extended Sidebar puts it back on screen. It reads OpenCode's own SQLite database
 
 ## ≡ Tool feed that names things
 
-> Not another wall of `bash`. Each tool row is labelled with what actually ran — the command, the file, the search pattern — plus how long it took. Running calls tick up live, failures are marked with `×`.
+> Not another wall of `bash` or `task`. Each tool row is labelled with what actually ran — the command, the file, the search pattern, or the short task description — plus how long it took. Running calls tick up live, failures are marked with `×`.
 
 ## ± File changes with diff stats
 
@@ -47,6 +47,16 @@ Extended Sidebar puts it back on screen. It reads OpenCode's own SQLite database
 ## ⋔ Delegates and sub-agents
 
 > When an orchestrator hands work off, the delegates show up as their own rows — tokens, status, live pulse, and a click to jump into any of them. **Sessions** lists the project's boulder. **Current** lists only children of the current session — a new main session starts empty, even if `.omo/boulder.json` still has yesterday's tasks.
+
+## ▤ OMO plans
+
+> When the project has oh-my-openagent, a second header line appears under OES:
+>
+> ```
+> OMO | Plans
+> ```
+>
+> **Plans** lists the latest boulder works by name and status (active first, then newest). A row with a session is a click to jump there. Without `.omo/` the line is gone — no warning, no empty OMO chrome. The checklist itself stays out of the sidebar.
 
 ## ◴ Where the time actually goes
 
@@ -60,13 +70,14 @@ Extended Sidebar puts it back on screen. It reads OpenCode's own SQLite database
 
 ## ▣ Three focused views
 
-> One header line, three scopes:
+> One header line, three scopes — and a second line when OMO is present:
 >
 > ```
 > OES | Sessions | Current | Perf
+> OMO | Plans
 > ```
 >
-> **Sessions** is the project view: where you are, where you have been, who else is running. **Current** is the deep view: this agent, the delegates it spawned (not the project's leftover boulder), its tools, its files. **Perf** is the timing view. Your choice is remembered between restarts, as is every collapsed section.
+> **Sessions** is the project view: where you are, where you have been, who else is running. **Current** is the deep view: this agent, the delegates it spawned (not the project's leftover boulder), its tools, its files. **Perf** is the timing view. **Plans** is the OMO view: recent works and their status. Your choice is remembered between restarts, as is every collapsed section. Clickable labels — tabs, fold headers, session rows — are underlined.
 
 ## ⊘ Privacy first
 
@@ -119,7 +130,7 @@ The three arrows blink about twice per second, and only the glyph blinks — the
 | accent `∴`             | `primary`                   | Perf: thinking time and reasoning tokens         |
 
 
-Direction beats freshness: while an arrow is lit it drives the colour, so `↑` reads yellow even on a session that was busy a millisecond ago. The session you are currently in is additionally **bold**, which is how you tell it apart from any other accent-coloured row.
+Direction beats freshness: while an arrow is lit it drives the colour, so `↑` reads yellow even on a session that was busy a millisecond ago. The session you are currently in is additionally **bold**, which is how you tell it apart from any other accent-coloured row. Anything you can click — a tab, a fold header, a session or plan row — is **underlined**.
 
 The three arrows keep their meaning under **Perf**, where they label measured time instead of live traffic: `↑` is time waiting for the first token, `↓` is time spent streaming, `→` is time inside tool calls.
 
@@ -184,7 +195,7 @@ Changes are picked up on the next refresh — no restart needed.
 | Source          | Path                                                          | Used for                                         |
 | --------------- | ------------------------------------------------------------- | ------------------------------------------------ |
 | OpenCode SQLite | `~/.local/share/opencode/opencode.db` (or `OPENCODE_DB_PATH`) | sessions, tokens, cost, tool parts, edited files, turn timings |
-| OMO boulder     | `<project>/.omo/boulder.json` (legacy `.sisyphus/`)           | delegates — section is hidden when absent        |
+| OMO boulder     | `<project>/.omo/boulder.json` (legacy `.sisyphus/`)           | delegates + plan names/status — OMO line hidden when absent |
 | `oes.json`      | plugin / user config / project                                | display limits                                   |
 
 
@@ -202,7 +213,7 @@ Perf times each assistant turn from its own records: waiting is the gap between 
 
 Cost is shown only when the provider reports it. Many gateways record `0`, and the sidebar will not invent a price from an online catalogue.
 
-`oh-my-openagent` is optional enrichment, never a requirement. Without `.omo/` you simply get one section fewer, and no warnings.
+`oh-my-openagent` is optional enrichment, never a requirement. Without `.omo/` the **OMO | Plans** line is gone, Delegates is hidden, and there are no warnings.
 
 ## Project layout
 
@@ -210,7 +221,7 @@ Cost is shown only when the provider reports it. Many gateways record `0`, and t
 src/
   tui.tsx       # plugin entry (sidebar_content slot)
   sidebar.tsx   # tabs, foldable sections, rows
-  chrome.tsx    # shared fold headers, diff stats, kv persistence
+  chrome.tsx    # brand tabs, fold headers, diff stats, kv persistence
   perfview.tsx  # Perf tab rendering
   perf.ts       # turn timings per model, phase and tool
   monitor.ts    # fs.watch + poll fingerprint
@@ -223,7 +234,7 @@ src/
   pulse.ts      # live/stale detection, flow, tool labels, bars, sparklines
   sqlite.ts     # bun:sqlite | node:sqlite
   paths.ts      # XDG paths / OPENCODE_DB_PATH
-  omo.ts        # boulder / delegates
+  omo.ts        # boulder / delegates / plans
 oes.json        # display defaults
 ```
 

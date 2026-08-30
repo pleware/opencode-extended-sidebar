@@ -1,9 +1,10 @@
 /** @jsxImportSource @opentui/solid */
 import { createEffect, createMemo, createSignal, For, on, Show, onCleanup, type JSX } from "solid-js"
 import type { TuiPluginApi, TuiTheme } from "@opencode-ai/plugin/tui"
-import { emptyOmo } from "./omo.js"
+import { emptyOmo, planStatusLabel } from "./omo.js"
 import { emptyDb } from "./db.js"
 import {
+  BrandTabs,
   DiffStat,
   FoldHeader,
   kvRead,
@@ -45,6 +46,7 @@ import {
   pulseAgeMs,
   sessionBusyFromEvent,
   sessionIdFromEvent,
+  preferToolLabel,
   toolFlow,
   toolHitFromEvent,
   toolMark,
@@ -158,7 +160,7 @@ function AgentLine(props: RowData & {
   return (
     <box flexDirection="row" onMouseUp={props.onSelect}>
       <text fg={glyphFg()}>{`${props.glyph ?? markGlyph(props.mark, props.frame ?? 0, props.flow)} `}</text>
-      <text fg={bodyFg()} bold={Boolean(props.current)}>
+      <text fg={bodyFg()} bold={Boolean(props.current)} underline={Boolean(props.onSelect)}>
         {rest()}
       </text>
       <Show when={Boolean(props.diff && (props.diff.additions > 0 || props.diff.deletions > 0))}>
@@ -232,7 +234,7 @@ function mergeTools(
     }
     byId.set(hit.id, {
       id: hit.id,
-      name: hit.name,
+      name: preferToolLabel(hit.name, prev?.name),
       status: hit.status,
       startedAt: prev?.startedAt ?? now,
       endedAt: hit.status === "running" ? null : now,
@@ -252,40 +254,16 @@ function mergeTools(
     .slice(0, limit)
 }
 
-const TABS = ["sessions", "current", "perf"] as const
+const OES_TABS = ["sessions", "current", "perf"] as const
+const OMO_TABS = ["plans"] as const
+const TABS = [...OES_TABS, ...OMO_TABS] as const
 type Tab = (typeof TABS)[number]
 
 const TAB_LABELS: Record<Tab, string> = {
   sessions: "Sessions",
   current: "Current",
   perf: "Perf",
-}
-
-function ScopeTabs(props: {
-  tab: Tab
-  colors: ThemeColors
-  onPick: (tab: Tab) => void
-}): JSX.Element {
-  const brand = () => props.colors.primary || props.colors.text
-  const tabFg = (tab: Tab) =>
-    props.tab === tab ? props.colors.primary || props.colors.text : props.colors.textMuted
-  return (
-    <box flexDirection="row" gap={1}>
-      <text fg={brand()} bold>
-        OES
-      </text>
-      <For each={TABS}>
-        {(tab) => (
-          <box flexDirection="row" gap={1} onMouseUp={() => props.onPick(tab)}>
-            <text fg={props.colors.textMuted}>|</text>
-            <text fg={tabFg(tab)} bold={props.tab === tab}>
-              {TAB_LABELS[tab]}
-            </text>
-          </box>
-        )}
-      </For>
-    </box>
-  )
+  plans: "Plans",
 }
 
 function emptyLive(): LiveSnapshot {
@@ -318,6 +296,11 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   const [foldTools, setFoldTools] = createSignal(kvRead(props.api, KV_FOLD_TOOLS, false))
   const [foldFiles, setFoldFiles] = createSignal(kvRead(props.api, KV_FOLD_FILES, false))
   const [tab, setTab] = createSignal<Tab>(kvReadOne(props.api, KV_TAB, "sessions", TABS))
+  const shown = createMemo((): Tab => {
+    const t = tab()
+    if (t === "plans" && !snap().omo.present) return "sessions"
+    return t
+  })
   const [liveTools, setLiveTools] = createSignal<Record<string, ToolHit>>({})
   const [liveFiles, setLiveFiles] = createSignal<Record<string, FileView>>({})
 
@@ -664,22 +647,26 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
 
   const filesAll = createMemo(() =>
     decorateFiles(mergeFiles(snap().db.files ?? [], liveFiles()), projectDir(), {
-      git: tab() === "current" && !foldFiles(),
+      git: shown() === "current" && !foldFiles(),
     }),
   )
   const files = createMemo(() => filesAll().slice(0, oes().fileRows))
   const filesStat = createMemo(() => sumDiff(filesAll()))
 
-  const pickTab = (next: Tab) => {
-    setTab(next)
-    kvWriteOne(props.api, KV_TAB, next)
-    if (next === "current" || next === "perf") monitor.refresh()
+  const pickTab = (next: string) => {
+    if (!(TABS as readonly string[]).includes(next)) return
+    const picked = next as Tab
+    setTab(picked)
+    kvWriteOne(props.api, KV_TAB, picked)
+    if (picked === "current" || picked === "perf" || picked === "plans") monitor.refresh()
     requestRender()
   }
 
+  const plans = createMemo(() => snap().omo.plans.slice(0, 8))
+
   /** Perf SQLite scan runs only while this tab is open. */
   const perf = createMemo(() => {
-    if (tab() !== "perf") return emptyPerf(props.sessionId)
+    if (shown() !== "perf") return emptyPerf(props.sessionId)
     const o = oes()
     const history = o.perfHistory > 0
       ? snap()
@@ -715,9 +702,28 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
 
   return (
     <box flexDirection="column" gap={1} paddingTop={1}>
-      <ScopeTabs tab={tab()} colors={colors()} onPick={pickTab} />
+      <box flexDirection="column" gap={0}>
+        <BrandTabs
+          brand="OES"
+          tabs={OES_TABS}
+          labels={TAB_LABELS}
+          active={shown() === "plans" ? null : shown()}
+          colors={colors()}
+          onPick={pickTab}
+        />
+        <Show when={snap().omo.present}>
+          <BrandTabs
+            brand="OMO"
+            tabs={OMO_TABS}
+            labels={TAB_LABELS}
+            active={shown() === "plans" ? "plans" : null}
+            colors={colors()}
+            onPick={pickTab}
+          />
+        </Show>
+      </box>
       <box flexDirection="column" gap={1} paddingLeft={1}>
-        <Show when={tab() === "sessions"}>
+        <Show when={shown() === "sessions"}>
         <box flexDirection="column" gap={1}>
         <box flexDirection="column" gap={0}>
           <FoldHeader
@@ -831,7 +837,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
         </box>
         </Show>
 
-        <Show when={tab() === "current"}>
+        <Show when={shown() === "current"}>
         <box flexDirection="column" gap={1}>
         <box flexDirection="column" gap={0}>
           <FoldHeader
@@ -969,7 +975,33 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
         </box>
         </Show>
 
-        <Show when={tab() === "perf"}>
+        <Show when={shown() === "plans"}>
+          <box flexDirection="column" gap={0}>
+            {plans().length === 0 ? (
+              <text fg={colors().textMuted}>• none</text>
+            ) : (
+              <For each={plans()}>
+                {(p) => (
+                  <Row
+                    kind="agent"
+                    mark={composeMark({
+                      lifecycle: p.status,
+                      ageMs: pulseAgeMs(now(), p.updatedAt),
+                    })}
+                    name={p.name}
+                    suffix={planStatusLabel(p.status)}
+                    current={p.current}
+                    onSelect={
+                      p.sessionId ? () => selectSession(props.api, p.sessionId) : undefined
+                    }
+                  />
+                )}
+              </For>
+            )}
+          </box>
+        </Show>
+
+        <Show when={shown() === "perf"}>
           <PerfPanel
             api={props.api}
             perf={perf()}

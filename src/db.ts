@@ -163,7 +163,7 @@ export type ToolStatus = "running" | "completed" | "error" | "pending"
 export type ToolView = {
   id: string
   callId?: string | null
-  /** Display label: command / file hint, not just "bash". */
+  /** Display label: command / file / task description, not just "bash" or "task". */
   name: string
   tool: string
   status: ToolStatus
@@ -255,6 +255,8 @@ export function listToolEvents(db: SqlDb, sessionId: string, limit = TOOL_ROWS):
         command: matchField(data, "command"),
         filePath: matchField(data, "filePath"),
         pattern: matchField(data, "pattern"),
+        description: matchField(data, "description"),
+        subagent: matchField(data, "subagent_type") || matchField(data, "category"),
       }),
       status,
       startedAt,

@@ -377,18 +377,41 @@ function basenameHint(p: string): string {
   return (i >= 0 ? t.slice(i + 1) : t) || "file"
 }
 
-/** Command / file hint — never output bodies. */
+function firstHint(
+  tool: string,
+  parts: Array<string | null | undefined>,
+  maxLen = Infinity,
+): string {
+  const skip = tool.toLowerCase()
+  for (const p of parts) {
+    let t = (p || "").replace(/\s+/g, " ").trim()
+    if (!t) continue
+    t = t.replace(/\s*\(@[^)]*subagent\)\s*$/i, "").trim()
+    if (!t || t.toLowerCase() === skip) continue
+    // Task `description` is 3–5 words. A long hit is almost certainly prompt text.
+    if (t.length > maxLen) continue
+    return t
+  }
+  return ""
+}
+
+/** Command / file / task-description hint — never prompt or output bodies. */
 export function shortToolLabel(opts: {
   tool: string
   title?: string | null
   command?: string | null
   filePath?: string | null
   pattern?: string | null
+  description?: string | null
+  subagent?: string | null
 }): string {
   const tool = (opts.tool || "tool").trim() || "tool"
   if (opts.filePath) return `${tool} ${clipHint(basenameHint(opts.filePath), 14)}`.trim()
   if (opts.pattern) return `${tool} ${clipHint(opts.pattern, 12)}`.trim()
-  const raw = (opts.title || opts.command || "").replace(/\s+/g, " ").trim()
+  const raw =
+    firstHint(tool, [opts.description, opts.title], 80) ||
+    firstHint(tool, [opts.command]) ||
+    firstHint(tool, [opts.subagent], 80)
   const stripped = raw.replace(/^cd\s+\S+\s*(?:&&|;)\s*/i, "")
   const fileish = stripped.match(/(?:^|[\s/\\])((?:[\w.-]+[/\\])*[\w.-]+\.[a-z0-9]{1,8})\b/i)
   if (fileish?.[1]) return clipHint(basenameHint(fileish[1]), 20)
@@ -399,6 +422,19 @@ export function shortToolLabel(opts: {
   }
   if (stripped) return clipHint(stripped, 22)
   return tool
+}
+
+/** A later live event may only have the bare tool name — keep the specific label. */
+export function preferToolLabel(next: string, prev?: string | null): string {
+  const a = (next || "").trim()
+  const b = (prev || "").trim()
+  if (!a) return b
+  if (!b) return a
+  const bare = (s: string) => {
+    const t = s.toLowerCase()
+    return t === "task" || t === "tool" || t === "bash" || t === "unknown"
+  }
+  return bare(a) && !bare(b) ? b : a
 }
 
 function eventBags(evt: unknown): Record<string, unknown>[] {
@@ -424,6 +460,8 @@ function toolNameFromEvent(evt: unknown): string | null {
   let command: string | null = null
   let filePath: string | null = null
   let pattern: string | null = null
+  let description: string | null = null
+  let subagent: string | null = null
   for (const bag of bags) {
     if (!tool && typeof bag.tool === "string" && bag.tool.trim()) tool = bag.tool.trim()
     const state = bag.state && typeof bag.state === "object" ? (bag.state as Record<string, unknown>) : null
@@ -435,9 +473,20 @@ function toolNameFromEvent(evt: unknown): string | null {
     if (!command && typeof inp?.command === "string") command = inp.command
     if (!filePath && typeof inp?.filePath === "string") filePath = inp.filePath
     if (!pattern && typeof inp?.pattern === "string") pattern = inp.pattern
+    if (!description && typeof inp?.description === "string") description = inp.description
+    if (!subagent && typeof inp?.subagent_type === "string") subagent = inp.subagent_type
+    if (!subagent && typeof inp?.category === "string") subagent = inp.category
   }
-  if (!tool && !title && !command && !filePath) return null
-  return shortToolLabel({ tool: tool || "tool", title, command, filePath, pattern })
+  if (!tool && !title && !command && !filePath && !description) return null
+  return shortToolLabel({
+    tool: tool || "tool",
+    title,
+    command,
+    filePath,
+    pattern,
+    description,
+    subagent,
+  })
 }
 
 function toolIdFromEvent(evt: unknown): string | null {
@@ -468,7 +517,7 @@ function toolStatusFromEvent(evt: unknown): ToolHit["status"] | null {
   return null
 }
 
-/** Name + status only. Never reads args or outputs. */
+/** Name + status only. Label hints (file/command/description), never prompt or output. */
 export function toolHitFromEvent(evt: unknown): ToolHit | null {
   const status = toolStatusFromEvent(evt)
   if (!status) return null
