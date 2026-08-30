@@ -24,6 +24,8 @@ export type PlanView = {
   name: string
   status: string
   sessionId: string | null
+  /** Project-relative plan markdown path, when boulder lists active_plan. */
+  planPath: string | null
   updatedAt: number | null
   current: boolean
 }
@@ -119,19 +121,32 @@ export function planStatusLabel(status: string): string {
   return s
 }
 
-function asPlan(id: string, w: RawWork, current: boolean): PlanView {
+function relativePlanPath(projectRoot: string, activePlan: string | null | undefined): string | null {
+  const abs = resolvePlanPath(projectRoot, activePlan ?? null)
+  if (!abs) return null
+  try {
+    const rel = path.relative(projectRoot, abs)
+    if (!rel || rel.startsWith("..") || path.isAbsolute(rel)) return null
+    return rel.replace(/\\/g, "/")
+  } catch {
+    return null
+  }
+}
+
+function asPlan(id: string, w: RawWork, current: boolean, projectRoot: string): PlanView {
   return {
     id,
     name: planLabel(w.plan_name, w.active_plan),
     status: (w.status || "unknown").toLowerCase(),
     sessionId: lastSessionId(w.session_ids),
+    planPath: relativePlanPath(projectRoot, w.active_plan),
     updatedAt: parseStamp(w.updated_at) ?? parseStamp(w.started_at),
     current,
   }
 }
 
 /** Recent boulder works + the top-level plan, active first then newest. */
-function collectPlans(raw: RawBoulder): PlanView[] {
+function collectPlans(raw: RawBoulder, projectRoot: string): PlanView[] {
   const out: PlanView[] = []
   const seen = new Set<string>()
   const push = (p: PlanView) => {
@@ -150,13 +165,13 @@ function collectPlans(raw: RawBoulder): PlanView[] {
     for (const [id, w] of Object.entries(raw.works)) {
       if (!w || typeof w !== "object") continue
       if (!(w.plan_name || w.active_plan || w.status)) continue
-      push(asPlan(id, w, Boolean(workId && id === workId)))
+      push(asPlan(id, w, Boolean(workId && id === workId), projectRoot))
     }
   }
 
   if (raw.plan_name || raw.active_plan) {
     const current = !workId || !raw.works?.[workId]
-    push(asPlan("active", raw, current))
+    push(asPlan("active", raw, current, projectRoot))
   }
 
   out.sort((a, b) => {
@@ -315,7 +330,7 @@ export function readOmo(projectRoot: string | null | undefined): OmoSnapshot {
       percent: total ? Math.round((completed / total) * 100) : 0,
       steps,
     },
-    plans: collectPlans(raw),
+    plans: collectPlans(raw, root),
     delegates: normalizeDelegates(tasks),
     stamp: `${fileStamp(boulderPath)}|${fileStamp(planPath)}`,
   }

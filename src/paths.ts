@@ -60,6 +60,79 @@ export function canonicalizePath(p: string): string {
   return path.normalize(realpathSafe(resolved) ?? resolved)
 }
 
+/**
+ * OpenCode/git often emit posix paths (`D:/a/b` or `/d/a/b`).
+ * Fold those onto the host path so Windows `D:\` matches.
+ */
+export function normalizeIncomingPath(p: string): string {
+  let t = p.trim().replace(/\\/g, "/")
+  const m = t.match(/^\/([A-Za-z])\/(.*)$/)
+  if (m) t = `${m[1]}:/${m[2]}`
+  return t
+}
+
+function isInsideRoot(root: string, abs: string): boolean {
+  const rel = path.relative(root, abs)
+  if (!rel || path.isAbsolute(rel)) return false
+  const n = rel.replace(/\\/g, "/")
+  if (n === ".." || n.startsWith("../")) return false
+  return true
+}
+
+function asRootList(roots: string | readonly string[] | null | undefined): string[] {
+  if (!roots) return []
+  const list = typeof roots === "string" ? [roots] : [...roots]
+  const out: string[] = []
+  const seen = new Set<string>()
+  for (const r of list) {
+    if (!r || typeof r !== "string") continue
+    let key = r
+    try {
+      key = canonicalizePath(r)
+    } catch {
+      key = r
+    }
+    const fold = process.platform === "win32" ? key.toLowerCase() : key
+    if (seen.has(fold)) continue
+    seen.add(fold)
+    out.push(r)
+  }
+  return out
+}
+
+/** Absolute path + project-relative posix path, or null if outside / missing. */
+export function resolveProjectFile(
+  roots: string | readonly string[] | null | undefined,
+  filePath: string | null | undefined,
+): { abs: string; rel: string } | null {
+  if (!filePath) return null
+  const incoming = normalizeIncomingPath(filePath)
+  for (const rawRoot of asRootList(roots)) {
+    try {
+      const root = canonicalizePath(rawRoot)
+      const abs = path.isAbsolute(incoming)
+        ? canonicalizePath(incoming)
+        : canonicalizePath(path.join(root, incoming))
+      if (!isInsideRoot(root, abs)) continue
+      if (!fs.existsSync(abs)) continue
+      const rel = path.relative(root, abs).replace(/\\/g, "/")
+      if (!rel) continue
+      return { abs, rel }
+    } catch {
+      // next root
+    }
+  }
+  return null
+}
+
+/** Project-relative path for detail dialogs — never escapes above project root. */
+export function relativeProjectPath(
+  projectRoot: string | null | undefined,
+  filePath: string | null | undefined,
+): string | null {
+  return resolveProjectFile(projectRoot, filePath)?.rel ?? null
+}
+
 export function fileStamp(p: string | null | undefined): string {
   if (!p) return "0"
   try {

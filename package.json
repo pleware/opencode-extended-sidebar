@@ -1,7 +1,7 @@
 {
   "name": "opencode-extended-sidebar",
-  "version": "0.2.4",
-  "description": "OpenCode TUI sidebar: session switcher, live tool activity, file diffs, per-model timings and OMO plans (read-only)",
+  "version": "0.2.5",
+  "description": "OpenCode TUI sidebar: session switcher, live tools/files, click-for-detail dialogs, perf timings and OMO plans (read-only)",
   "type": "module",
   "license": "MIT",
   "author": "pleware",

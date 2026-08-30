@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { emptyDb, type SessionView } from "../../src/db.js"
 import {
   delegatesForSession,
+  groupDelegates,
   reconcileDelegateStatus,
   type DelegateView,
   type LiveSnapshot,
@@ -80,6 +81,63 @@ describe("delegatesForSession", () => {
     })
     const out = delegatesForSession(snap, "ses_main")
     expect(out.map((x) => x.sessionId)).toEqual(["ses_child"])
+  })
+})
+
+describe("groupDelegates", () => {
+  const row = (over: Partial<DelegateView> & { title: string }): DelegateView => ({
+    taskKey: over.taskKey ?? over.sessionId ?? over.title,
+    sessionId: over.sessionId ?? null,
+    agent: over.agent ?? "oracle",
+    status: over.status ?? "completed",
+    updatedAt: 1,
+    tokensTotal: 0,
+    timeUpdated: 1,
+    archived: false,
+    ...over,
+  })
+
+  test("empty and a single agent stay a flat list", () => {
+    expect(groupDelegates([])).toEqual([])
+    const one = [row({ title: "F1", agent: "oracle" }), row({ title: "F2", agent: "oracle" })]
+    const out = groupDelegates(one)
+    expect(out.every((x) => x.kind === "row" && !x.grouped)).toBe(true)
+    expect(out.map((x) => (x.kind === "row" ? x.delegate.title : ""))).toEqual(["F1", "F2"])
+  })
+
+  test("two or more agents get muted headers; order follows first appearance", () => {
+    const out = groupDelegates([
+      row({ title: "F1 final", agent: "oracle", sessionId: "a" }),
+      row({ title: "Fix F1", agent: "Sisyphus-Junior", sessionId: "b" }),
+      row({ title: "F4 scope", agent: "oracle", sessionId: "c" }),
+      row({ title: "Fix F4", agent: "Sisyphus-Junior", sessionId: "d" }),
+    ])
+    const shape = out.map((x) =>
+      x.kind === "header" ? `${x.agent} (${x.count})` : x.delegate.title,
+    )
+    expect(shape).toEqual([
+      "oracle (2)",
+      "F1 final",
+      "F4 scope",
+      "Sisyphus-Junior (2)",
+      "Fix F1",
+      "Fix F4",
+    ])
+    expect(out.filter((x) => x.kind === "row").every((x) => x.kind === "row" && x.grouped)).toBe(true)
+    const headers = out.filter((x) => x.kind === "header")
+    expect(headers[0]?.members).toHaveLength(2)
+    expect(headers[1]?.members).toHaveLength(2)
+  })
+
+  test("missing agent collapses to agent and still groups against named ones", () => {
+    const out = groupDelegates([
+      row({ title: "named", agent: "oracle" }),
+      row({ title: "blank", agent: null }),
+      row({ title: "spaces", agent: "  " }),
+    ])
+    expect(
+      out.filter((x) => x.kind === "header").map((x) => `${x.agent} (${x.count})`),
+    ).toEqual(["oracle (1)", "agent (2)"])
   })
 })
 

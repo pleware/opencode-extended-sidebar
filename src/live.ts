@@ -11,6 +11,8 @@ import { openReadonlyDb, resetReadonlyDb } from "./sqlite.js"
 
 export type DelegateView = Delegate & {
   tokensTotal: number | null
+  tokensIn: number | null
+  tokensOut: number | null
   timeUpdated: number | null
   archived: boolean
 }
@@ -63,6 +65,49 @@ export function reconcileDelegateStatus(
   return omo === "unknown" ? "running" : omo
 }
 
+/** Display key — empty / missing agent collapses to `agent`. */
+export function delegateAgentKey(d: Pick<DelegateView, "agent">): string {
+  const s = (d.agent || "").trim()
+  return s || "agent"
+}
+
+export type DelegateListItem =
+  | { kind: "header"; agent: string; count: number; members: DelegateView[] }
+  | { kind: "row"; grouped: boolean; delegate: DelegateView }
+
+/**
+ * Cluster by agent when two or more names appear. Group order follows first
+ * appearance (keeps recency on Current). One agent → flat rows, no headers.
+ */
+export function groupDelegates(list: DelegateView[]): DelegateListItem[] {
+  if (list.length === 0) return []
+  const seen = new Set<string>()
+  for (const d of list) seen.add(delegateAgentKey(d))
+  const grouped = seen.size >= 2
+  if (!grouped) {
+    return list.map((delegate) => ({ kind: "row" as const, grouped: false, delegate }))
+  }
+  const order: string[] = []
+  const buckets = new Map<string, DelegateView[]>()
+  for (const d of list) {
+    const key = delegateAgentKey(d)
+    let bucket = buckets.get(key)
+    if (!bucket) {
+      bucket = []
+      buckets.set(key, bucket)
+      order.push(key)
+    }
+    bucket.push(d)
+  }
+  const out: DelegateListItem[] = []
+  for (const agent of order) {
+    const rows = buckets.get(agent) ?? []
+    out.push({ kind: "header", agent, count: rows.length, members: rows })
+    for (const delegate of rows) out.push({ kind: "row", grouped: true, delegate })
+  }
+  return out
+}
+
 /** Delegates of this session only: SQLite children + OMO tasks whose parent is this session. */
 export function delegatesForSession(snap: LiveSnapshot, sessionId: string): DelegateView[] {
   const childIds = new Set(snap.db.children.map((c) => c.id))
@@ -90,6 +135,8 @@ export function delegatesForSession(snap: LiveSnapshot, sessionId: string): Dele
       status: c.status,
       updatedAt: c.timeUpdated,
       tokensTotal: c.tokensTotal,
+      tokensIn: c.tokensIn,
+      tokensOut: c.tokensOut,
       timeUpdated: c.timeUpdated,
       archived: c.status === "archived",
     })
@@ -104,6 +151,8 @@ function enrichDelegates(omo: OmoSnapshot, db: DbSnapshot): DelegateView[] {
       ...d,
       status: reconcileDelegateStatus(d.status, sess),
       tokensTotal: sess ? sess.tokensTotal : null,
+      tokensIn: sess ? sess.tokensIn : null,
+      tokensOut: sess ? sess.tokensOut : null,
       timeUpdated: sess?.timeUpdated ?? d.updatedAt,
       archived: sess?.status === "archived",
     }

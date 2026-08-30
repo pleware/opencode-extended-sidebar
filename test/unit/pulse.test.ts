@@ -6,6 +6,7 @@ import {
   formatDuration,
   formatSpan,
   formatTokens,
+  hottestMark,
   packChips,
   preferToolLabel,
   shortToolLabel,
@@ -77,6 +78,15 @@ describe("composeMark", () => {
     expect(composeMark({ lifecycle: "in_progress", ageMs: 25_000 })).toBe("stale")
     expect(composeMark({ lifecycle: "running", ageMs: 50_000 })).toBe("idle")
     expect(composeMark({ lifecycle: "active", ageMs: null })).toBe("stale")
+  })
+})
+
+describe("hottestMark", () => {
+  test("live beats stale and error; empty is idle bullet", () => {
+    expect(hottestMark([])).toBe("ready")
+    expect(hottestMark(["ready", "error"])).toBe("error")
+    expect(hottestMark(["error", "stale"])).toBe("stale")
+    expect(hottestMark(["error", "stale", "live"])).toBe("live")
   })
 })
 

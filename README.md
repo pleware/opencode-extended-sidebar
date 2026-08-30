@@ -36,17 +36,17 @@ Extended Sidebar puts it back on screen. It reads OpenCode's own SQLite database
 
 ## ≡ Tool feed that names things
 
-> Not another wall of `bash` or `task`. Each tool row is labelled with what actually ran — the command, the file, the search pattern, or the short task description — plus how long it took. Running calls tick up live, failures are marked with `×`.
+> Not another wall of `bash` or `task`. Each tool row is labelled with what actually ran — the command, the file, the search pattern, or the short task description — plus how long it took. Running calls tick up live, failures are marked with `×`. **Click a tool** for a metadata sheet (label, duration, status — never args or output).
 
 ## ± File changes with diff stats
 
-> See which files this session touched, with `+N −M` per file and a running total in the section header. Letters follow `git status --short` exactly: **M** modified, **A** added, **D** deleted, **R** renamed, **C** copied, **U** unmerged, **T** typechange, **?** untracked. The only extra letter is **V** (viewed) — git does not use it — for a session read with no git status. Git is asked only about those listed paths, and only while the Files section is open on the Current tab. If there is no repo or no `git` binary, git letters stay off and only **V** appears on reads. Additions are green, deletions are red, both pulled from your theme's diff colours. Long names are shortened intelligently (`start…end.ext`) so the panel stays narrow.
+> See which files this session touched, with `+N −M` per file and a running total in the section header. Letters follow `git status --short` exactly: **M** modified, **A** added, **D** deleted, **R** renamed, **C** copied, **U** unmerged, **T** typechange, **?** untracked. The only extra letter is **V** (viewed) — git does not use it — for a session read with no git status. Git is asked only about those listed paths, and only while the Files section is open on the Current tab. If there is no repo or no `git` binary, git letters stay off and only **V** appears on reads. Additions are green, deletions are red, both pulled from your theme's diff colours. Long names are shortened intelligently (`start…end.ext`) so the panel stays narrow. **Click a Markdown file** to open a formatted preview (Copy path / Close). Other files open a detail sheet first.
 >
 > Scratch paths are dropped by default (`tmp/`, `.tmp/`). They never appear in the list and they do not count towards the header total. Override the list with `skipDirs` in `oes.json`, or set it to `[]` to show everything. Set `skipGitignore` to `true` to also hide files that match the project's root `.gitignore`.
 
 ## ⋔ Delegates and sub-agents
 
-> When an orchestrator hands work off, the delegates show up as their own rows — tokens, status, live pulse, and a click to jump into any of them. **Sessions** lists the project's boulder. **Current** lists only children of the current session — a new main session starts empty, even if `.omo/boulder.json` still has yesterday's tasks. A leftover boulder `running` does not keep the spinner up once the OpenCode session has gone idle.
+> When an orchestrator hands work off, the delegates show up as their own rows — tokens, status, live pulse, and a click to jump into any of them. Two or more agent names become group headers (`• oracle (6)`) with the same pulse glyph as the rows; a single agent stays a flat list. **Sessions** lists the project's boulder. **Current** lists only children of the current session — a new main session starts empty, even if `.omo/boulder.json` still has yesterday's tasks. A leftover boulder `running` does not keep the spinner up once the OpenCode session has gone idle.
 
 ## ▤ OMO plans
 
@@ -56,7 +56,7 @@ Extended Sidebar puts it back on screen. It reads OpenCode's own SQLite database
 > OMO | Plans
 > ```
 >
-> **Plans** lists the latest boulder works by name and status (active first, then newest). A row with a session is a click to jump there. Without `.omo/` the line is gone — no warning, no empty OMO chrome. The checklist itself stays out of the sidebar.
+> **Plans** lists the latest boulder works by name and status (active first, then newest). A row with a session is a click to jump there; a row without opens plan metadata and can preview the plan markdown file (formatted, not raw). Without `.omo/` the line is gone — no warning, no empty OMO chrome. The checklist itself stays out of the sidebar list.
 
 ## ◴ Where the time actually goes
 
@@ -81,7 +81,7 @@ Extended Sidebar puts it back on screen. It reads OpenCode's own SQLite database
 
 ## ⊘ Privacy first
 
-> The sidebar never renders prompts, tool arguments, tool outputs, patch bodies, or absolute paths. It opens OpenCode's database strictly read-only (`PRAGMA query_only`) and never writes a byte back. What you see is metadata: names, counts, statuses, durations. Perf goes one step further and pulls its timings through `json_extract`, so message text and tool output never even leave SQLite.
+> The sidebar never renders prompts, tool arguments, tool outputs, patch bodies, or absolute paths in the panel list. Detail dialogs may show a **project-relative** path on click. It opens OpenCode's database strictly read-only (`PRAGMA query_only`) and never writes a byte back. What you see is metadata: names, counts, statuses, durations. Perf goes one step further and pulls its timings through `json_extract`, so message text and tool output never even leave SQLite.
 
 ## ∅ Zero dependencies
 
@@ -221,6 +221,8 @@ Cost is shown only when the provider reports it. Many gateways record `0`, and t
 src/
   tui.tsx       # plugin entry (sidebar_content slot)
   sidebar.tsx   # tabs, foldable sections, rows
+  detail.tsx    # file / tool / plan detail dialogs
+  clipboard.ts  # copy-to-clipboard helper (no deps)
   chrome.tsx    # brand tabs, fold headers, diff stats, kv persistence
   perfview.tsx  # Perf tab rendering
   perf.ts       # turn timings per model, phase and tool

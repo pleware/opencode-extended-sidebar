@@ -13,7 +13,12 @@ import {
   kvWriteOne,
   type ThemeColors,
 } from "./chrome.js"
-import { delegatesForSession, type DelegateView, type LiveSnapshot } from "./live.js"
+import {
+  delegatesForSession,
+  groupDelegates,
+  type DelegateView,
+  type LiveSnapshot,
+} from "./live.js"
 import { emptyPerf, readPerfSnapshot } from "./perf.js"
 import { PerfPanel } from "./perfview.js"
 import {
@@ -30,6 +35,7 @@ import {
 import { onGitMarksChange } from "./git.js"
 import { getOes } from "./oes.js"
 import { startMonitor } from "./monitor.js"
+import { openFileDetail, openPlanDetail, openToolDetail } from "./detail.js"
 import { getOpenCodeDbPath } from "./paths.js"
 import {
   TICK_MS,
@@ -42,6 +48,7 @@ import {
   formatDuration,
   formatTokens,
   formatUsd,
+  hottestMark,
   markGlyph,
   phaseAgeMs,
   pulseAgeMs,
@@ -95,11 +102,16 @@ function clip(s: string, max: number): string {
   return `${t.slice(0, max - 1)}…`
 }
 
-type RowKind = "agent" | "tool" | "file"
+type RowKind = "agent" | "tool" | "file" | "delegate" | "group"
+
+function agentDisplayName(name: string): string {
+  return (name || "agent").replace(/\s*-\s*/g, " ").trim() || "agent"
+}
 
 function shortName(name: string, kind: RowKind, max: number): string {
   if (kind === "file") return shortFileName(name, max)
-  return clip((name || "agent").replace(/\s*-\s*/g, " ").trim(), max)
+  if (kind === "agent" || kind === "group") return clip(agentDisplayName(name), max)
+  return clip((name || "agent").replace(/\s+/g, " ").trim(), max)
 }
 
 type RowData = {
@@ -133,7 +145,9 @@ function AgentLine(props: RowData & {
   const bodyFg = () =>
     props.kind === "file"
       ? props.colors.text
-      : markColor(props.mark, props.colors, props.current, props.flow)
+      : props.kind === "group"
+        ? props.colors.textMuted
+        : markColor(props.mark, props.colors, props.current, props.flow)
   const rest = () => {
     const max = Math.max(0, props.lineMax - 2)
     const suffix = props.suffix?.trim() ?? ""
@@ -327,6 +341,11 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   }
 
   const projectDir = () => props.api.state.path.directory ?? null
+  const projectRoots = () => {
+    const dir = projectDir()
+    const tree = props.api.state.path.worktree ?? null
+    return [dir, tree].filter((p): p is string => Boolean(p))
+  }
 
   let watchedId = props.sessionId
   let monitor = startMonitor({
@@ -709,6 +728,38 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     />
   )
 
+  const DelegateRows = (list: DelegateView[]): JSX.Element => (
+    <For each={groupDelegates(list)}>
+      {(item) => {
+        if (item.kind === "header") {
+          return (
+            <Row
+              kind="group"
+              mark={hottestMark(item.members.map(delegateMark))}
+              name={`${agentDisplayName(item.agent)} (${item.count})`}
+            />
+          )
+        }
+        const d = item.delegate
+        const isBusy = Boolean(d.sessionId && busy()[d.sessionId])
+        const mark = delegateMark(d)
+        const dir = rowFlow(d.sessionId, isBusy)
+        return (
+          <Row
+            kind={item.grouped ? "delegate" : "agent"}
+            mark={mark}
+            name={item.grouped ? d.title || d.taskKey || "task" : d.agent || "agent"}
+            tokens={d.tokensTotal}
+            title={item.grouped ? undefined : d.title}
+            current={Boolean(d.sessionId && d.sessionId === props.sessionId)}
+            flow={dir}
+            onSelect={() => selectSession(props.api, d.sessionId)}
+          />
+        )
+      }}
+    </For>
+  )
+
   return (
     <box flexDirection="column" gap={1} paddingTop={1}>
       <box flexDirection="column" gap={0}>
@@ -819,25 +870,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
                 {snap().delegates.length === 0 ? (
                   <text fg={colors().textMuted}>• none</text>
                 ) : (
-                  <For each={snap().delegates}>
-                    {(d) => {
-                      const isBusy = Boolean(d.sessionId && busy()[d.sessionId])
-                      const mark = delegateMark(d)
-                      const dir = rowFlow(d.sessionId, isBusy)
-                      return (
-                        <Row
-                          kind="agent"
-                          mark={mark}
-                          name={d.agent || "agent"}
-                          tokens={d.tokensTotal}
-                          title={d.title}
-                          current={Boolean(d.sessionId && d.sessionId === props.sessionId)}
-                          flow={dir}
-                          onSelect={() => selectSession(props.api, d.sessionId)}
-                        />
-                      )
-                    }}
-                  </For>
+                  DelegateRows(snap().delegates)
                 )}
               </box>
             </Show>
@@ -895,25 +928,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
                 {sessionDelegates().length === 0 ? (
                   <text fg={colors().textMuted}>• none</text>
                 ) : (
-                  <For each={sessionDelegates()}>
-                    {(d) => {
-                      const isBusy = Boolean(d.sessionId && busy()[d.sessionId])
-                      const mark = delegateMark(d)
-                      const dir = rowFlow(d.sessionId, isBusy)
-                      return (
-                        <Row
-                          kind="agent"
-                          mark={mark}
-                          name={d.agent || "agent"}
-                          tokens={d.tokensTotal}
-                          title={d.title}
-                          current={Boolean(d.sessionId && d.sessionId === props.sessionId)}
-                          flow={dir}
-                          onSelect={() => selectSession(props.api, d.sessionId)}
-                        />
-                      )
-                    }}
-                  </For>
+                  DelegateRows(sessionDelegates())
                 )}
               </box>
             </Show>
@@ -943,7 +958,14 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
                         ? formatDuration(Math.max(0, now() - t.startedAt))
                         : formatDuration(t.durationMs)
                     return (
-                      <Row kind="tool" mark={mark} name={t.name} suffix={dur} flow={dir} />
+                      <Row
+                        kind="tool"
+                        mark={mark}
+                        name={t.name}
+                        suffix={dur}
+                        flow={dir}
+                        onSelect={() => openToolDetail(props.api, t, colors())}
+                      />
                     )
                   }}
                 </For>
@@ -974,6 +996,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
                       glyph={f.letter ?? "•"}
                       name={f.name}
                       diff={{ additions: f.additions, deletions: f.deletions }}
+                      onSelect={() => openFileDetail(props.api, f, projectRoots(), colors())}
                     />
                   )}
                 </For>
@@ -1001,7 +1024,9 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
                     suffix={planStatusLabel(p.status)}
                     current={p.current}
                     onSelect={
-                      p.sessionId ? () => selectSession(props.api, p.sessionId) : undefined
+                      p.sessionId
+                        ? () => selectSession(props.api, p.sessionId)
+                        : () => openPlanDetail(props.api, p, projectRoots(), colors())
                     }
                   />
                 )}

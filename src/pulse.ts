@@ -73,6 +73,19 @@ export function composeMark(opts: {
   return pulseFromAge(opts.ageMs)
 }
 
+/** Group header pulse: live > stale > error > idle `•`. */
+export function hottestMark(marks: readonly AgentMark[]): AgentMark {
+  let stale = false
+  let error = false
+  for (const m of marks) {
+    if (m === "live") return "live"
+    if (m === "stale") stale = true
+    else if (m === "error") error = true
+  }
+  if (stale) return "stale"
+  return error ? "error" : "ready"
+}
+
 export function spinnerFrame(frame: number): string {
   const i = ((frame % SPINNER_FRAMES.length) + SPINNER_FRAMES.length) % SPINNER_FRAMES.length
   return SPINNER_FRAMES[i] ?? "⠋"
