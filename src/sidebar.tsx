@@ -736,6 +736,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
             <Row
               kind="group"
               mark={hottestMark(item.members.map(delegateMark))}
+              glyph="▾"
               name={`${agentDisplayName(item.agent)} (${item.count})`}
             />
           )

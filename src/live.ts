@@ -11,8 +11,6 @@ import { openReadonlyDb, resetReadonlyDb } from "./sqlite.js"
 
 export type DelegateView = Delegate & {
   tokensTotal: number | null
-  tokensIn: number | null
-  tokensOut: number | null
   timeUpdated: number | null
   archived: boolean
 }
@@ -135,8 +133,6 @@ export function delegatesForSession(snap: LiveSnapshot, sessionId: string): Dele
       status: c.status,
       updatedAt: c.timeUpdated,
       tokensTotal: c.tokensTotal,
-      tokensIn: c.tokensIn,
-      tokensOut: c.tokensOut,
       timeUpdated: c.timeUpdated,
       archived: c.status === "archived",
     })
@@ -151,8 +147,6 @@ function enrichDelegates(omo: OmoSnapshot, db: DbSnapshot): DelegateView[] {
       ...d,
       status: reconcileDelegateStatus(d.status, sess),
       tokensTotal: sess ? sess.tokensTotal : null,
-      tokensIn: sess ? sess.tokensIn : null,
-      tokensOut: sess ? sess.tokensOut : null,
       timeUpdated: sess?.timeUpdated ?? d.updatedAt,
       archived: sess?.status === "archived",
     }

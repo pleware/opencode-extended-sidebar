@@ -42,8 +42,6 @@ export type SessionView = {
   parentId: string | null
   directory: string
   tokensTotal: number
-  tokensIn: number
-  tokensOut: number
   cost: number
   timeUpdated: number
   ageMs: number
@@ -78,8 +76,6 @@ export function toSessionView(row: SessionRow, now = Date.now()): SessionView {
     parentId: row.parent_id,
     directory: row.directory,
     tokensTotal: ti + to + tr,
-    tokensIn: ti,
-    tokensOut: to + tr,
     cost: row.cost || 0,
     timeUpdated: row.time_updated,
     ageMs: Math.max(0, now - (row.time_updated || 0)),

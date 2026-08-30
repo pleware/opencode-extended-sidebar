@@ -46,7 +46,7 @@ Extended Sidebar puts it back on screen. It reads OpenCode's own SQLite database
 
 ## ⋔ Delegates and sub-agents
 
-> When an orchestrator hands work off, the delegates show up as their own rows — tokens, status, live pulse, and a click to jump into any of them. Two or more agent names become group headers (`• oracle (6)`) with the same pulse glyph as the rows; a single agent stays a flat list. **Sessions** lists the project's boulder. **Current** lists only children of the current session — a new main session starts empty, even if `.omo/boulder.json` still has yesterday's tasks. A leftover boulder `running` does not keep the spinner up once the OpenCode session has gone idle.
+> When an orchestrator hands work off, the delegates show up as their own rows — tokens, status, live pulse, and a click to jump into any of them. Two or more agent names become group headers (`▾ oracle (6)`); a single agent stays a flat list. **Sessions** lists the project's boulder. **Current** lists only children of the current session — a new main session starts empty, even if `.omo/boulder.json` still has yesterday's tasks. A leftover boulder `running` does not keep the spinner up once the OpenCode session has gone idle.
 
 ## ▤ OMO plans
 
@@ -101,6 +101,7 @@ Every row is one glyph plus one colour: the glyph says *what* is happening, the 
 | `↓`                             | tokens are streaming in                                       |
 | `→`                             | a tool call is in flight                                      |
 | `•`                             | nothing in progress — finished, queued or archived            |
+| `▾`                             | Delegates: agent group header (`▼` is the section fold)       |
 | `×`                             | failed — an errored session, delegate or tool call            |
 | `M` `A` `D` `R` `C` `U` `T` `?` | Files: git status — same letters as `git status --short`      |
 | `V`                             | Files: viewed (session read only) — not a git letter          |
