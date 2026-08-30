@@ -4,8 +4,9 @@
  */
 import fs from "node:fs"
 import path from "node:path"
-import { For, Show, type JSX } from "solid-js"
+import { createMemo, For, Show, type JSX } from "solid-js"
 import { SyntaxStyle } from "@opentui/core"
+import { useTerminalDimensions } from "@opentui/solid"
 import type { TuiPluginApi, TuiTheme } from "@opencode-ai/plugin/tui"
 import { copyText } from "./clipboard.js"
 import { type ThemeColors } from "./chrome.js"
@@ -19,6 +20,14 @@ import { formatAge, formatDuration } from "./pulse.js"
 
 const PREVIEW_MAX_LINES = 200
 const PREVIEW_MAX_BYTES = 128_000
+/** DialogPad 2 + title 1 + divider 1 + footer 3 + slack 1. Extra is the optional path line. */
+const PREVIEW_CHROME = 8
+const PREVIEW_MIN_ROWS = 8
+
+export function previewViewportRows(termHeight: number, extraChrome = 0): number {
+  const h = Number.isFinite(termHeight) && termHeight > 0 ? termHeight : 24
+  return Math.max(PREVIEW_MIN_ROWS, Math.floor(h * 0.75) - PREVIEW_CHROME - extraChrome)
+}
 
 const PREVIEW_EXT = new Set([
   ".md",
@@ -209,6 +218,57 @@ function formatWhen(ts: number | null | undefined): string {
   return d.toISOString().replace("T", " ").slice(0, 19)
 }
 
+function PreviewDialog(props: {
+  api: TuiPluginApi
+  colors: ThemeColors
+  title: string
+  subtitle: string | null
+  pretty: boolean
+  text: string
+  truncated: boolean
+  syntaxStyle: ReturnType<typeof SyntaxStyle.fromStyles> | null
+}): JSX.Element {
+  const dimensions = useTerminalDimensions()
+  const extra = props.subtitle ? 1 : 0
+  const bodyHeight = createMemo(() => previewViewportRows(dimensions().height, extra))
+  const Dialog = props.api.ui.Dialog
+  return (
+    <Dialog size="xlarge" onClose={() => closeDialog(props.api)}>
+      <DialogPad>
+        <box flexDirection="column" gap={0} flexShrink={0}>
+          <text fg={props.colors.text} bold>
+            {props.title}
+          </text>
+          <Show when={props.subtitle}>
+            <DetailLine text={props.subtitle!} colors={props.colors} muted />
+          </Show>
+          {divider(props.colors)}
+        </box>
+        <scrollbox scrollY focused height={bodyHeight()} maxHeight={bodyHeight()}>
+          <PreviewBody
+            text={props.text}
+            pretty={props.pretty}
+            colors={props.colors}
+            syntaxStyle={props.syntaxStyle}
+          />
+          <Show when={props.truncated}>
+            <DetailLine text="… truncated" colors={props.colors} muted />
+          </Show>
+        </scrollbox>
+        <box flexDirection="column" gap={0} paddingTop={1} flexShrink={0}>
+          <ActionRow
+            label="Copy path"
+            colors={props.colors}
+            disabled={!props.subtitle}
+            onPick={() => copyRelativePath(props.api, props.subtitle)}
+          />
+          <ActionRow label="Close" colors={props.colors} onPick={() => closeDialog(props.api)} />
+        </box>
+      </DialogPad>
+    </Dialog>
+  )
+}
+
 function openTextPreview(
   api: TuiPluginApi,
   colors: ThemeColors,
@@ -223,38 +283,18 @@ function openTextPreview(
   }
   const pretty = isMarkdownPath(absPath)
   const syntaxStyle = pretty ? markdownStyleFromTheme(api.theme) : null
-  const Dialog = api.ui.Dialog
   api.ui.dialog.setSize("xlarge")
   api.ui.dialog.replace(() => (
-    <Dialog size="xlarge" onClose={() => closeDialog(api)}>
-      <DialogPad>
-        <text fg={colors.text} bold>
-          {title}
-        </text>
-        <Show when={subtitle}>
-          <DetailLine text={subtitle!} colors={colors} muted />
-        </Show>
-        {divider(colors)}
-        <PreviewBody
-          text={preview.text}
-          pretty={pretty}
-          colors={colors}
-          syntaxStyle={syntaxStyle}
-        />
-        <Show when={preview.truncated}>
-          <DetailLine text="… truncated" colors={colors} muted />
-        </Show>
-        <box flexDirection="column" gap={0} paddingTop={1}>
-          <ActionRow
-            label="Copy path"
-            colors={colors}
-            disabled={!subtitle}
-            onPick={() => copyRelativePath(api, subtitle)}
-          />
-          <ActionRow label="Close" colors={colors} onPick={() => closeDialog(api)} />
-        </box>
-      </DialogPad>
-    </Dialog>
+    <PreviewDialog
+      api={api}
+      colors={colors}
+      title={title}
+      subtitle={subtitle}
+      pretty={pretty}
+      text={preview.text}
+      truncated={preview.truncated}
+      syntaxStyle={syntaxStyle}
+    />
   ))
 }
 

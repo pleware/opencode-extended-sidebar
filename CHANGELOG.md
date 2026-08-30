@@ -1,5 +1,6 @@
 # Changelog
 
+- **0.2.7** (2026-08-30) Keep file previews inside a terminal-sized scrollbox so Copy and Close stay on screen.
 - **0.2.6** (2026-08-30) Use a down-triangle glyph on Delegate group headers so they no longer look like rows.
 - **0.2.5** (2026-08-30) Add click-for-detail dialogs with formatted Markdown preview and group Delegates by agent name.
 - **0.2.4** (2026-08-30) Stop leftover Delegates spinners once the OpenCode session is idle, extract tool and file metadata in SQLite, and spawn git status off the TUI thread.

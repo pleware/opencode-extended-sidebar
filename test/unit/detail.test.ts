@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
-import { canPreviewPath, isMarkdownPath, readTextPreview } from "../../src/detail.js"
+import { canPreviewPath, isMarkdownPath, previewViewportRows, readTextPreview } from "../../src/detail.js"
 import { normalizeIncomingPath, relativeProjectPath, resolveProjectFile } from "../../src/paths.js"
 
 describe("relativeProjectPath", () => {
@@ -62,5 +62,20 @@ describe("preview helpers", () => {
     expect(out?.text).toBe("line1\nline2")
     expect(out?.truncated).toBe(false)
     fs.rmSync(dir, { recursive: true, force: true })
+  })
+})
+
+describe("previewViewportRows", () => {
+  test("caps at three quarters of the terminal minus chrome", () => {
+    expect(previewViewportRows(40)).toBe(22)
+    expect(previewViewportRows(40, 1)).toBe(21)
+  })
+
+  test("never goes below eight rows", () => {
+    expect(previewViewportRows(8)).toBe(8)
+  })
+
+  test("falls back when the terminal height is missing", () => {
+    expect(previewViewportRows(0)).toBe(previewViewportRows(24))
   })
 })
