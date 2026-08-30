@@ -1,0 +1,11 @@
+#!/bin/sh
+# Fold the version bump + CHANGELOG line into the commit that just ran.
+set -e
+dir=$(git rev-parse --git-dir)
+flag=$dir/OES_AMEND
+[ -f "$flag" ] || exit 0
+rm -f "$flag"
+export SKIP_OES_BUMP=1
+root=$(git rev-parse --show-toplevel)
+git add -- "$root/package.json" "$root/CHANGELOG.md"
+git commit --amend --no-edit --no-verify

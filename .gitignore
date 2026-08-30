@@ -1,0 +1,13 @@
+node_modules/
+dist/
+*.tgz
+.DS_Store
+Thumbs.db
+*.log
+.env
+.env.*
+backlog.md
+myworkspace/
+.cursor/
+.agents/
+skills-lock.json

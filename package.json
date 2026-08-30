@@ -1,0 +1,64 @@
+{
+  "name": "opencode-extended-sidebar",
+  "version": "0.2.1",
+  "description": "OpenCode TUI sidebar: session switcher, live tool activity, file diffs and per-model turn timings (read-only)",
+  "type": "module",
+  "license": "MIT",
+  "author": "pleware",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pleware/opencode-extended-sidebar.git"
+  },
+  "homepage": "https://github.com/pleware/opencode-extended-sidebar#readme",
+  "bugs": {
+    "url": "https://github.com/pleware/opencode-extended-sidebar/issues"
+  },
+  "keywords": [
+    "opencode",
+    "plugin",
+    "tui",
+    "sidebar",
+    "session-switcher",
+    "token-usage",
+    "latency",
+    "observability",
+    "oh-my-openagent",
+    "phrouros"
+  ],
+  "oc-plugin": [
+    "tui"
+  ],
+  "exports": {
+    "./tui": "./src/tui.tsx"
+  },
+  "files": [
+    "src",
+    "oes.json",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "peerDependencies": {
+    "@opencode-ai/plugin": ">=1.3.7",
+    "@opentui/core": ">=0.5.8",
+    "@opentui/solid": ">=0.5.8",
+    "solid-js": ">=1.9.0"
+  },
+  "peerDependenciesMeta": {
+    "@opentui/core": {
+      "optional": true
+    },
+    "@opentui/solid": {
+      "optional": true
+    },
+    "solid-js": {
+      "optional": true
+    }
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "prepare": "node scripts/install-git-hooks.mjs"
+  }
+}

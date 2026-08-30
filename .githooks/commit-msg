@@ -1,0 +1,42 @@
+#!/bin/sh
+# Strip AI / agent attribution trailers and marketing footers from the commit message.
+# Installed via: git config core.hooksPath .githooks
+set -e
+
+msg_file=$1
+[ -n "$msg_file" ] && [ -f "$msg_file" ] || exit 0
+
+# Known agents / vendors that tools inject as authors (Co-authored-by, Assisted-by, …).
+# Intentionally NOT stripping arbitrary human Co-authored-by lines.
+ai_name='Cursor([[:space:]]+Agent)?|Claude([[:space:]]+(Code|Sonnet|Opus|Haiku|[0-9.]+))?|Anthropic|Copilot|GitHub[[:space:]]+Copilot|Gemini|Google[[:space:]]+AI|ChatGPT|OpenAI|GPT-?[0-9]|Codex|Devin|Windsurf|Codeium|Aider|Amp|OpenCode|Oh[[:space:]]+My[[:space:]]+OpenAgent|Cody|Tabnine|Continue(\.dev)?|Sweep|Mentat|Amazon[[:space:]]+Q|Q[[:space:]]+Developer|CodeWhisperer|JetBrains[[:space:]]+AI|Junie|Cline|Roo|Goose'
+
+ai_email='cursor\.com|anthropic\.com|openai\.com|[Cc]opilot@users\.noreply\.github\.com|\+[Cc]opilot\[bot\]@users\.noreply\.github\.com'
+
+tmp=${msg_file}.tmp.$$
+grep -Eiv \
+  -e "^[[:space:]]*Co-authored-by:.*\\b(${ai_name})\\b" \
+  -e "^[[:space:]]*Co-authored-by:.*@(${ai_email})" \
+  -e "^[[:space:]]*(Made-with|Co-created-by):[[:space:]]*(${ai_name})\\b" \
+  -e "^[[:space:]]*(Assisted-by|Generated-by|Generated-By|AI-assistant|AI-Assistant|Coding-Agent|AI-Tool|AI-Model(-Version)?|AI-Attribution):" \
+  -e '^[[:space:]]*🤖' \
+  -e "Generated[[:space:]]+with[[:space:]]+(\\[)?(${ai_name})" \
+  -e "Made[[:space:]]+with[[:space:]]+(\\[)?(${ai_name})" \
+  "$msg_file" > "$tmp" || true
+
+# Collapse consecutive blank lines to one; drop trailing blanks.
+awk '
+  /^[[:space:]]*$/ { blank++; next }
+  {
+    if (blank && NR > blank) print ""
+    blank = 0
+    print
+  }
+' "$tmp" > "$msg_file"
+
+rm -f "$tmp"
+
+root=$(git rev-parse --show-toplevel)
+if [ -n "$root" ] && [ -f "$root/scripts/note-commit.mjs" ]; then
+  node "$root/scripts/note-commit.mjs" "$msg_file" || exit 1
+fi
+exit 0
