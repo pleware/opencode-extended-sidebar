@@ -61,7 +61,8 @@ function skipDirsOf(raw: unknown, fallback: string[]): string[] {
   return out
 }
 
-function pick(raw: Record<string, unknown> | null, base: OesOptions): OesOptions {
+/** Merge one oes.json object onto a base. Exported for tests. */
+export function pick(raw: Record<string, unknown> | null, base: OesOptions): OesOptions {
   if (!raw) return base
   return {
     fileRows: clamp(raw.fileRows, 3, 20, base.fileRows),
@@ -100,6 +101,12 @@ export function oesStamp(projectRoot?: string | null): string {
 
 let cacheKey = ""
 let cache: OesOptions = OES_DEFAULTS
+
+/** Drop the merged-options cache so the next getOes re-reads files. */
+export function resetOesCache(): void {
+  cacheKey = ""
+  cache = OES_DEFAULTS
+}
 
 export function getOes(projectRoot?: string | null): OesOptions {
   const key = oesStamp(projectRoot)

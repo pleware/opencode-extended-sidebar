@@ -1,8 +1,9 @@
 /**
  * Read-only git status for Files letters. No repo / no git → empty, never throws.
  * Status is scoped to the listed paths — never the whole worktree.
+ * Spawn is async: the TUI keeps the last letters until git returns.
  */
-import { spawnSync } from "node:child_process"
+import { spawn } from "node:child_process"
 import fs from "node:fs"
 import path from "node:path"
 import { fileStamp } from "./paths.js"
@@ -12,6 +13,7 @@ export type GitLetter = "M" | "A" | "D" | "R" | "C" | "U" | "T" | "?"
 
 const GIT_PATH_CAP = 40
 const GIT_DEBOUNCE_MS = 2500
+const GIT_TIMEOUT_MS = 1500
 
 export function findGitRoot(start?: string | null): string | null {
   if (!start) return null
@@ -53,7 +55,12 @@ function porcelainLetter(xy: string): GitLetter | null {
   return rank(x) ?? rank(y)
 }
 
-function parsePorcelainZ(buf: string): Map<string, GitLetter> {
+function xIsRename(x: string): boolean {
+  return x === "R" || x === "C"
+}
+
+/** Parse `git status --porcelain -z` stdout. Exported for tests. */
+export function parsePorcelainZ(buf: string): Map<string, GitLetter> {
   const out = new Map<string, GitLetter>()
   let i = 0
   while (i < buf.length) {
@@ -73,10 +80,6 @@ function parsePorcelainZ(buf: string): Map<string, GitLetter> {
     if (letter && p1) out.set(p1.toLowerCase(), letter)
   }
   return out
-}
-
-function xIsRename(x: string): boolean {
-  return x === "R" || x === "C"
 }
 
 export function relToGitRoot(posixPath: string, root: string): string {
@@ -106,8 +109,84 @@ let cacheMarks = new Map<string, GitLetter>()
 let cacheRoot: string | null = null
 let lastPathKey = ""
 let lastSpawn = 0
+let pendingKey = ""
+let spawnGen = 0
+let inFlight = false
 
-/** Porcelain letters for the given files only. Debounced on index stamp noise. */
+const listeners = new Set<() => void>()
+
+function notify(): void {
+  for (const fn of listeners) {
+    try {
+      fn()
+    } catch {
+      // sidebar teardown
+    }
+  }
+}
+
+/** Re-render when an async git status lands. Returns unsubscribe. */
+export function onGitMarksChange(fn: () => void): () => void {
+  listeners.add(fn)
+  return () => {
+    listeners.delete(fn)
+  }
+}
+
+/** Drop cached letters and in-flight spawn accounting (tests). */
+export function resetGitCache(): void {
+  spawnGen += 1
+  inFlight = false
+  cacheKey = ""
+  pendingKey = ""
+  lastPathKey = ""
+  lastSpawn = 0
+  cacheRoot = null
+  cacheMarks = new Map()
+}
+
+function runGit(root: string, rels: string[], key: string, gen: number): void {
+  let child
+  try {
+    child = spawn(
+      "git",
+      ["-c", "core.quotepath=false", "status", "--porcelain", "-z", "--", ...rels],
+      { cwd: root, windowsHide: true },
+    )
+  } catch {
+    if (gen === spawnGen) inFlight = false
+    return
+  }
+  let out = ""
+  const timer = setTimeout(() => {
+    try {
+      child.kill()
+    } catch {
+      // already gone
+    }
+  }, GIT_TIMEOUT_MS)
+  child.stdout?.setEncoding("utf8")
+  child.stdout?.on("data", (chunk: string) => {
+    out += chunk
+  })
+  child.stderr?.resume()
+  const finish = (ok: boolean) => {
+    clearTimeout(timer)
+    if (gen !== spawnGen) return
+    inFlight = false
+    cacheRoot = root
+    cacheKey = key
+    if (ok) cacheMarks = parsePorcelainZ(out)
+    notify()
+  }
+  child.on("error", () => finish(false))
+  child.on("close", (code) => finish(code === 0))
+}
+
+/**
+ * Last known porcelain letters. Never waits on git — a stale map is returned
+ * and a spawn is scheduled when the cache key is cold (2.5 s debounce on index noise).
+ */
 export function readGitMarksFor(
   posixPaths: string[],
   projectRoot?: string | null,
@@ -123,33 +202,21 @@ export function readGitMarksFor(
   const pathKey = rels.slice().sort().join("\0")
   const stamp = gitStatusStamp(projectRoot)
   const key = `${root}|${stamp}|${pathKey}`
-  if (key === cacheKey) return { root: cacheRoot, marks: cacheMarks }
+  cacheRoot = root
+  if (key === cacheKey) return { root, marks: cacheMarks }
+  if (inFlight && pendingKey === key) return { root, marks: cacheMarks }
 
   const now = Date.now()
   if (pathKey === lastPathKey && lastSpawn > 0 && now - lastSpawn < GIT_DEBOUNCE_MS) {
-    return { root: cacheRoot, marks: cacheMarks }
+    return { root, marks: cacheMarks }
   }
 
-  cacheRoot = root
-  cacheMarks = new Map()
-  cacheKey = key
+  pendingKey = key
   lastPathKey = pathKey
   lastSpawn = now
-  try {
-    const res = spawnSync(
-      "git",
-      ["-c", "core.quotepath=false", "status", "--porcelain", "-z", "--", ...rels],
-      {
-        cwd: root,
-        encoding: "utf8",
-        timeout: 1500,
-        windowsHide: true,
-      },
-    )
-    if (res.status === 0 && res.stdout) cacheMarks = parsePorcelainZ(res.stdout)
-  } catch {
-    cacheMarks = new Map()
-  }
+  spawnGen += 1
+  inFlight = true
+  runGit(root, rels, key, spawnGen)
   return { root, marks: cacheMarks }
 }
 

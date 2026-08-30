@@ -27,6 +27,7 @@ import {
   type FileLetter,
   type FileView,
 } from "./files.js"
+import { onGitMarksChange } from "./git.js"
 import { getOes } from "./oes.js"
 import { startMonitor } from "./monitor.js"
 import { getOpenCodeDbPath } from "./paths.js"
@@ -303,6 +304,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   })
   const [liveTools, setLiveTools] = createSignal<Record<string, ToolHit>>({})
   const [liveFiles, setLiveFiles] = createSignal<Record<string, FileView>>({})
+  const [gitTick, setGitTick] = createSignal(0)
 
   const colors = (): ThemeColors => props.theme.current as unknown as ThemeColors
 
@@ -495,6 +497,11 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     setFrame((n) => n + 1)
   }, TICK_MS)
 
+  const offGit = onGitMarksChange(() => {
+    setGitTick((n) => n + 1)
+    queueMicrotask(requestRender)
+  })
+
   createEffect(() => {
     frame()
     now()
@@ -508,6 +515,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     if (debounce) clearTimeout(debounce)
     clearInterval(tick)
     monitor.stop()
+    offGit()
     for (const off of offs) off()
   })
 
@@ -645,11 +653,12 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     requestRender()
   }
 
-  const filesAll = createMemo(() =>
-    decorateFiles(mergeFiles(snap().db.files ?? [], liveFiles()), projectDir(), {
+  const filesAll = createMemo(() => {
+    gitTick()
+    return decorateFiles(mergeFiles(snap().db.files ?? [], liveFiles()), projectDir(), {
       git: shown() === "current" && !foldFiles(),
-    }),
-  )
+    })
+  })
   const files = createMemo(() => filesAll().slice(0, oes().fileRows))
   const filesStat = createMemo(() => sumDiff(filesAll()))
 

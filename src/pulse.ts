@@ -68,10 +68,8 @@ export function composeMark(opts: {
     if (s === "running" || s === "in_progress" || s === "active") return "stale"
     return "queued"
   }
-  if (s === "running" || s === "in_progress" || s === "active") {
-    const pulse = pulseFromAge(opts.ageMs)
-    return pulse === "idle" ? "stale" : pulse
-  }
+  // Running is not terminal — same age window as Agents. A leftover
+  // boulder `running` must not keep the spinner after the session went quiet.
   return pulseFromAge(opts.ageMs)
 }
 

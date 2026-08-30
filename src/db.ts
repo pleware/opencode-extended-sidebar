@@ -2,7 +2,7 @@
  * Read-only queries against OpenCode opencode.db (session / todo).
  */
 import fs from "node:fs"
-import { fileHitFromPartData, filesFromPatchData, type FileFilter, type FileView } from "./files.js"
+import { fileHitFromExtracted, filesFromPatchJson, type FileFilter, type FileView } from "./files.js"
 import { getOes } from "./oes.js"
 import { shortToolLabel } from "./pulse.js"
 import { openReadonlyDb, resetReadonlyDb, type SqlDb } from "./sqlite.js"
@@ -184,42 +184,57 @@ export function normalizeToolStatus(raw: string | null | undefined): ToolStatus 
   return "pending"
 }
 
-function unescapeJson(s: string): string {
-  try {
-    return JSON.parse(`"${s}"`) as string
-  } catch {
-    return s.replace(/\\"/g, '"').replace(/\\\\/g, "\\")
-  }
+function str(v: unknown): string | null {
+  if (typeof v === "string" && v.trim()) return v.trim()
+  return null
 }
 
-function matchField(data: string, key: string): string | null {
-  const re = new RegExp(`"${key}"\\s*:\\s*"((?:\\\\.|[^"\\\\])*)"`)
-  const m = data.match(re)
-  return m?.[1] != null ? unescapeJson(m[1]) : null
-}
-
-function matchNum(data: string, key: string): number | null {
-  const m = data.match(new RegExp(`"${key}"\\s*:\\s*(\\d+)`))
-  if (!m?.[1]) return null
-  const n = Number(m[1])
-  return Number.isFinite(n) && n > 0 ? n : null
-}
-
-/** Metadata only — regex, never parses tool I/O JSON. */
+/** Metadata only — json_extract, never the part blob. */
 export function listToolEvents(db: SqlDb, sessionId: string, limit = TOOL_ROWS): ToolView[] {
   type Row = {
     id: string
     time_created: number
     time_updated: number
-    data: string
+    tool: string | null
+    callID: string | null
+    status: string | null
+    tstart: number | null
+    tend: number | null
+    title: string | null
+    command: string | null
+    command2: string | null
+    filePath: string | null
+    filePath2: string | null
+    pattern: string | null
+    pattern2: string | null
+    description: string | null
+    description2: string | null
+    subagent: string | null
+    category: string | null
   }
   let rows: Row[] = []
   try {
     rows = db.all<Row>(
-      `SELECT id, time_created, time_updated, data
+      `SELECT id, time_created, time_updated,
+              json_extract(data,'$.tool') AS tool,
+              json_extract(data,'$.callID') AS callID,
+              json_extract(data,'$.state.status') AS status,
+              json_extract(data,'$.state.time.start') AS tstart,
+              json_extract(data,'$.state.time.end') AS tend,
+              json_extract(data,'$.state.title') AS title,
+              json_extract(data,'$.state.input.command') AS command,
+              json_extract(data,'$.input.command') AS command2,
+              json_extract(data,'$.state.input.filePath') AS filePath,
+              json_extract(data,'$.input.filePath') AS filePath2,
+              json_extract(data,'$.state.input.pattern') AS pattern,
+              json_extract(data,'$.input.pattern') AS pattern2,
+              json_extract(data,'$.state.input.description') AS description,
+              json_extract(data,'$.input.description') AS description2,
+              json_extract(data,'$.state.input.subagent_type') AS subagent,
+              json_extract(data,'$.state.input.category') AS category
        FROM part
        WHERE session_id = ?
-         AND data LIKE '%"type":"tool"%'
+         AND json_extract(data,'$.type') = 'tool'
        ORDER BY time_created DESC
        LIMIT ${TOOL_SCAN}`,
       sessionId,
@@ -230,14 +245,11 @@ export function listToolEvents(db: SqlDb, sessionId: string, limit = TOOL_ROWS):
 
   const out: ToolView[] = []
   for (const row of rows) {
-    const data = String(row.data || "")
-    if (!/"type"\s*:\s*"tool"/.test(data)) continue
-    const tool = matchField(data, "tool") || "tool"
-    const statusRaw = matchField(data, "status")
-    const start = matchNum(data, "start")
-    const end = matchNum(data, "end")
+    const tool = str(row.tool) || "tool"
+    const start = stampMaybe(row.tstart)
+    const end = stampMaybe(row.tend)
     const status = normalizeToolStatus(
-      statusRaw || (end != null ? "completed" : start != null ? "running" : null),
+      str(row.status) || (end != null ? "completed" : start != null ? "running" : null),
     )
     const startedAt = start ?? stampMaybe(row.time_created)
     const endedAt =
@@ -247,16 +259,16 @@ export function listToolEvents(db: SqlDb, sessionId: string, limit = TOOL_ROWS):
       startedAt != null && endedAt != null && endedAt >= startedAt ? endedAt - startedAt : null
     out.push({
       id: String(row.id),
-      callId: matchField(data, "callID"),
+      callId: str(row.callID),
       tool,
       name: shortToolLabel({
         tool,
-        title: matchField(data, "title"),
-        command: matchField(data, "command"),
-        filePath: matchField(data, "filePath"),
-        pattern: matchField(data, "pattern"),
-        description: matchField(data, "description"),
-        subagent: matchField(data, "subagent_type") || matchField(data, "category"),
+        title: str(row.title),
+        command: str(row.command) || str(row.command2),
+        filePath: str(row.filePath) || str(row.filePath2),
+        pattern: str(row.pattern) || str(row.pattern2),
+        description: str(row.description) || str(row.description2),
+        subagent: str(row.subagent) || str(row.category),
       }),
       status,
       startedAt,
@@ -277,24 +289,45 @@ const FILE_SCAN = 80
 
 /** Patch `files[]` + edit metadata +/- . No bodies. */
 export function listSessionFiles(db: SqlDb, sessionId: string, filter?: FileFilter): FileView[] {
-  type Row = { data: string; time_updated: number; time_created: number }
+  type Row = {
+    time_updated: number
+    time_created: number
+    kind: string | null
+    tool: string | null
+    filePath: string | null
+    filePath2: string | null
+    filePath3: string | null
+    addMeta: number | null
+    addMeta2: number | null
+    addTop: number | null
+    delMeta: number | null
+    delMeta2: number | null
+    delTop: number | null
+    files: string | null
+  }
   let rows: Row[] = []
   try {
     rows = db.all<Row>(
-      `SELECT data, time_updated, time_created
+      `SELECT time_created, time_updated,
+              json_extract(data,'$.type') AS kind,
+              json_extract(data,'$.tool') AS tool,
+              json_extract(data,'$.state.input.filePath') AS filePath,
+              json_extract(data,'$.input.filePath') AS filePath2,
+              json_extract(data,'$.filePath') AS filePath3,
+              json_extract(data,'$.state.metadata.additions') AS addMeta,
+              json_extract(data,'$.metadata.additions') AS addMeta2,
+              json_extract(data,'$.additions') AS addTop,
+              json_extract(data,'$.state.metadata.deletions') AS delMeta,
+              json_extract(data,'$.metadata.deletions') AS delMeta2,
+              json_extract(data,'$.deletions') AS delTop,
+              json_extract(data,'$.files') AS files
        FROM part
        WHERE session_id = ?
          AND (
-           data LIKE '%"type":"patch"%'
+           json_extract(data,'$.type') = 'patch'
            OR (
-             data LIKE '%"type":"tool"%'
-             AND (
-               data LIKE '%"tool":"edit"%'
-               OR data LIKE '%"tool":"write"%'
-               OR data LIKE '%"tool":"multiedit"%'
-               OR data LIKE '%"tool":"read"%'
-               OR data LIKE '%"tool":"delete"%'
-             )
+             json_extract(data,'$.type') = 'tool'
+              AND json_extract(data,'$.tool') IN ('edit','write','multiedit','read','delete','apply_edit','applyedit','remove','view','read_file','readfile')
            )
          )
        ORDER BY time_updated DESC
@@ -319,12 +352,18 @@ export function listSessionFiles(db: SqlDb, sessionId: string, filter?: FileFilt
   }
   for (const row of rows) {
     const at = stampMaybe(row.time_updated) ?? stampMaybe(row.time_created) ?? 0
-    const data = String(row.data || "")
-    if (/"type"\s*:\s*"patch"/.test(data)) {
-      for (const f of filesFromPatchData(data, at, filter)) add(f)
+    if (str(row.kind) === "patch") {
+      for (const f of filesFromPatchJson(row.files, at, filter)) add(f)
       continue
     }
-    const hit = fileHitFromPartData(data, at, filter)
+    const hit = fileHitFromExtracted({
+      tool: str(row.tool),
+      filePath: str(row.filePath) || str(row.filePath2) || str(row.filePath3),
+      additions: row.addMeta ?? row.addMeta2 ?? row.addTop,
+      deletions: row.delMeta ?? row.delMeta2 ?? row.delTop,
+      at,
+      filter,
+    })
     if (hit) add(hit)
   }
   return [...byId.values()].sort((a, b) => b.at - a.at)

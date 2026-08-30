@@ -1,6 +1,6 @@
 {
   "name": "opencode-extended-sidebar",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "OpenCode TUI sidebar: session switcher, live tool activity, file diffs, per-model timings and OMO plans (read-only)",
   "type": "module",
   "license": "MIT",
@@ -59,6 +59,8 @@
     "node": ">=20"
   },
   "scripts": {
-    "prepare": "node scripts/install-git-hooks.mjs"
+    "prepare": "node scripts/install-git-hooks.mjs",
+    "test": "bun test test/unit test/snapshot",
+    "bench": "bun test test/bench"
   }
 }

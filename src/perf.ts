@@ -151,7 +151,7 @@ const PART_SQL = `
   ORDER BY time_created DESC
   LIMIT ?`
 
-type MsgRow = {
+export type MsgRow = {
   id: string
   role: string | null
   model: string | null
@@ -167,7 +167,7 @@ type MsgRow = {
   cost: number | null
 }
 
-type PartRow = {
+export type PartRow = {
   mid: string
   kind: string | null
   pstart: number | null
@@ -283,7 +283,8 @@ function readRows(
   return { msgs, parts }
 }
 
-function aggregate(sessionId: string, msgs: MsgRow[], parts: PartRow[]): PerfSnapshot {
+/** Fold message + part rows into the Perf snapshot. Exported for tests. */
+export function aggregate(sessionId: string, msgs: MsgRow[], parts: PartRow[]): PerfSnapshot {
   const snap = emptyPerf(sessionId)
   snap.present = true
   const { byMsg, tools } = collectParts(parts)

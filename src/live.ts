@@ -41,6 +41,28 @@ export function computeFingerprint(opts: {
   ].join("::")
 }
 
+/**
+ * Boulder often leaves `task_sessions` on `running` after the work (and the
+ * OpenCode session) has finished. SQLite session status wins.
+ */
+export function reconcileDelegateStatus(
+  omoStatus: string,
+  sess?: Pick<SessionView, "status"> | null,
+): string {
+  const omo = (omoStatus || "unknown").toLowerCase()
+  if (!sess) return omo
+  if (sess.status === "archived") return "completed"
+  const omoError = omo === "error" || omo === "failed"
+  const omoDone = omo === "completed" || omo === "done"
+  if (sess.status === "idle") {
+    if (omoError) return omo
+    if (omoDone) return omo
+    return "completed"
+  }
+  if (omoError || omoDone) return omo
+  return omo === "unknown" ? "running" : omo
+}
+
 /** Delegates of this session only: SQLite children + OMO tasks whose parent is this session. */
 export function delegatesForSession(snap: LiveSnapshot, sessionId: string): DelegateView[] {
   const childIds = new Set(snap.db.children.map((c) => c.id))
@@ -80,6 +102,7 @@ function enrichDelegates(omo: OmoSnapshot, db: DbSnapshot): DelegateView[] {
     const sess = d.sessionId ? db.byId[d.sessionId] : undefined
     return {
       ...d,
+      status: reconcileDelegateStatus(d.status, sess),
       tokensTotal: sess ? sess.tokensTotal : null,
       timeUpdated: sess?.timeUpdated ?? d.updatedAt,
       archived: sess?.status === "archived",
@@ -173,6 +196,11 @@ let last: {
   omo: string
   snap: LiveSnapshot
 } | null = null
+
+/** Drop the in-memory live snapshot so the next read is a real load. */
+export function resetLiveCache(): void {
+  last = null
+}
 
 function withAges(db: DbSnapshot, now: number): DbSnapshot {
   const bump = (v: SessionView | null): SessionView | null =>

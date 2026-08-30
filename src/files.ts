@@ -87,7 +87,8 @@ function statsFromBag(o: Record<string, unknown> | null | undefined): { add: num
   }
 }
 
-function isSkipped(posixPath: string, skip: string[]): boolean {
+/** True when a relative/posix path sits under a skipDirs rule. Exported for tests. */
+export function isSkipped(posixPath: string, skip: string[]): boolean {
   if (!skip.length) return false
   const segs = posixPath.toLowerCase().split("/").filter(Boolean)
   segs.pop()
@@ -283,6 +284,68 @@ export function fileHitFromPartData(data: string, at: number, filter?: FileFilte
     filter,
     touchFromPartData(data),
   )
+}
+
+function firstString(...vals: unknown[]): string | null {
+  for (const v of vals) {
+    if (typeof v === "string" && v.trim()) return v.trim()
+  }
+  return null
+}
+
+function firstNum(...vals: unknown[]): number {
+  for (const v of vals) {
+    const n = typeof v === "number" ? v : typeof v === "string" ? Number(v) : NaN
+    if (Number.isFinite(n) && n > 0) return Math.round(n)
+  }
+  return 0
+}
+
+/** Patch `files` from json_extract — array or JSON text. No bodies. */
+export function filesFromPatchJson(raw: unknown, at: number, filter?: FileFilter): FileView[] {
+  let list: unknown = raw
+  if (typeof raw === "string") {
+    const t = raw.trim()
+    if (!t) return []
+    try {
+      list = JSON.parse(t)
+    } catch {
+      return []
+    }
+  }
+  if (!Array.isArray(list)) return []
+  const out: FileView[] = []
+  for (const item of list) {
+    const p =
+      typeof item === "string"
+        ? item
+        : firstString(
+            item && typeof item === "object" ? (item as Record<string, unknown>).filePath : null,
+            item && typeof item === "object" ? (item as Record<string, unknown>).path : null,
+          )
+    if (!p) continue
+    const f = asFile(p, 0, 0, at, filter)
+    if (f) out.push(f)
+  }
+  return out
+}
+
+/** Path + +/- from extracted columns. Never needs the part blob. */
+export function fileHitFromExtracted(opts: {
+  tool?: string | null
+  filePath?: string | null
+  filePathAlt?: string | null
+  additions?: unknown
+  deletions?: unknown
+  at: number
+  filter?: FileFilter
+}): FileView | null {
+  const raw = firstString(opts.filePath, opts.filePathAlt)
+  if (!raw) return null
+  const tool = (opts.tool || "").toLowerCase()
+  const touch = touchOfTool(tool)
+  if (tool && !touch) return null
+  return asFile(raw, firstNum(opts.additions), firstNum(opts.deletions), opts.at, opts.filter, touch ?? "write")
 }
 
 /** Git porcelain wins. `V` (viewed) only when git has no letter — git does not use V. */

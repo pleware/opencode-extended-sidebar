@@ -46,7 +46,7 @@ Extended Sidebar puts it back on screen. It reads OpenCode's own SQLite database
 
 ## ⋔ Delegates and sub-agents
 
-> When an orchestrator hands work off, the delegates show up as their own rows — tokens, status, live pulse, and a click to jump into any of them. **Sessions** lists the project's boulder. **Current** lists only children of the current session — a new main session starts empty, even if `.omo/boulder.json` still has yesterday's tasks.
+> When an orchestrator hands work off, the delegates show up as their own rows — tokens, status, live pulse, and a click to jump into any of them. **Sessions** lists the project's boulder. **Current** lists only children of the current session — a new main session starts empty, even if `.omo/boulder.json` still has yesterday's tasks. A leftover boulder `running` does not keep the spinner up once the OpenCode session has gone idle.
 
 ## ▤ OMO plans
 
@@ -201,19 +201,19 @@ Changes are picked up on the next refresh — no restart needed.
 
 The panel stays fresh three ways at once: a ~1.5s poll of database and WAL stamps, `fs.watch` on the relevant directories, and OpenCode's own session, message, tool and diff events. Token and reasoning deltas only move the live arrows — they do not rescan SQLite. A full tools/files read runs when this session's `MAX(part.time_updated)` actually changes.
 
-Diff counts come from edit-tool metadata (`additions` / `deletions`). Patch parts contribute file names only — the sidebar will not parse a diff body just to guess a number.
+Tools and files are filtered with `json_extract` on `part.data` — SQLite returns type, tool, timestamps, labels and +/- metadata. The blob itself (prompts, args, outputs, patch bodies) never enters the process. Diff counts come from edit-tool metadata (`additions` / `deletions`). Patch parts contribute file names only.
 
 `skipDirs` is applied in `files.ts` (`asFile`), so live events, SQLite parts and patch `files[]` all drop the same paths. A bare name matches any directory segment (`tmp` hides `project/tmp/scratch.md` and `C:\work\tmp\out.json`). A name with a slash matches a relative prefix (`docs/media` hides `docs/media/demo.gif`). Matching is case-insensitive. A file merely named `tmp.md` still shows. Setting `skipDirs` in a later `oes.json` **replaces** the list — it does not append — so an empty array shows everything, including scratch files. The config stays JSON on purpose: OpenCode already speaks JSON, three files merge without a parser, and a YAML library would be a runtime dependency.
 
 `skipGitignore` is off by default. When on, the root `.gitignore` is also applied — comments, `!` negation, directory-only slashes, `*` / `**`. Nested `.gitignore` files and `.git/info/exclude` are ignored. It stays off because Files lists what the session just touched, and a gitignored file the agent edited is often exactly the one you want to see.
 
-File letters come from `git status --porcelain -- <paths>` for the files already in the Files list, at the git root found by walking up from the session directory. They keep git's meaning: **R** is rename, **U** is unmerged, **?** is untracked. The spawn is skipped while Files is folded or you are not on the Current tab, and it is debounced so indexer noise on Windows does not walk the whole tree. A git letter always wins over a session letter. The only extra is **V** (viewed), which git's short status does not use. No `.git`, no `git` on PATH, or a failed spawn: the sidebar stays up and only **V** is used for read-only touches. The name itself stays the basename — no full paths.
+File letters come from `git status --porcelain -- <paths>` for the files already in the Files list, at the git root found by walking up from the session directory. They keep git's meaning: **R** is rename, **U** is unmerged, **?** is untracked. The spawn is skipped while Files is folded or you are not on the Current tab, and it is debounced so indexer noise on Windows does not walk the whole tree. Git runs **asynchronously** — the panel keeps the last letters (or **V** on a first read) until the process returns, so a 1.5 s `git` cannot stall the TUI. A git letter always wins over a session letter. The only extra is **V** (viewed), which git's short status does not use. No `.git`, no `git` on PATH, or a failed spawn: the sidebar stays up and only **V** is used for read-only touches. The name itself stays the basename — no full paths.
 
 Perf times each assistant turn from its own records: waiting is the gap between the message start and its first `text` or `reasoning` part, thinking is the summed length of the `reasoning` parts, streaming spans the `text` parts, and tool time comes from each tool part's own start and end. Phases are measured against the whole window rather than the summed turn durations, because a tool call can outlive the turn that started it. Every one of those fields is pulled with `json_extract`, so SQLite returns numbers and statuses and nothing else. The scan runs **only while the Perf tab is open**. It is cached against this session's `MAX(time_updated)`, not the whole WAL, so streaming on another tab does not keep re-reading parts. History rows refresh at most every ten seconds.
 
 Cost is shown only when the provider reports it. Many gateways record `0`, and the sidebar will not invent a price from an online catalogue.
 
-`oh-my-openagent` is optional enrichment, never a requirement. Without `.omo/` the **OMO | Plans** line is gone, Delegates is hidden, and there are no warnings.
+`oh-my-openagent` is optional enrichment, never a requirement. Without `.omo/` the **OMO | Plans** line is gone, Delegates is hidden, and there are no warnings. Delegate pulse follows the OpenCode session row: a `task_sessions` entry left on `running` is treated as finished once that session is idle.
 
 ## Project layout
 
@@ -228,7 +228,7 @@ src/
   live.ts       # unified snapshot
   db.ts         # read-only session / tool / file queries
   files.ts      # basenames + diff stats + git letters + V (viewed)
-  git.ts        # git status --porcelain on listed files only
+  git.ts        # git status --porcelain (async spawn, last letters until it returns)
   gitignore.ts  # root .gitignore matcher (used when skipGitignore)
   oes.ts        # oes.json options
   pulse.ts      # live/stale detection, flow, tool labels, bars, sparklines
@@ -236,6 +236,7 @@ src/
   paths.ts      # XDG paths / OPENCODE_DB_PATH
   omo.ts        # boulder / delegates / plans
 oes.json        # display defaults
+test/           # bun:test — unit, SQLite/OMO fixtures, 5k-part bench
 ```
 
 ## Environment
@@ -261,6 +262,8 @@ oes.json        # display defaults
 Issues and pull requests are welcome. The guiding constraints are worth knowing before you open one: read-only access to OpenCode data, no runtime npm dependencies, no prompts or tool I/O in the UI, and every row has to survive a narrow terminal.
 
 Every commit patch-bumps `package.json` and prepends one English sentence to [CHANGELOG.md](CHANGELOG.md). Write that sentence as the first line of the commit message. Merges and `SKIP_OES_BUMP=1` skip the bump.
+
+`bun test` runs unit and fixture tests (`test/unit`, `test/snapshot`). `bun run bench` times the 5k-part scan — fingerprint, live snapshot hit/miss, tools/files, Perf — and fails if it exceeds the budgets in `test/bench`. Git is not in those budgets: it is spawned off the TUI thread. No extra npm dependencies — `bun:test` and `bun:sqlite` are enough.
 
 ## License
 
