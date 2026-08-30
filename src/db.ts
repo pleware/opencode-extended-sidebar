@@ -5,7 +5,7 @@ import fs from "node:fs"
 import { fileHitFromPartData, filesFromPatchData, type FileFilter, type FileView } from "./files.js"
 import { getOes } from "./oes.js"
 import { shortToolLabel } from "./pulse.js"
-import { openReadonlyDb, type SqlDb } from "./sqlite.js"
+import { openReadonlyDb, resetReadonlyDb, type SqlDb } from "./sqlite.js"
 
 export type SessionRow = {
   id: string
@@ -360,6 +360,22 @@ export function getSessionsByIds(db: SqlDb, ids: string[]): SessionRow[] {
   )
 }
 
+export function sessionScanStamp(db: SqlDb, sessionId: string): string {
+  try {
+    const s = db.get<{ time_updated: number }>(
+      `SELECT time_updated FROM session WHERE id = ? LIMIT 1`,
+      sessionId,
+    )
+    const p = db.get<{ m: number | null }>(
+      `SELECT MAX(time_updated) AS m FROM part WHERE session_id = ?`,
+      sessionId,
+    )
+    return `${s?.time_updated ?? 0}|${p?.m ?? 0}`
+  } catch {
+    return "x"
+  }
+}
+
 export function readDbSnapshot(opts: {
   dbPath: string
   sessionId: string
@@ -370,10 +386,10 @@ export function readDbSnapshot(opts: {
     return emptyDb(opts.dbPath, "db missing")
   }
 
-  const db = openReadonlyDb(opts.dbPath)
-  if (!db) return emptyDb(opts.dbPath, "sqlite unavailable")
+  const run = (): DbSnapshot => {
+    const db = openReadonlyDb(opts.dbPath)
+    if (!db) return emptyDb(opts.dbPath, "sqlite unavailable")
 
-  try {
     const now = Date.now()
     const row = getSessionById(db, opts.sessionId)
     if (!row) {
@@ -381,16 +397,10 @@ export function readDbSnapshot(opts: {
     }
     const current = toSessionView(row, now)
     let parent: SessionView | null = null
-    let children: SessionView[] = []
-    let siblings: SessionView[] = []
-
-    children = listChildSessions(db, row.id).map((r) => toSessionView(r, now))
+    const children = listChildSessions(db, row.id).map((r) => toSessionView(r, now))
     if (row.parent_id) {
       const p = getSessionById(db, row.parent_id)
       if (p) parent = toSessionView(p, now)
-      siblings = listSiblingSessions(db, row.parent_id, row.id).map((r) =>
-        toSessionView(r, now),
-      )
     }
 
     const main = parent ?? current
@@ -403,7 +413,7 @@ export function readDbSnapshot(opts: {
       projectId: row.project_id,
       limit: oes.sessionRows,
     }).map((r) => toSessionView(r, now))
-    for (const v of [current, parent, main, ...children, ...siblings, ...extra, ...recent]) {
+    for (const v of [current, parent, main, ...children, ...extra, ...recent]) {
       if (v) byId[v.id] = v
     }
 
@@ -414,10 +424,10 @@ export function readDbSnapshot(opts: {
       main,
       parent,
       children,
-      siblings,
+      siblings: [],
       byId,
       recent,
-      todos: listTodos(db, row.id),
+      todos: [],
       tools: listToolEvents(db, row.id, oes.toolRows),
       files: listSessionFiles(db, row.id, {
         skipDirs: oes.skipDirs,
@@ -426,9 +436,16 @@ export function readDbSnapshot(opts: {
       }),
       error: null,
     }
+  }
+
+  try {
+    return run()
   } catch (e) {
-    return emptyDb(opts.dbPath, e instanceof Error ? e.message : "db read failed")
-  } finally {
-    db.close()
+    resetReadonlyDb()
+    try {
+      return run()
+    } catch {
+      return emptyDb(opts.dbPath, e instanceof Error ? e.message : "db read failed")
+    }
   }
 }

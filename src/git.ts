@@ -1,5 +1,6 @@
 /**
  * Read-only git status for Files letters. No repo / no git → empty, never throws.
+ * Status is scoped to the listed paths — never the whole worktree.
  */
 import { spawnSync } from "node:child_process"
 import fs from "node:fs"
@@ -8,6 +9,9 @@ import { fileStamp } from "./paths.js"
 
 /** Porcelain XY letters only. `?` is untracked. Do not invent extras here. */
 export type GitLetter = "M" | "A" | "D" | "R" | "C" | "U" | "T" | "?"
+
+const GIT_PATH_CAP = 40
+const GIT_DEBOUNCE_MS = 2500
 
 export function findGitRoot(start?: string | null): string | null {
   if (!start) return null
@@ -75,28 +79,73 @@ function xIsRename(x: string): boolean {
   return x === "R" || x === "C"
 }
 
+export function relToGitRoot(posixPath: string, root: string): string {
+  const file = posixPath.replace(/\\/g, "/")
+  const base = root.replace(/\\/g, "/").replace(/\/+$/, "")
+  const lower = file.toLowerCase()
+  const rootLower = base.toLowerCase()
+  if (lower.startsWith(`${rootLower}/`)) return lower.slice(rootLower.length + 1)
+  return lower.replace(/^\.\//, "")
+}
+
+function relsFrom(posixPaths: string[], root: string): string[] {
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const p of posixPaths) {
+    const rel = relToGitRoot(p, root)
+    if (!rel || seen.has(rel)) continue
+    seen.add(rel)
+    out.push(rel)
+    if (out.length >= GIT_PATH_CAP) break
+  }
+  return out
+}
+
 let cacheKey = ""
 let cacheMarks = new Map<string, GitLetter>()
 let cacheRoot: string | null = null
+let lastPathKey = ""
+let lastSpawn = 0
 
-export function readGitMarks(projectRoot?: string | null): {
+/** Porcelain letters for the given files only. Debounced on index stamp noise. */
+export function readGitMarksFor(
+  posixPaths: string[],
+  projectRoot?: string | null,
+): {
   root: string | null
   marks: Map<string, GitLetter>
 } {
   const root = findGitRoot(projectRoot)
-  const key = `${root ?? ""}|${gitStatusStamp(projectRoot)}`
+  if (!root || posixPaths.length === 0) {
+    return { root, marks: new Map() }
+  }
+  const rels = relsFrom(posixPaths, root)
+  const pathKey = rels.slice().sort().join("\0")
+  const stamp = gitStatusStamp(projectRoot)
+  const key = `${root}|${stamp}|${pathKey}`
   if (key === cacheKey) return { root: cacheRoot, marks: cacheMarks }
-  cacheKey = key
+
+  const now = Date.now()
+  if (pathKey === lastPathKey && lastSpawn > 0 && now - lastSpawn < GIT_DEBOUNCE_MS) {
+    return { root: cacheRoot, marks: cacheMarks }
+  }
+
   cacheRoot = root
   cacheMarks = new Map()
-  if (!root) return { root, marks: cacheMarks }
+  cacheKey = key
+  lastPathKey = pathKey
+  lastSpawn = now
   try {
-    const res = spawnSync("git", ["-c", "core.quotepath=false", "status", "--porcelain", "-z"], {
-      cwd: root,
-      encoding: "utf8",
-      timeout: 1500,
-      windowsHide: true,
-    })
+    const res = spawnSync(
+      "git",
+      ["-c", "core.quotepath=false", "status", "--porcelain", "-z", "--", ...rels],
+      {
+        cwd: root,
+        encoding: "utf8",
+        timeout: 1500,
+        windowsHide: true,
+      },
+    )
     if (res.status === 0 && res.stdout) cacheMarks = parsePorcelainZ(res.stdout)
   } catch {
     cacheMarks = new Map()
@@ -105,14 +154,8 @@ export function readGitMarks(projectRoot?: string | null): {
 }
 
 export function gitLetterFor(posixPath: string, projectRoot?: string | null): GitLetter | null {
-  const { root, marks } = readGitMarks(projectRoot)
+  const { root, marks } = readGitMarksFor([posixPath], projectRoot)
   if (!root || marks.size === 0) return null
-  const file = posixPath.replace(/\\/g, "/")
-  const base = root.replace(/\\/g, "/").replace(/\/+$/, "")
-  const lower = file.toLowerCase()
-  const rootLower = base.toLowerCase()
-  const rel = lower.startsWith(`${rootLower}/`)
-    ? lower.slice(rootLower.length + 1)
-    : lower.replace(/^\.\//, "")
-  return marks.get(rel) ?? marks.get(lower) ?? null
+  const rel = relToGitRoot(posixPath, root)
+  return marks.get(rel) ?? marks.get(posixPath.replace(/\\/g, "/").toLowerCase()) ?? null
 }

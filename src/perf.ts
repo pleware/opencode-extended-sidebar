@@ -4,7 +4,7 @@
  * message text, reasoning text and tool I/O never enter the process.
  */
 import fs from "node:fs"
-import { openReadonlyDb, type SqlDb } from "./sqlite.js"
+import { openReadonlyDb, resetReadonlyDb, type SqlDb } from "./sqlite.js"
 
 /** Where the session's wall clock goes. `idle` is whatever the phases do not claim. */
 export type PerfPhase = "wait" | "think" | "recv" | "tool" | "idle"
@@ -448,6 +448,10 @@ export type PerfOptions = {
 
 let cacheKey = ""
 let cached: PerfSnapshot | null = null
+let histKey = ""
+let histAt = 0
+let histCached: SessionPerf[] = []
+const HIST_TTL_MS = 10_000
 
 export function readPerfSnapshot(opts: PerfOptions): PerfSnapshot {
   const key = opts.cacheKey
@@ -455,35 +459,45 @@ export function readPerfSnapshot(opts: PerfOptions): PerfSnapshot {
     : ""
   if (key && key === cacheKey && cached) return cached
 
-  let snap: PerfSnapshot
-  if (!opts.dbPath || !fs.existsSync(opts.dbPath)) {
-    snap = emptyPerf(opts.sessionId, "db missing")
-  } else {
+  const load = (): PerfSnapshot => {
+    if (!opts.dbPath || !fs.existsSync(opts.dbPath)) {
+      return emptyPerf(opts.sessionId, "db missing")
+    }
     const db = openReadonlyDb(opts.dbPath)
-    if (!db) {
-      snap = emptyPerf(opts.sessionId, "sqlite unavailable")
-    } else {
+    if (!db) return emptyPerf(opts.sessionId, "sqlite unavailable")
+    const { msgs, parts } = readRows(db, opts.sessionId, opts.turns)
+    const snap = aggregate(opts.sessionId, msgs, parts)
+    const hKey = (opts.history ?? []).map((h) => h.id).join(",")
+    const now = Date.now()
+    if (hKey === histKey && now - histAt < HIST_TTL_MS) {
+      snap.history = histCached
+      return snap
+    }
+    const histTurns = Math.max(20, Math.min(opts.historyTurns ?? 60, opts.turns))
+    for (const h of opts.history ?? []) {
+      if (h.id === opts.sessionId) continue
       try {
-        const { msgs, parts } = readRows(db, opts.sessionId, opts.turns)
-        snap = aggregate(opts.sessionId, msgs, parts)
-        const histTurns = Math.max(20, Math.min(opts.historyTurns ?? 60, opts.turns))
-        for (const h of opts.history ?? []) {
-          if (h.id === opts.sessionId) continue
-          try {
-            const row = sessionPerf(db, h.id, h.title, histTurns)
-            if (row) snap.history.push(row)
-          } catch {
-            // one unreadable session must not sink the tab
-          }
-        }
-      } catch (e) {
-        snap = emptyPerf(
-          opts.sessionId,
-          e instanceof Error ? e.message : "perf read failed",
-        )
-      } finally {
-        db.close()
+        const row = sessionPerf(db, h.id, h.title, histTurns)
+        if (row) snap.history.push(row)
+      } catch {
+        // one unreadable session must not sink the tab
       }
+    }
+    histKey = hKey
+    histAt = now
+    histCached = snap.history
+    return snap
+  }
+
+  let snap: PerfSnapshot
+  try {
+    snap = load()
+  } catch (e) {
+    resetReadonlyDb()
+    try {
+      snap = load()
+    } catch {
+      snap = emptyPerf(opts.sessionId, e instanceof Error ? e.message : "perf read failed")
     }
   }
 

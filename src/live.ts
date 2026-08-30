@@ -2,12 +2,12 @@
  * Unified live snapshot: OpenCode SQLite + OMO files.
  * Fingerprint-driven — callers poll / watch and call readLiveSnapshot.
  */
-import { emptyDb, readDbSnapshot, type DbSnapshot } from "./db.js"
-import { emptyOmo, readOmo, readOmoConfig, type Delegate, type OmoConfigView, type OmoSnapshot } from "./omo.js"
-import { gitStatusStamp } from "./git.js"
+import { emptyDb, readDbSnapshot, sessionScanStamp, type DbSnapshot, type SessionView } from "./db.js"
+import { emptyOmo, omoStamp, readOmo, readOmoConfig, type Delegate, type OmoConfigView, type OmoSnapshot } from "./omo.js"
 import { gitignoreStamp } from "./gitignore.js"
 import { oesStamp } from "./oes.js"
 import { dbStamp, getOpenCodeDbPath } from "./paths.js"
+import { openReadonlyDb, resetReadonlyDb } from "./sqlite.js"
 
 export type DelegateView = Delegate & {
   tokensTotal: number | null
@@ -18,26 +18,26 @@ export type DelegateView = Delegate & {
 export type LiveSnapshot = {
   generatedAt: number
   fingerprint: string
+  /** session.time_updated + MAX(part.time_updated) — Perf cache key, not git. */
+  scanStamp: string
   db: DbSnapshot
   omo: OmoSnapshot
   omoConfig: OmoConfigView
   delegates: DelegateView[]
 }
 
+/** Cheap poll key: WAL + omo/oes stamps. No git, no boulder JSON. */
 export function computeFingerprint(opts: {
   dbPath: string
   projectRoot: string | null
   sessionId: string
 }): string {
-  const omo = readOmo(opts.projectRoot)
   return [
     opts.sessionId,
     dbStamp(opts.dbPath),
-    omo.stamp,
-    omo.boulderPath || "",
+    omoStamp(opts.projectRoot),
     oesStamp(opts.projectRoot),
     gitignoreStamp(opts.projectRoot),
-    gitStatusStamp(opts.projectRoot),
   ].join("::")
 }
 
@@ -91,35 +91,100 @@ export function readLiveSnapshot(opts: {
   sessionId: string
   projectRoot: string | null
   dbPath?: string
+  force?: boolean
 }): LiveSnapshot {
   const dbPath = opts.dbPath || getOpenCodeDbPath()
+  const cheap = computeFingerprint({
+    dbPath,
+    projectRoot: opts.projectRoot,
+    sessionId: opts.sessionId,
+  })
+  const omoKey = omoStamp(opts.projectRoot)
+  let scan = "0"
+  const handle = openReadonlyDb(dbPath)
+  if (opts.sessionId && handle) {
+    try {
+      scan = sessionScanStamp(handle, opts.sessionId)
+    } catch {
+      resetReadonlyDb()
+      const again = openReadonlyDb(dbPath)
+      if (again) {
+        try {
+          scan = sessionScanStamp(again, opts.sessionId)
+        } catch {
+          scan = "x"
+        }
+      }
+    }
+  }
+
+  if (
+    !opts.force &&
+    last &&
+    last.sessionId === opts.sessionId &&
+    last.scan === scan &&
+    last.omo === omoKey
+  ) {
+    const now = Date.now()
+    return {
+      ...last.snap,
+      generatedAt: now,
+      fingerprint: `${cheap}::${scan}`,
+      scanStamp: scan,
+      db: withAges(last.snap.db, now),
+    }
+  }
+
   const omo = readOmo(opts.projectRoot)
   const extraIds = omo.delegates
     .map((d) => d.sessionId)
     .filter((id): id is string => Boolean(id))
-  const db = opts.sessionId
-    ? readDbSnapshot({
-        dbPath,
-        sessionId: opts.sessionId,
-        extraIds,
-        projectRoot: opts.projectRoot,
-      })
-    : emptyDb(dbPath, "no session")
-  const fingerprint = [
-    opts.sessionId,
-    dbStamp(dbPath),
-    omo.stamp,
-    oesStamp(opts.projectRoot),
-    gitignoreStamp(opts.projectRoot),
-    gitStatusStamp(opts.projectRoot),
-  ].join("::")
+  let db: DbSnapshot
+  try {
+    db = opts.sessionId
+      ? readDbSnapshot({
+          dbPath,
+          sessionId: opts.sessionId,
+          extraIds,
+          projectRoot: opts.projectRoot,
+        })
+      : emptyDb(dbPath, "no session")
+  } catch {
+    resetReadonlyDb()
+    db = emptyDb(dbPath, "db read failed")
+  }
 
-  return {
+  const snap: LiveSnapshot = {
     generatedAt: Date.now(),
-    fingerprint,
+    fingerprint: `${cheap}::${scan}`,
+    scanStamp: scan,
     db,
     omo,
     omoConfig: readOmoConfig(),
     delegates: enrichDelegates(omo, db),
   }
+  last = { sessionId: opts.sessionId, scan, omo: omoKey, snap }
+  return snap
+}
+
+let last: {
+  sessionId: string
+  scan: string
+  omo: string
+  snap: LiveSnapshot
+} | null = null
+
+function withAges(db: DbSnapshot, now: number): DbSnapshot {
+  const bump = (v: SessionView | null): SessionView | null =>
+    v ? { ...v, ageMs: Math.max(0, now - v.timeUpdated) } : null
+  const current = bump(db.current)
+  const parent = bump(db.parent)
+  const main = bump(db.main)
+  const children = db.children.map((v) => bump(v)!)
+  const recent = db.recent.map((v) => bump(v)!)
+  const byId: DbSnapshot["byId"] = {}
+  for (const v of [current, parent, main, ...children, ...recent, ...Object.values(db.byId).map((x) => bump(x)!)]) {
+    if (v) byId[v.id] = v
+  }
+  return { ...db, current, parent, main, children, recent, byId }
 }

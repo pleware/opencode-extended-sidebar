@@ -83,6 +83,14 @@ function stripSessionPrefix(id: string | null | undefined): string | null {
   return s.startsWith("opencode:") ? s.slice("opencode:".length) : s
 }
 
+/** Boulder + plan mtimes only — no JSON parse. */
+export function omoStamp(projectRoot?: string | null): string {
+  if (!projectRoot) return "0"
+  const boulderPath = findBoulder(canonicalizePath(projectRoot))
+  if (!boulderPath) return "0"
+  return `${fileStamp(boulderPath)}|${fileStamp(path.dirname(boulderPath))}`
+}
+
 export function findBoulder(projectRoot: string): string | null {
   for (const rel of [".omo/boulder.json", ".sisyphus/boulder.json"]) {
     const p = path.join(projectRoot, rel)

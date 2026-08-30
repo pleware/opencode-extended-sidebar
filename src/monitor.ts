@@ -42,6 +42,7 @@ export function startMonitor(opts: MonitorOptions): MonitorHandle {
         sessionId: opts.sessionId,
         projectRoot: opts.projectRoot,
         dbPath,
+        force,
       }),
     )
   }

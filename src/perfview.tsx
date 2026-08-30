@@ -33,7 +33,7 @@ const KV_FOLD_HISTORY = "oes.fold.perf.history"
 
 const PHASES: Array<{ key: PerfPhase; glyph: string; label: string }> = [
   { key: "wait", glyph: "↑", label: "wait" },
-  { key: "think", glyph: "✳", label: "think" },
+  { key: "think", glyph: "∴", label: "think" },
   { key: "recv", glyph: "↓", label: "recv" },
   { key: "tool", glyph: "→", label: "tools" },
   { key: "idle", glyph: "·", label: "idle" },
@@ -117,13 +117,13 @@ function ModelRow(props: {
   const chips = (): Chip[] => [
     { text: `${m().turns}×`, rank: 2 },
     { text: m().waitMs != null ? `↑${formatDuration(m().waitMs)}` : "", rank: 0 },
-    { text: m().thinkMs != null ? `✳${formatDuration(m().thinkMs)}` : "", rank: 3 },
+    { text: m().thinkMs != null ? `∴${formatDuration(m().thinkMs)}` : "", rank: 3 },
     { text: m().recvMs != null ? `↓${formatDuration(m().recvMs)}` : "", rank: 1 },
     { text: formatRate(m().tokensPerSec), rank: 4 },
   ]
   const chipFg = (chip: Chip): string => {
     if (chip.text.startsWith("↑")) return props.colors.warning || props.colors.text
-    if (chip.text.startsWith("✳")) return props.colors.primary || props.colors.text
+    if (chip.text.startsWith("∴")) return props.colors.primary || props.colors.text
     if (chip.text.startsWith("↓")) return props.colors.success
     return props.colors.textMuted
   }
@@ -287,7 +287,7 @@ export function PerfPanel(props: PerfPanelProps): JSX.Element {
     const parts = [
       `↑${formatTokens(t.tokensIn)}`,
       `↓${formatTokens(t.tokensOut)}`,
-      t.tokensReasoning > 0 ? `✳${formatTokens(t.tokensReasoning)}` : "",
+      t.tokensReasoning > 0 ? `∴${formatTokens(t.tokensReasoning)}` : "",
       t.cacheHit != null ? `⧉${formatPercent(t.cacheHit)}` : "",
     ].filter(Boolean)
     return parts.join(" ")

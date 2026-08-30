@@ -40,7 +40,7 @@ Extended Sidebar puts it back on screen. It reads OpenCode's own SQLite database
 
 ## ± File changes with diff stats
 
-> See which files this session touched, with `+N −M` per file and a running total in the section header. Letters follow `git status --short` exactly: **M** modified, **A** added, **D** deleted, **R** renamed, **C** copied, **U** unmerged, **T** typechange, **?** untracked. The only extra letter is **V** (viewed) — git does not use it — for a session read with no git status. If there is no repo or no `git` binary, git letters stay off and only **V** appears on reads. Additions are green, deletions are red, both pulled from your theme's diff colours. Long names are shortened intelligently (`start…end.ext`) so the panel stays narrow.
+> See which files this session touched, with `+N −M` per file and a running total in the section header. Letters follow `git status --short` exactly: **M** modified, **A** added, **D** deleted, **R** renamed, **C** copied, **U** unmerged, **T** typechange, **?** untracked. The only extra letter is **V** (viewed) — git does not use it — for a session read with no git status. Git is asked only about those listed paths, and only while the Files section is open on the Current tab. If there is no repo or no `git` binary, git letters stay off and only **V** appears on reads. Additions are green, deletions are red, both pulled from your theme's diff colours. Long names are shortened intelligently (`start…end.ext`) so the panel stays narrow.
 >
 > Scratch paths are dropped by default (`tmp/`, `.tmp/`). They never appear in the list and they do not count towards the header total. Override the list with `skipDirs` in `oes.json`, or set it to `[]` to show everything. Set `skipGitignore` to `true` to also hide files that match the project's root `.gitignore`.
 
@@ -50,7 +50,7 @@ Extended Sidebar puts it back on screen. It reads OpenCode's own SQLite database
 
 ## ◴ Where the time actually goes
 
-> A session that feels slow is rarely slow for the reason you assume. **Perf** splits the wall clock into the four things that can eat it — **↑** waiting for the model to answer, **✳** thinking, **↓** streaming tokens back, **→** tool calls — and draws each as a bar with its share and its total. Whatever the phases do not claim is idle.
+> A session that feels slow is rarely slow for the reason you assume. **Perf** splits the wall clock into the four things that can eat it — **↑** waiting for the model to answer, **∴** thinking, **↓** streaming tokens back, **→** tool calls — and draws each as a bar with its share and its total. Whatever the phases do not claim is idle.
 >
 > Every model you used gets a row: turns, average time to first token, average thinking time, average streaming time, and output tokens per second. Mixing a fast model and a slow one in the same session stops being a guess. Under it, tools are ranked by the time they burned, not by how often they ran, so a single 2-minute call outranks fifty instant greps. Two sparklines show whether latency and throughput are drifting over the last turns, and **History** puts the same numbers next to your other recent sessions.
 >
@@ -93,7 +93,7 @@ Every row is one glyph plus one colour: the glyph says *what* is happening, the 
 | `×`                             | failed — an errored session, delegate or tool call            |
 | `M` `A` `D` `R` `C` `U` `T` `?` | Files: git status — same letters as `git status --short`      |
 | `V`                             | Files: viewed (session read only) — not a git letter          |
-| `✳`                             | Perf: thinking — reasoning time and reasoning tokens          |
+| `∴`                             | Perf: thinking — reasoning time and reasoning tokens          |
 | `⧉`                             | Perf: cache hit rate — cached input vs input actually sent    |
 | `█░`                            | Perf: share of the wall clock, or of total tool time          |
 | `▁▂▃▄▅▆▇█`                      | Perf: sparkline over recent turns — `·` is a turn with no reading |
@@ -116,7 +116,7 @@ The three arrows blink about twice per second, and only the glyph blinks — the
 | red `D` `U`            | `error`                     | Files: deleted or unmerged                       |
 | green `A`              | `success`                   | Files: added                                     |
 | muted `?` `V`          | `textMuted`                 | Files: untracked, or viewed (not a git letter)   |
-| accent `✳`             | `primary`                   | Perf: thinking time and reasoning tokens         |
+| accent `∴`             | `primary`                   | Perf: thinking time and reasoning tokens         |
 
 
 Direction beats freshness: while an arrow is lit it drives the colour, so `↑` reads yellow even on a session that was busy a millisecond ago. The session you are currently in is additionally **bold**, which is how you tell it apart from any other accent-coloured row.
@@ -188,7 +188,7 @@ Changes are picked up on the next refresh — no restart needed.
 | `oes.json`      | plugin / user config / project                                | display limits                                   |
 
 
-The panel stays fresh three ways at once: a ~1.5s poll of the database and WAL stamps, `fs.watch` on the relevant directories, and OpenCode's own session, message, tool and diff events. Whichever fires first triggers a re-render.
+The panel stays fresh three ways at once: a ~1.5s poll of database and WAL stamps, `fs.watch` on the relevant directories, and OpenCode's own session, message, tool and diff events. Token and reasoning deltas only move the live arrows — they do not rescan SQLite. A full tools/files read runs when this session's `MAX(part.time_updated)` actually changes.
 
 Diff counts come from edit-tool metadata (`additions` / `deletions`). Patch parts contribute file names only — the sidebar will not parse a diff body just to guess a number.
 
@@ -196,9 +196,9 @@ Diff counts come from edit-tool metadata (`additions` / `deletions`). Patch part
 
 `skipGitignore` is off by default. When on, the root `.gitignore` is also applied — comments, `!` negation, directory-only slashes, `*` / `**`. Nested `.gitignore` files and `.git/info/exclude` are ignored. It stays off because Files lists what the session just touched, and a gitignored file the agent edited is often exactly the one you want to see.
 
-File letters come from `git status --porcelain` at the git root found by walking up from the session directory, and they keep git's meaning: **R** is rename, **U** is unmerged, **?** is untracked. A git letter always wins over a session letter. The only extra is **V** (viewed), which git's short status does not use. No `.git`, no `git` on PATH, or a failed spawn: the sidebar stays up and only **V** is used for read-only touches. The name itself stays the basename — no full paths.
+File letters come from `git status --porcelain -- <paths>` for the files already in the Files list, at the git root found by walking up from the session directory. They keep git's meaning: **R** is rename, **U** is unmerged, **?** is untracked. The spawn is skipped while Files is folded or you are not on the Current tab, and it is debounced so indexer noise on Windows does not walk the whole tree. A git letter always wins over a session letter. The only extra is **V** (viewed), which git's short status does not use. No `.git`, no `git` on PATH, or a failed spawn: the sidebar stays up and only **V** is used for read-only touches. The name itself stays the basename — no full paths.
 
-Perf times each assistant turn from its own records: waiting is the gap between the message start and its first `text` or `reasoning` part, thinking is the summed length of the `reasoning` parts, streaming spans the `text` parts, and tool time comes from each tool part's own start and end. Phases are measured against the whole window rather than the summed turn durations, because a tool call can outlive the turn that started it. Every one of those fields is pulled with `json_extract`, so SQLite returns numbers and statuses and nothing else. A snapshot is cached against the same fingerprint that drives the rest of the panel, so an open Perf tab costs one read per actual change — around 50 ms for a thousand-part session.
+Perf times each assistant turn from its own records: waiting is the gap between the message start and its first `text` or `reasoning` part, thinking is the summed length of the `reasoning` parts, streaming spans the `text` parts, and tool time comes from each tool part's own start and end. Phases are measured against the whole window rather than the summed turn durations, because a tool call can outlive the turn that started it. Every one of those fields is pulled with `json_extract`, so SQLite returns numbers and statuses and nothing else. The scan runs **only while the Perf tab is open**. It is cached against this session's `MAX(time_updated)`, not the whole WAL, so streaming on another tab does not keep re-reading parts. History rows refresh at most every ten seconds.
 
 Cost is shown only when the provider reports it. Many gateways record `0`, and the sidebar will not invent a price from an online catalogue.
 
@@ -217,7 +217,7 @@ src/
   live.ts       # unified snapshot
   db.ts         # read-only session / tool / file queries
   files.ts      # basenames + diff stats + git letters + V (viewed)
-  git.ts        # git status --porcelain (optional; no repo is fine)
+  git.ts        # git status --porcelain on listed files only
   gitignore.ts  # root .gitignore matcher (used when skipGitignore)
   oes.ts        # oes.json options
   pulse.ts      # live/stale detection, flow, tool labels, bars, sparklines

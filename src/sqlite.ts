@@ -70,8 +70,9 @@ function wrapNodeSync(db: {
   }
 }
 
-/** Open opencode.db readonly. Never throws — returns null on failure. */
-export function openReadonlyDb(dbPath: string): SqlDb | null {
+let hold: { path: string; db: SqlDb } | null = null
+
+function openFresh(dbPath: string): SqlDb | null {
   if (!dbPath || !fs.existsSync(dbPath)) return null
   try {
     if (typeof process.versions.bun === "string") {
@@ -98,4 +99,26 @@ export function openReadonlyDb(dbPath: string): SqlDb | null {
   } catch {
     return null
   }
+}
+
+/** Drop the cached handle so the next open is a real reopen. */
+export function resetReadonlyDb(): void {
+  if (!hold) return
+  try {
+    hold.db.close()
+  } catch {
+    // ignore
+  }
+  hold = null
+}
+
+/** Open opencode.db readonly. Reuses one handle per path. Never throws — returns null on failure. */
+export function openReadonlyDb(dbPath: string): SqlDb | null {
+  if (!dbPath) return null
+  if (hold?.path === dbPath) return hold.db
+  resetReadonlyDb()
+  const db = openFresh(dbPath)
+  if (!db) return null
+  hold = { path: dbPath, db }
+  return db
 }

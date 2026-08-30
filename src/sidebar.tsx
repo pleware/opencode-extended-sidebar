@@ -293,6 +293,7 @@ function emptyLive(): LiveSnapshot {
   return {
     generatedAt: 0,
     fingerprint: "",
+    scanStamp: "0",
     db: emptyDb(dbPath),
     omo: emptyOmo(),
     omoConfig: { present: false, path: null, teamMode: null, agents: [] },
@@ -409,6 +410,27 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   queueMicrotask(hydrateDiff)
 
   let debounce: ReturnType<typeof setTimeout> | null = null
+  const eventType = (evt: unknown): string => {
+    if (evt && typeof evt === "object" && typeof (evt as { type?: unknown }).type === "string") {
+      return (evt as { type: string }).type
+    }
+    return ""
+  }
+  const shouldRefreshDb = (type: string): boolean => {
+    if (!type || type.includes(".delta")) return false
+    if (type.includes("tool.called") || type.includes("tool.success") || type.includes("tool.failed")) {
+      return true
+    }
+    if (type.includes("file.edited") || type.includes("session.diff")) return true
+    if (type.includes("session.status") || type.includes("session.idle") || type.includes("session.created")) {
+      return true
+    }
+    if (type.includes("part.updated")) return true
+    if (type.includes("step.started") || type.includes("step.ended") || type.includes("step.failed")) {
+      return true
+    }
+    return false
+  }
   const onEvent = (...args: unknown[]) => {
     const evt = args[0]
     const id = sessionIdFromEvent(evt) ?? props.sessionId
@@ -431,6 +453,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     }
     ingestFiles(filesFromEvent(evt, props.sessionId, fileFilter(projectDir())))
     queueMicrotask(requestRender)
+    if (!shouldRefreshDb(eventType(evt))) return
     if (debounce) clearTimeout(debounce)
     debounce = setTimeout(() => {
       debounce = null
@@ -640,7 +663,9 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   }
 
   const filesAll = createMemo(() =>
-    decorateFiles(mergeFiles(snap().db.files ?? [], liveFiles()), projectDir()),
+    decorateFiles(mergeFiles(snap().db.files ?? [], liveFiles()), projectDir(), {
+      git: tab() === "current" && !foldFiles(),
+    }),
   )
   const files = createMemo(() => filesAll().slice(0, oes().fileRows))
   const filesStat = createMemo(() => sumDiff(filesAll()))
@@ -648,11 +673,11 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   const pickTab = (next: Tab) => {
     setTab(next)
     kvWriteOne(props.api, KV_TAB, next)
-    monitor.refresh()
+    if (next === "current" || next === "perf") monitor.refresh()
     requestRender()
   }
 
-  /** Perf reads extra tables, so it only runs while its tab is open. */
+  /** Perf SQLite scan runs only while this tab is open. */
   const perf = createMemo(() => {
     if (tab() !== "perf") return emptyPerf(props.sessionId)
     const o = oes()
@@ -667,7 +692,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
       sessionId: props.sessionId,
       turns: o.perfTurns,
       history,
-      cacheKey: snap().fingerprint,
+      cacheKey: `${props.sessionId}::${snap().scanStamp}::${o.perfTurns}`,
     })
   })
 

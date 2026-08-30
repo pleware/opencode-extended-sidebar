@@ -2,7 +2,7 @@
  * Session file hits: basename + diff stats only.
  * Never keeps path, before/after, or tool I/O.
  */
-import { gitLetterFor, type GitLetter } from "./git.js"
+import { readGitMarksFor, relToGitRoot, type GitLetter } from "./git.js"
 import { ignoredByGitignore } from "./gitignore.js"
 import { getOes, OES_DEFAULTS } from "./oes.js"
 import { sessionIdFromEvent } from "./pulse.js"
@@ -286,9 +286,26 @@ export function fileHitFromPartData(data: string, at: number, filter?: FileFilte
 }
 
 /** Git porcelain wins. `V` (viewed) only when git has no letter — git does not use V. */
-export function decorateFiles(files: FileView[], projectRoot?: string | null): FileView[] {
+export function decorateFiles(
+  files: FileView[],
+  projectRoot?: string | null,
+  opts?: { git?: boolean },
+): FileView[] {
+  if (!files.length) return files
+  if (opts?.git === false) {
+    return files.map((f) => ({
+      ...f,
+      letter: f.letter ?? (f.touch === "read" ? "V" : null),
+    }))
+  }
+  const { root, marks } = readGitMarksFor(
+    files.map((f) => f.id),
+    projectRoot ?? null,
+  )
   return files.map((f) => {
-    const git = gitLetterFor(f.id, projectRoot ?? null)
+    const git = root
+      ? marks.get(relToGitRoot(f.id, root)) ?? marks.get(f.id.replace(/\\/g, "/").toLowerCase()) ?? null
+      : null
     return { ...f, letter: git ?? (f.touch === "read" ? "V" : null) }
   })
 }
