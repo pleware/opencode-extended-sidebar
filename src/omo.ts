@@ -5,7 +5,7 @@
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
-import { canonicalizePath, fileStamp } from "./paths.js"
+import { canonicalizePath, fileStamp, resolveProjectFile } from "./paths.js"
 
 export type PlanStep = { checked: boolean; text: string }
 
@@ -121,25 +121,33 @@ export function planStatusLabel(status: string): string {
   return s
 }
 
-function relativePlanPath(projectRoot: string, activePlan: string | null | undefined): string | null {
-  const abs = resolvePlanPath(projectRoot, activePlan ?? null)
-  if (!abs) return null
-  try {
-    const rel = path.relative(projectRoot, abs)
-    if (!rel || rel.startsWith("..") || path.isAbsolute(rel)) return null
-    return rel.replace(/\\/g, "/")
-  } catch {
-    return null
-  }
+/** Plans column glyph: check / check-o / fail. Running stays a spinner (`null`). */
+export function planStatusGlyph(status: string): string | null {
+  const s = planStatusLabel(status)
+  if (s === "done") return "✓"
+  if (s === "error") return "×"
+  if (s === "running") return null
+  return "○"
 }
 
-function asPlan(id: string, w: RawWork, current: boolean, projectRoot: string): PlanView {
+function relativePlanPath(projectRoot: string, activePlan: string | null | undefined): string | null {
+  return resolveProjectFile(projectRoot, activePlan)?.rel ?? null
+}
+
+function asPlan(
+  id: string,
+  w: RawWork,
+  current: boolean,
+  projectRoot: string,
+  fallbackPlan?: string | null,
+): PlanView {
+  const activePlan = w.active_plan || fallbackPlan || null
   return {
     id,
-    name: planLabel(w.plan_name, w.active_plan),
+    name: planLabel(w.plan_name, activePlan),
     status: (w.status || "unknown").toLowerCase(),
     sessionId: lastSessionId(w.session_ids),
-    planPath: relativePlanPath(projectRoot, w.active_plan),
+    planPath: relativePlanPath(projectRoot, activePlan),
     updatedAt: parseStamp(w.updated_at) ?? parseStamp(w.started_at),
     current,
   }
@@ -165,7 +173,7 @@ function collectPlans(raw: RawBoulder, projectRoot: string): PlanView[] {
     for (const [id, w] of Object.entries(raw.works)) {
       if (!w || typeof w !== "object") continue
       if (!(w.plan_name || w.active_plan || w.status)) continue
-      push(asPlan(id, w, Boolean(workId && id === workId), projectRoot))
+      push(asPlan(id, w, Boolean(workId && id === workId), projectRoot, raw.active_plan))
     }
   }
 

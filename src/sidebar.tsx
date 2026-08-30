@@ -1,7 +1,7 @@
 /** @jsxImportSource @opentui/solid */
 import { createEffect, createMemo, createSignal, For, on, Show, onCleanup, type JSX } from "solid-js"
 import type { TuiPluginApi, TuiTheme } from "@opencode-ai/plugin/tui"
-import { emptyOmo, planStatusLabel } from "./omo.js"
+import { emptyOmo, planStatusGlyph } from "./omo.js"
 import { emptyDb } from "./db.js"
 import {
   BrandTabs,
@@ -1021,14 +1021,10 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
                       lifecycle: p.status,
                       ageMs: pulseAgeMs(now(), p.updatedAt),
                     })}
+                    glyph={planStatusGlyph(p.status) ?? undefined}
                     name={p.name}
-                    suffix={planStatusLabel(p.status)}
                     current={p.current}
-                    onSelect={
-                      p.sessionId
-                        ? () => selectSession(props.api, p.sessionId)
-                        : () => openPlanDetail(props.api, p, projectRoots(), colors())
-                    }
+                    onSelect={() => openPlanDetail(props.api, p, projectRoots(), colors())}
                   />
                 )}
               </For>

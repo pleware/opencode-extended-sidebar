@@ -2,9 +2,7 @@
 /**
  * Detail dialogs for Files, Tools, and Plans (read-only metadata + optional preview).
  */
-import fs from "node:fs"
-import path from "node:path"
-import { createMemo, For, Show, type JSX } from "solid-js"
+import { createEffect, createMemo, For, Show, type JSX } from "solid-js"
 import { SyntaxStyle } from "@opentui/core"
 import { useTerminalDimensions } from "@opentui/solid"
 import type { TuiPluginApi, TuiTheme } from "@opencode-ai/plugin/tui"
@@ -16,44 +14,15 @@ import { formatDiffStat } from "./files.js"
 import type { PlanView } from "./omo.js"
 import { planStatusLabel } from "./omo.js"
 import { resolveProjectFile } from "./paths.js"
+import {
+  canPreviewPath,
+  isMarkdownPath,
+  previewViewportRows,
+  readTextPreview,
+} from "./preview.js"
 import { formatAge, formatDuration } from "./pulse.js"
 
-const PREVIEW_MAX_LINES = 200
-const PREVIEW_MAX_BYTES = 128_000
-/** DialogPad 2 + title 1 + divider 1 + footer 3 + slack 1. Extra is the optional path line. */
-const PREVIEW_CHROME = 8
-const PREVIEW_MIN_ROWS = 8
-
-export function previewViewportRows(termHeight: number, extraChrome = 0): number {
-  const h = Number.isFinite(termHeight) && termHeight > 0 ? termHeight : 24
-  return Math.max(PREVIEW_MIN_ROWS, Math.floor(h * 0.75) - PREVIEW_CHROME - extraChrome)
-}
-
-const PREVIEW_EXT = new Set([
-  ".md",
-  ".txt",
-  ".json",
-  ".jsonc",
-  ".yaml",
-  ".yml",
-  ".toml",
-  ".xml",
-  ".html",
-  ".css",
-  ".scss",
-  ".ts",
-  ".tsx",
-  ".js",
-  ".jsx",
-  ".mjs",
-  ".cjs",
-  ".sh",
-  ".py",
-  ".rs",
-  ".go",
-  ".sql",
-  ".csv",
-])
+export { canPreviewPath, isMarkdownPath, previewViewportRows, readTextPreview } from "./preview.js"
 
 function closeDialog(api: TuiPluginApi): void {
   try {
@@ -105,28 +74,12 @@ function ActionRow(props: {
   )
 }
 
-function resolveAbsPath(
-  projectRoot: string | readonly string[] | null | undefined,
-  relOrAbs: string,
-): string | null {
-  return resolveProjectFile(projectRoot, relOrAbs)?.abs ?? null
-}
-
 function DialogPad(props: { children: JSX.Element }): JSX.Element {
   return (
     <box flexDirection="column" gap={0} padding={1}>
       {props.children}
     </box>
   )
-}
-
-export function canPreviewPath(filePath: string): boolean {
-  const ext = path.extname(filePath).toLowerCase()
-  return PREVIEW_EXT.has(ext)
-}
-
-export function isMarkdownPath(filePath: string): boolean {
-  return path.extname(filePath).toLowerCase() === ".md"
 }
 
 /** OpenTUI markdown styles from the host theme — same markup.* keys OpenCode uses. */
@@ -181,7 +134,7 @@ function PreviewBody(props: {
 }): JSX.Element {
   if (props.pretty && props.syntaxStyle) {
     return (
-      <markdown syntaxStyle={props.syntaxStyle} conceal content={props.text} />
+      <markdown syntaxStyle={props.syntaxStyle} conceal content={props.text} width="100%" />
     )
   }
   return (
@@ -189,26 +142,6 @@ function PreviewBody(props: {
       {(line) => <text fg={props.colors.text}>{line || " "}</text>}
     </For>
   )
-}
-
-export function readTextPreview(absPath: string): { text: string; truncated: boolean } | null {
-  try {
-    const st = fs.statSync(absPath)
-    if (!st.isFile()) return null
-    const buf = fs.readFileSync(absPath)
-    const slice = buf.subarray(0, Math.min(buf.length, PREVIEW_MAX_BYTES))
-    if (slice.includes(0)) return null
-    let text = slice.toString("utf8")
-    const lines = text.split(/\r?\n/)
-    let truncated = buf.length > PREVIEW_MAX_BYTES
-    if (lines.length > PREVIEW_MAX_LINES) {
-      text = lines.slice(0, PREVIEW_MAX_LINES).join("\n")
-      truncated = true
-    }
-    return { text, truncated }
-  } catch {
-    return null
-  }
 }
 
 function formatWhen(ts: number | null | undefined): string {
@@ -229,20 +162,28 @@ function PreviewDialog(props: {
   syntaxStyle: ReturnType<typeof SyntaxStyle.fromStyles> | null
 }): JSX.Element {
   const dimensions = useTerminalDimensions()
-  const extra = props.subtitle ? 1 : 0
-  const bodyHeight = createMemo(() => previewViewportRows(dimensions().height, extra))
+  const showPath = () => Boolean(props.subtitle && props.subtitle !== props.title)
+  const extra = () => (showPath() ? 1 : 0)
+  const bodyHeight = createMemo(() =>
+    previewViewportRows(dimensions().height, extra(), props.pretty),
+  )
   const Dialog = props.api.ui.Dialog
+  createEffect(() => {
+    if (props.pretty) props.api.ui.dialog.setSize("xlarge")
+  })
   return (
     <Dialog size="xlarge" onClose={() => closeDialog(props.api)}>
       <DialogPad>
         <box flexDirection="column" gap={0} flexShrink={0}>
-          <text fg={props.colors.text} bold>
-            {props.title}
-          </text>
-          <Show when={props.subtitle}>
+          <box flexDirection="row" justifyContent="space-between" gap={1}>
+            <text fg={props.colors.text} bold>
+              Preview
+            </text>
+            <text fg={props.colors.text}>{props.title}</text>
+          </box>
+          <Show when={showPath()}>
             <DetailLine text={props.subtitle!} colors={props.colors} muted />
           </Show>
-          {divider(props.colors)}
         </box>
         <scrollbox scrollY focused height={bodyHeight()} maxHeight={bodyHeight()}>
           <PreviewBody
@@ -283,7 +224,6 @@ function openTextPreview(
   }
   const pretty = isMarkdownPath(absPath)
   const syntaxStyle = pretty ? markdownStyleFromTheme(api.theme) : null
-  api.ui.dialog.setSize("xlarge")
   api.ui.dialog.replace(() => (
     <PreviewDialog
       api={api}
@@ -296,6 +236,7 @@ function openTextPreview(
       syntaxStyle={syntaxStyle}
     />
   ))
+  if (pretty) api.ui.dialog.setSize("xlarge")
 }
 
 function copyRelativePath(api: TuiPluginApi, rel: string | null): void {
@@ -409,11 +350,17 @@ export function openPlanDetail(
   projectRoot: string | readonly string[] | null | undefined,
   colors: ThemeColors,
 ): void {
+  const found = plan.planPath ? resolveProjectFile(projectRoot, plan.planPath) : null
+  const rel = found?.rel ?? plan.planPath
+  const abs = found?.abs ?? null
+  if (abs && canPreviewPath(abs)) {
+    openTextPreview(api, colors, plan.name, rel, abs)
+    return
+  }
+  toast(api, plan.planPath ? "File not found on disk" : "No plan file linked", "warning")
   const status = planStatusLabel(plan.status)
   const age = plan.updatedAt != null ? formatAge(Math.max(0, Date.now() - plan.updatedAt)) : ""
   const updated = age ? `${age} ago` : "—"
-  const abs = plan.planPath && projectRoot ? resolveAbsPath(projectRoot, plan.planPath) : null
-  const canShowPlan = Boolean(abs && canPreviewPath(abs))
 
   const Dialog = api.ui.Dialog
   api.ui.dialog.setSize("medium")
@@ -426,19 +373,10 @@ export function openPlanDetail(
         {divider(colors)}
         <DetailLine text={`Status: ${status} · Work id: ${plan.id}`} colors={colors} />
         <DetailLine text={`Updated: ${updated}`} colors={colors} muted />
-        <DetailLine text="No linked session yet" colors={colors} muted />
         <Show when={plan.planPath}>
           <DetailLine text={plan.planPath!} colors={colors} muted />
         </Show>
         <box flexDirection="column" gap={0} paddingTop={1}>
-          <ActionRow
-            label="Show plan file"
-            colors={colors}
-            disabled={!canShowPlan}
-            onPick={() => {
-              if (abs) openTextPreview(api, colors, plan.name, plan.planPath, abs)
-            }}
-          />
           <ActionRow label="Close" colors={colors} onPick={() => closeDialog(api)} />
         </box>
       </DialogPad>

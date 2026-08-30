@@ -40,7 +40,7 @@ Extended Sidebar puts it back on screen. It reads OpenCode's own SQLite database
 
 ## ± File changes with diff stats
 
-> See which files this session touched, with `+N −M` per file and a running total in the section header. Letters follow `git status --short` exactly: **M** modified, **A** added, **D** deleted, **R** renamed, **C** copied, **U** unmerged, **T** typechange, **?** untracked. The only extra letter is **V** (viewed) — git does not use it — for a session read with no git status. Git is asked only about those listed paths, and only while the Files section is open on the Current tab. If there is no repo or no `git` binary, git letters stay off and only **V** appears on reads. Additions are green, deletions are red, both pulled from your theme's diff colours. Long names are shortened intelligently (`start…end.ext`) so the panel stays narrow. **Click a Markdown file** to open a formatted, scrollable preview (wheel / arrows; Copy path / Close stay under the document). Other files open a detail sheet first.
+> See which files this session touched, with `+N −M` per file and a running total in the section header. Letters follow `git status --short` exactly: **M** modified, **A** added, **D** deleted, **R** renamed, **C** copied, **U** unmerged, **T** typechange, **?** untracked. The only extra letter is **V** (viewed) — git does not use it — for a session read with no git status. Git is asked only about those listed paths, and only while the Files section is open on the Current tab. If there is no repo or no `git` binary, git letters stay off and only **V** appears on reads. Additions are green, deletions are red, both pulled from your theme's diff colours. Long names are shortened intelligently (`start…end.ext`) so the panel stays narrow. **Click a Markdown file** to open a formatted, scrollable preview. The dialog header is **Preview** plus the filename; the document is the body (xlarge dialog, ~90% of the terminal; wheel / arrows; Copy path / Close stay under it). Other files open a detail sheet first.
 >
 > Scratch paths are dropped by default (`tmp/`, `.tmp/`). They never appear in the list and they do not count towards the header total. Override the list with `skipDirs` in `oes.json`, or set it to `[]` to show everything. Set `skipGitignore` to `true` to also hide files that match the project's root `.gitignore`.
 
@@ -56,7 +56,7 @@ Extended Sidebar puts it back on screen. It reads OpenCode's own SQLite database
 > OMO | Plans
 > ```
 >
-> **Plans** lists the latest boulder works by name and status (active first, then newest). A row with a session is a click to jump there; a row without opens plan metadata and can preview the plan markdown file (formatted and scrollable, not raw). Without `.omo/` the line is gone — no warning, no empty OMO chrome. The checklist itself stays out of the sidebar list.
+> **Plans** lists the latest boulder works by name (active first, then newest). Status is a glyph, not a pulse dot: **✓** done, **○** pending, **×** failed; a running work still spins. **Click a plan** to open its markdown file as a formatted, scrollable preview — the same preview as a Files `.md` row. A work without its own `active_plan` inherits the boulder one. Without `.omo/` the line is gone — no warning, no empty OMO chrome. The checklist itself stays out of the sidebar list.
 
 ## ◴ Where the time actually goes
 
@@ -102,7 +102,9 @@ Every row is one glyph plus one colour: the glyph says *what* is happening, the 
 | `→`                             | a tool call is in flight                                      |
 | `•`                             | nothing in progress — finished, queued or archived            |
 | `▾`                             | Delegates: agent group header (`▼` is the section fold)       |
-| `×`                             | failed — an errored session, delegate or tool call            |
+| `×`                             | failed — an errored session, delegate, tool call or plan      |
+| `✓`                             | Plans: done                                                   |
+| `○`                             | Plans: pending / queued                                       |
 | `M` `A` `D` `R` `C` `U` `T` `?` | Files: git status — same letters as `git status --short`      |
 | `V`                             | Files: viewed (session read only) — not a git letter          |
 | `∴`                             | Perf: thinking — reasoning time and reasoning tokens          |
@@ -223,6 +225,7 @@ src/
   tui.tsx       # plugin entry (sidebar_content slot)
   sidebar.tsx   # tabs, foldable sections, rows
   detail.tsx    # file / tool / plan detail dialogs
+  preview.ts    # text/markdown preview helpers (no OpenTUI)
   clipboard.ts  # copy-to-clipboard helper (no deps)
   chrome.tsx    # brand tabs, fold headers, diff stats, kv persistence
   perfview.tsx  # Perf tab rendering

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
-import { canPreviewPath, isMarkdownPath, previewViewportRows, readTextPreview } from "../../src/detail.js"
+import { canPreviewPath, isMarkdownPath, previewViewportRows, readTextPreview } from "../../src/preview.js"
 import { normalizeIncomingPath, relativeProjectPath, resolveProjectFile } from "../../src/paths.js"
 
 describe("relativeProjectPath", () => {
@@ -57,7 +57,7 @@ describe("preview helpers", () => {
   test("readTextPreview reads text and truncates long files", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "oes-preview-"))
     const file = path.join(dir, "note.md")
-    fs.writeFileSync(file, "line1\nline2\n")
+    fs.writeFileSync(file, "line1\nline2")
     const out = readTextPreview(file)
     expect(out?.text).toBe("line1\nline2")
     expect(out?.truncated).toBe(false)
@@ -67,8 +67,13 @@ describe("preview helpers", () => {
 
 describe("previewViewportRows", () => {
   test("caps at three quarters of the terminal minus chrome", () => {
-    expect(previewViewportRows(40)).toBe(22)
-    expect(previewViewportRows(40, 1)).toBe(21)
+    expect(previewViewportRows(40)).toBe(23)
+    expect(previewViewportRows(40, 1)).toBe(22)
+  })
+
+  test("markdown fill uses nine tenths of the terminal", () => {
+    expect(previewViewportRows(40, 0, true)).toBe(29)
+    expect(previewViewportRows(8, 0, true)).toBe(12)
   })
 
   test("never goes below eight rows", () => {
