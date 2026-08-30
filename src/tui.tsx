@@ -6,6 +6,16 @@ const id = "opencode-extended-sidebar" as const
 
 const tui: TuiPlugin = async (api) => {
   try {
+    api.ui.toast({
+      message: "OpenCode Extended Sidebar Loaded. Engage!",
+      variant: "success",
+      duration: 7000,
+    })
+  } catch {
+    // host without toast
+  }
+
+  try {
     api.slots.register({
       order: 320,
       slots: {
