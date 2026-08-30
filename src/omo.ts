@@ -19,15 +19,58 @@ export type Delegate = {
   updatedAt: number | null
 }
 
-export type PlanView = {
+export type BoulderSession = {
   id: string
+  /** `direct` opened the work, `appended` was pulled in later. */
+  origin: "direct" | "appended" | null
+}
+
+/** One `task_sessions` entry: a plan unit handed to a subagent. */
+export type TaskView = {
+  taskKey: string
+  /** Short label from the plan (`todo:3`), when boulder recorded one. */
+  label: string | null
+  title: string
+  sessionId: string | null
+  agent: string | null
+  category: string | null
+  status: string
+  startedAt: number | null
+  endedAt: number | null
+  elapsedMs: number | null
+  updatedAt: number | null
+}
+
+/** One boulder run. Keyed by `work_id` — the same plan run twice is two works. */
+export type WorkView = {
+  workId: string
   name: string
   status: string
   sessionId: string | null
+  sessions: BoulderSession[]
+  agent: string | null
   /** Project-relative plan markdown path, when boulder lists active_plan. */
   planPath: string | null
+  startedAt: number | null
   updatedAt: number | null
+  endedAt: number | null
+  elapsedMs: number | null
   current: boolean
+}
+
+/** The active work, as mirrored on the boulder root. Blank when nothing is live. */
+export type BoulderView = {
+  workId: string | null
+  name: string | null
+  status: string | null
+  agent: string | null
+  startedAt: number | null
+  updatedAt: number | null
+  endedAt: number | null
+  elapsedMs: number | null
+  sessions: BoulderSession[]
+  tasks: TaskView[]
+  counts: { running: number; done: number; other: number; total: number }
 }
 
 export type OmoSnapshot = {
@@ -38,7 +81,8 @@ export type OmoSnapshot = {
   agent: string | null
   planName: string | null
   plan: { total: number; completed: number; percent: number; steps: PlanStep[] }
-  plans: PlanView[]
+  works: WorkView[]
+  boulder: BoulderView
   delegates: Delegate[]
   stamp: string
 }
@@ -52,12 +96,16 @@ export type OmoConfigView = {
 
 type RawTask = {
   task_key?: string
+  task_label?: string
   task_title?: string
   session_id?: string
   agent?: string
+  category?: string
   status?: string
   updated_at?: string | number
   started_at?: string | number
+  ended_at?: string | number
+  elapsed_ms?: number
 }
 
 function parseStamp(v: string | number | undefined): number | null {
@@ -76,7 +124,10 @@ type RawWork = {
   status?: string
   updated_at?: string | number
   started_at?: string | number
+  ended_at?: string | number
+  elapsed_ms?: number
   session_ids?: string[]
+  session_origins?: Record<string, string>
   task_sessions?: Record<string, RawTask>
 }
 
@@ -111,8 +162,8 @@ function planLabel(name: string | null | undefined, activePlan: string | null | 
   return "plan"
 }
 
-/** Short status for the Plans row suffix — no full paths, no checklist text. */
-export function planStatusLabel(status: string): string {
+/** Short work status — no full paths, no checklist text. */
+export function workStatusLabel(status: string): string {
   const s = status.toLowerCase()
   if (s === "in_progress" || s === "active") return "running"
   if (s === "completed") return "done"
@@ -121,71 +172,103 @@ export function planStatusLabel(status: string): string {
   return s
 }
 
-/** Plans column glyph: check / check-o / fail. Running stays a spinner (`null`). */
-export function planStatusGlyph(status: string): string | null {
-  const s = planStatusLabel(status)
+/** Works column glyph. Running stays a spinner (`null`). */
+export function workStatusGlyph(status: string): string | null {
+  const s = workStatusLabel(status)
   if (s === "done") return "✓"
   if (s === "error") return "×"
   if (s === "running") return null
+  if (s === "paused") return "⏸"
+  if (s === "abandoned") return "⊘"
   return "○"
+}
+
+/** Paused and abandoned are deliberate stops — they must not keep pulsing. */
+export function workIsTerminal(status: string): boolean {
+  const s = workStatusLabel(status)
+  return s === "done" || s === "error" || s === "paused" || s === "abandoned"
 }
 
 function relativePlanPath(projectRoot: string, activePlan: string | null | undefined): string | null {
   return resolveProjectFile(projectRoot, activePlan)?.rel ?? null
 }
 
-function asPlan(
-  id: string,
+function collectSessions(
+  ids: string[] | undefined,
+  origins: Record<string, string> | undefined,
+): BoulderSession[] {
+  if (!Array.isArray(ids)) return []
+  const out: BoulderSession[] = []
+  const seen = new Set<string>()
+  for (const raw of ids) {
+    const id = stripSessionPrefix(raw)
+    if (!id || seen.has(id)) continue
+    seen.add(id)
+    // Boulder keys origins by the stored id, prefixed or not.
+    const hint = origins?.[String(raw)] ?? origins?.[id] ?? null
+    const origin = hint === "direct" || hint === "appended" ? hint : null
+    out.push({ id, origin })
+  }
+  return out.slice(0, 24)
+}
+
+function asWork(
+  workId: string,
   w: RawWork,
   current: boolean,
   projectRoot: string,
   fallbackPlan?: string | null,
-): PlanView {
+): WorkView {
   const activePlan = w.active_plan || fallbackPlan || null
+  const sessions = collectSessions(w.session_ids, w.session_origins)
   return {
-    id,
+    workId,
     name: planLabel(w.plan_name, activePlan),
     status: (w.status || "unknown").toLowerCase(),
     sessionId: lastSessionId(w.session_ids),
+    sessions,
+    agent: w.agent ?? null,
     planPath: relativePlanPath(projectRoot, activePlan),
+    startedAt: parseStamp(w.started_at),
     updatedAt: parseStamp(w.updated_at) ?? parseStamp(w.started_at),
+    endedAt: parseStamp(w.ended_at),
+    elapsedMs: typeof w.elapsed_ms === "number" && Number.isFinite(w.elapsed_ms) ? w.elapsed_ms : null,
     current,
   }
 }
 
-/** Recent boulder works + the top-level plan, active first then newest. */
-function collectPlans(raw: RawBoulder, projectRoot: string): PlanView[] {
-  const out: PlanView[] = []
-  const seen = new Set<string>()
-  const push = (p: PlanView) => {
-    const key = p.name.toLowerCase() === "plan" ? p.id : p.name.toLowerCase()
-    if (seen.has(key)) {
-      const prev = out.find((x) => (x.name.toLowerCase() === "plan" ? x.id : x.name.toLowerCase()) === key)
-      if (prev && p.current) prev.current = true
-      return
-    }
-    seen.add(key)
-    out.push(p)
-  }
-
+/**
+ * Boulder runs, newest first, active pinned to the top. Keyed by `work_id`, so
+ * two runs of the same plan stay two rows. The root fields are a mirror of the
+ * active work — they only become a work of their own on a legacy state with no
+ * `works` map.
+ */
+function collectWorks(raw: RawBoulder, projectRoot: string): WorkView[] {
+  const out: WorkView[] = []
   const workId = raw.active_work_id ?? null
-  if (raw.works) {
-    for (const [id, w] of Object.entries(raw.works)) {
-      if (!w || typeof w !== "object") continue
-      if (!(w.plan_name || w.active_plan || w.status)) continue
-      push(asPlan(id, w, Boolean(workId && id === workId), projectRoot, raw.active_plan))
-    }
+  const entries =
+    raw.works && typeof raw.works === "object" && !Array.isArray(raw.works)
+      ? Object.entries(raw.works)
+      : []
+
+  for (const [id, w] of entries) {
+    if (!w || typeof w !== "object") continue
+    if (!(w.plan_name || w.active_plan || w.status)) continue
+    out.push(asWork(id, w, Boolean(workId && id === workId), projectRoot, raw.active_plan))
   }
 
-  if (raw.plan_name || raw.active_plan) {
-    const current = !workId || !raw.works?.[workId]
-    push(asPlan("active", raw, current, projectRoot))
+  if (out.length === 0 && (raw.plan_name || raw.active_plan || raw.status)) {
+    out.push(asWork(workId || "active", raw, true, projectRoot))
   }
 
   out.sort((a, b) => {
     if (a.current !== b.current) return a.current ? -1 : 1
     return (b.updatedAt ?? 0) - (a.updatedAt ?? 0)
   })
+
+  // A dangling active_work_id leaves nobody current; boulder itself then mirrors
+  // the most recently updated work.
+  if (out.length > 0 && !out.some((w) => w.current)) out[0]!.current = true
   return out.slice(0, 20)
 }
 
@@ -251,29 +334,78 @@ function readPlanSteps(planPath: string | null): PlanStep[] {
   }
 }
 
-function normalizeDelegates(raw: Record<string, RawTask> | undefined): Delegate[] {
-  if (!raw) return []
-  const list: Delegate[] = []
+function taskRank(status: string): number {
+  if (status === "running" || status === "in_progress" || status === "active") return 0
+  if (status === "pending" || status === "queued") return 1
+  if (status === "error" || status === "failed" || status === "cancelled") return 2
+  if (status === "completed" || status === "done") return 3
+  return 4
+}
+
+function collectTasks(raw: Record<string, RawTask> | undefined): TaskView[] {
+  if (!raw || typeof raw !== "object") return []
+  const list: TaskView[] = []
   for (const [key, t] of Object.entries(raw)) {
     if (!t || typeof t !== "object") continue
     list.push({
       taskKey: t.task_key || key,
+      label: t.task_label ?? null,
       title: t.task_title || key,
       sessionId: stripSessionPrefix(t.session_id),
       agent: t.agent ?? null,
+      category: t.category ?? null,
       status: (t.status || "unknown").toLowerCase(),
+      startedAt: parseStamp(t.started_at),
+      endedAt: parseStamp(t.ended_at),
+      elapsedMs: typeof t.elapsed_ms === "number" && Number.isFinite(t.elapsed_ms) ? t.elapsed_ms : null,
       updatedAt: parseStamp(t.updated_at) ?? parseStamp(t.started_at),
     })
   }
-  const rank = (s: string) => {
-    if (s === "running" || s === "in_progress" || s === "active") return 0
-    if (s === "pending" || s === "queued") return 1
-    if (s === "error" || s === "failed") return 2
-    if (s === "completed" || s === "done") return 3
-    return 4
-  }
-  list.sort((a, b) => rank(a.status) - rank(b.status) || a.title.localeCompare(b.title))
+  list.sort((a, b) => taskRank(a.status) - taskRank(b.status) || a.title.localeCompare(b.title))
   return list.slice(0, 40)
+}
+
+function taskToDelegate(t: TaskView): Delegate {
+  return {
+    taskKey: t.taskKey,
+    title: t.title,
+    sessionId: t.sessionId,
+    agent: t.agent,
+    status: t.status,
+    updatedAt: t.updatedAt,
+  }
+}
+
+function countTasks(tasks: readonly TaskView[]): BoulderView["counts"] {
+  let running = 0
+  let done = 0
+  for (const t of tasks) {
+    const r = taskRank(t.status)
+    if (r === 0) running += 1
+    else if (r === 3) done += 1
+  }
+  return { running, done, other: tasks.length - running - done, total: tasks.length }
+}
+
+export function emptyBoulder(): BoulderView {
+  return {
+    workId: null,
+    name: null,
+    status: null,
+    agent: null,
+    startedAt: null,
+    updatedAt: null,
+    endedAt: null,
+    elapsedMs: null,
+    sessions: [],
+    tasks: [],
+    counts: { running: 0, done: 0, other: 0, total: 0 },
+  }
+}
+
+/** The task boulder is on right now, if any. */
+export function currentTask(boulder: BoulderView): TaskView | null {
+  return boulder.tasks.find((t) => taskRank(t.status) === 0) ?? null
 }
 
 export function emptyOmo(): OmoSnapshot {
@@ -285,7 +417,8 @@ export function emptyOmo(): OmoSnapshot {
     agent: null,
     planName: null,
     plan: { total: 0, completed: 0, percent: 0, steps: [] },
-    plans: [],
+    works: [],
+    boulder: emptyBoulder(),
     delegates: [],
     stamp: "0",
   }
@@ -305,20 +438,19 @@ export function readOmo(projectRoot: string | null | undefined): OmoSnapshot {
     return { ...emptyOmo(), boulderPath, stamp: fileStamp(boulderPath) }
   }
 
-  let planName = raw.plan_name ?? null
-  let activePlan = raw.active_plan ?? null
-  let agent = raw.agent ?? null
-  let status = raw.status ?? null
-  let tasks = raw.task_sessions
-  const workId = raw.active_work_id
-  if (workId && raw.works?.[workId]) {
-    const w = raw.works[workId]
-    planName = planName || w.plan_name || null
-    activePlan = activePlan || w.active_plan || null
-    agent = agent || w.agent || null
-    status = status || w.status || null
-    if (!tasks || !Object.keys(tasks).length) tasks = w.task_sessions
-  }
+  const works = collectWorks(raw, root)
+  const active = works.find((w) => w.current) ?? null
+  // Root fields mirror the active work; fall back to the work entry itself.
+  const mirror: RawWork = (active && raw.works?.[active.workId]) || raw
+
+  const planName = raw.plan_name || mirror.plan_name || null
+  const activePlan = raw.active_plan || mirror.active_plan || null
+  const agent = raw.agent || mirror.agent || null
+  const status = raw.status || mirror.status || null
+  const rootTasks = raw.task_sessions
+  const tasks = collectTasks(
+    rootTasks && Object.keys(rootTasks).length ? rootTasks : mirror.task_sessions,
+  )
 
   const planPath = resolvePlanPath(root, activePlan)
   const steps = readPlanSteps(planPath)
@@ -338,8 +470,21 @@ export function readOmo(projectRoot: string | null | undefined): OmoSnapshot {
       percent: total ? Math.round((completed / total) * 100) : 0,
       steps,
     },
-    plans: collectPlans(raw, root),
-    delegates: normalizeDelegates(tasks),
+    works,
+    boulder: {
+      workId: active?.workId ?? null,
+      name: active?.name ?? planName,
+      status: active?.status ?? status,
+      agent: active?.agent ?? agent,
+      startedAt: active?.startedAt ?? parseStamp(raw.started_at),
+      updatedAt: active?.updatedAt ?? parseStamp(raw.updated_at),
+      endedAt: active?.endedAt ?? parseStamp(raw.ended_at),
+      elapsedMs: active?.elapsedMs ?? null,
+      sessions: active?.sessions ?? collectSessions(raw.session_ids, raw.session_origins),
+      tasks,
+      counts: countTasks(tasks),
+    },
+    delegates: tasks.map(taskToDelegate),
     stamp: `${fileStamp(boulderPath)}|${fileStamp(planPath)}`,
   }
 }

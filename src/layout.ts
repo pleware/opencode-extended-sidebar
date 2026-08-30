@@ -1,0 +1,109 @@
+/**
+ * Vertical row budget for the sidebar. Pure — no OpenTUI, unit tested directly.
+ * Same idea as `packChips` in pulse.ts, one axis over: under pressure the worst
+ * rank gives up rows first, and nothing drops below its `min` until every
+ * section has already reached it.
+ */
+
+/** Rows OpenCode's own TUI takes around the `sidebar_content` slot. */
+const PANEL_CHROME = 10
+const PANEL_MIN_ROWS = 8
+
+/** Usable rows in the sidebar slot for a terminal that tall. */
+export function panelRows(termHeight: number): number {
+  const h = Number.isFinite(termHeight) && termHeight > 0 ? termHeight : 24
+  return Math.max(PANEL_MIN_ROWS, Math.floor(h) - PANEL_CHROME)
+}
+
+/** Rows a section keeps before it is worth folding instead. */
+export const ROW_MIN = {
+  delegates: 2,
+  files: 3,
+  omo: 3,
+  sessions: 2,
+  tools: 3,
+} as const
+
+/**
+ * Higher gives up rows first. Live activity outranks history: on Current the
+ * tool feed survives longest, on Sessions the session list does. OMO ties with
+ * Delegates so the optional group never starves the core on its own.
+ */
+export const ROW_RANK = {
+  delegates: 3,
+  files: 2,
+  omo: 3,
+  sessions: 1,
+  tools: 1,
+} as const
+
+export type Section<K extends string = string> = {
+  key: K
+  /** Rows the section would like — usually the matching `oes.json` value. */
+  want: number
+  min: number
+  rank: number
+}
+
+/**
+ * Split `budget - fixed` rows across the sections. Ties are broken by whoever
+ * currently holds the most rows, so equal ranks shrink together. A section that
+ * hits `min` while the budget is still short is handed `0` — the caller folds
+ * it rather than rendering a stub.
+ */
+export function packSections<K extends string>(
+  budget: number,
+  fixed: number,
+  sections: readonly Section<K>[],
+): Record<K, number> {
+  const live = sections.map((s) => {
+    const min = Math.max(0, Math.round(s.min))
+    return { key: s.key, min, rank: s.rank, rows: Math.max(min, Math.max(0, Math.round(s.want))) }
+  })
+  const available = Math.max(0, Math.round(budget) - Math.round(fixed))
+  const total = () => live.reduce((sum, s) => sum + s.rows, 0)
+
+  const worstAbove = (floor: (s: (typeof live)[number]) => number): number => {
+    let worst = -1
+    for (let i = 0; i < live.length; i += 1) {
+      const s = live[i]!
+      if (s.rows <= floor(s)) continue
+      const best = worst < 0 ? null : live[worst]!
+      if (!best || s.rank > best.rank || (s.rank === best.rank && s.rows > best.rows)) worst = i
+    }
+    return worst
+  }
+
+  while (total() > available) {
+    const i = worstAbove((s) => s.min)
+    if (i < 0) break
+    live[i]!.rows -= 1
+  }
+
+  // Everyone is at their minimum and it still does not fit: fold, worst first.
+  while (total() > available) {
+    const i = worstAbove(() => 0)
+    if (i < 0) break
+    live[i]!.rows = 0
+  }
+
+  const out = {} as Record<K, number>
+  for (const s of live) out[s.key] = s.rows
+  return out
+}
+
+/**
+ * Cut a row list to `budget`, spending one row on a `+N more` note when it does
+ * not fit. A list that overflows must say so — silently dropping the tail hides
+ * whole sections of the document index.
+ */
+export function sliceWithOverflow<T>(
+  rows: readonly T[],
+  budget: number,
+): { rows: T[]; hidden: number } {
+  const max = Math.max(0, Math.round(budget))
+  if (max <= 0) return { rows: [], hidden: rows.length }
+  if (rows.length <= max) return { rows: [...rows], hidden: 0 }
+  const keep = Math.max(1, max - 1)
+  return { rows: rows.slice(0, keep), hidden: rows.length - keep }
+}

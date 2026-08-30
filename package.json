@@ -1,7 +1,7 @@
 {
   "name": "opencode-extended-sidebar",
-  "version": "0.2.8",
-  "description": "OpenCode TUI sidebar: session switcher, live tools/files, click-for-detail dialogs with scrollable file preview, perf timings and OMO plans (read-only)",
+  "version": "0.2.9",
+  "description": "OpenCode TUI sidebar: session switcher, live tools/files, click-for-detail dialogs with scrollable file preview, perf timings, height-aware row trimming and an optional OMO group with works, boulder and a document index (read-only)",
   "type": "module",
   "license": "MIT",
   "author": "pleware",
@@ -23,6 +23,8 @@
     "latency",
     "observability",
     "oh-my-openagent",
+    "boulder",
+    "markdown-preview",
     "phrouros"
   ],
   "oc-plugin": [

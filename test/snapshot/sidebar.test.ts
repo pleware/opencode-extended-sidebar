@@ -171,6 +171,87 @@ describe("finished child vs leftover boulder running", () => {
   })
 })
 
+describe("boulder schema v2 views", () => {
+  test("works list the runs, boulder mirrors the active one, nothing leaks", () => {
+    projFix = createFixtureProject({
+      boulder: {
+        schema_version: 2,
+        active_work_id: "work_now",
+        plan_name: "refactor-auth",
+        status: "active",
+        agent: "atlas",
+        works: {
+          work_done: {
+            plan_name: "refactor-auth",
+            status: "completed",
+            updated_at: NOW - 86_400_000,
+            session_ids: ["opencode:ses_old_main"],
+          },
+          work_now: {
+            plan_name: "refactor-auth",
+            status: "active",
+            agent: "atlas",
+            elapsed_ms: 720_000,
+            updated_at: NOW,
+            session_ids: ["opencode:ses_main", "ses_child"],
+            session_origins: { "opencode:ses_main": "direct", ses_child: "appended" },
+            task_sessions: {
+              "todo:1": { task_title: "scaffold", status: "completed" },
+              "todo:3": {
+                task_label: "todo:3",
+                task_title: "wire session jump",
+                session_id: "opencode:ses_child",
+                agent: "junior",
+                category: "implement",
+                status: "running",
+                started_at: NOW - 4_000,
+              },
+            },
+          },
+        },
+      },
+    })
+    dbFix = createFixtureDb({
+      sessions: [
+        { id: "ses_main", project_id: "proj_a", title: "main", parent_id: null, time_updated: NOW },
+        {
+          id: "ses_child",
+          project_id: "proj_a",
+          title: "wire session jump",
+          parent_id: "ses_main",
+          agent: "junior",
+          time_updated: NOW - 2_000,
+        },
+      ],
+    })
+    const snap = readLiveSnapshot({
+      sessionId: "ses_main",
+      projectRoot: projFix.root,
+      dbPath: dbFix.dbPath,
+      force: true,
+    })
+
+    // Same plan run twice stays two rows; the root mirror is not a third.
+    expect(snap.omo.works.map((w) => w.workId)).toEqual(["work_now", "work_done"])
+    expect(snap.omo.works[0]?.current).toBe(true)
+
+    const b = snap.omo.boulder
+    expect(b.workId).toBe("work_now")
+    expect(b.agent).toBe("atlas")
+    expect(b.elapsedMs).toBe(720_000)
+    expect(b.sessions.map((s) => `${s.id}:${s.origin}`)).toEqual([
+      "ses_main:direct",
+      "ses_child:appended",
+    ])
+    expect(b.counts).toEqual({ running: 1, done: 1, other: 0, total: 2 })
+
+    // Delegates keep working off the same tasks.
+    expect(delegatesForSession(snap, "ses_main").map((d) => d.sessionId)).toContain("ses_child")
+
+    assertPrivacy({ works: snap.omo.works, boulder: snap.omo.boulder })
+  })
+})
+
 describe("tools and files views", () => {
   test("labels and +/- without leaking bodies or full paths", () => {
     dbFix = createFixtureDb({

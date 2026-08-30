@@ -1,6 +1,7 @@
 /** @jsxImportSource @opentui/solid */
 /**
- * Detail dialogs for Files, Tools, and Plans (read-only metadata + optional preview).
+ * Detail dialogs for Files, Tools, Works and OMO documents
+ * (read-only metadata + optional preview).
  */
 import { createEffect, createMemo, For, Show, type JSX } from "solid-js"
 import { SyntaxStyle } from "@opentui/core"
@@ -11,8 +12,10 @@ import { type ThemeColors } from "./chrome.js"
 import type { ToolView } from "./db.js"
 import type { FileView } from "./files.js"
 import { formatDiffStat } from "./files.js"
-import type { PlanView } from "./omo.js"
-import { planStatusLabel } from "./omo.js"
+import type { DocView } from "./docs.js"
+import { DOC_KIND_LABEL } from "./docs.js"
+import type { WorkView } from "./omo.js"
+import { workStatusLabel } from "./omo.js"
 import { resolveProjectFile } from "./paths.js"
 import {
   canPreviewPath,
@@ -344,23 +347,24 @@ export function openToolDetail(api: TuiPluginApi, tool: ToolView, colors: ThemeC
   ))
 }
 
-export function openPlanDetail(
+export function openWorkDetail(
   api: TuiPluginApi,
-  plan: PlanView,
+  work: WorkView,
   projectRoot: string | readonly string[] | null | undefined,
   colors: ThemeColors,
 ): void {
-  const found = plan.planPath ? resolveProjectFile(projectRoot, plan.planPath) : null
-  const rel = found?.rel ?? plan.planPath
+  const found = work.planPath ? resolveProjectFile(projectRoot, work.planPath) : null
+  const rel = found?.rel ?? work.planPath
   const abs = found?.abs ?? null
   if (abs && canPreviewPath(abs)) {
-    openTextPreview(api, colors, plan.name, rel, abs)
+    openTextPreview(api, colors, work.name, rel, abs)
     return
   }
-  toast(api, plan.planPath ? "File not found on disk" : "No plan file linked", "warning")
-  const status = planStatusLabel(plan.status)
-  const age = plan.updatedAt != null ? formatAge(Math.max(0, Date.now() - plan.updatedAt)) : ""
+  toast(api, work.planPath ? "File not found on disk" : "No plan file linked", "warning")
+  const status = workStatusLabel(work.status)
+  const age = work.updatedAt != null ? formatAge(Math.max(0, Date.now() - work.updatedAt)) : ""
   const updated = age ? `${age} ago` : "—"
+  const agent = work.agent ? ` · ${work.agent}` : ""
 
   const Dialog = api.ui.Dialog
   api.ui.dialog.setSize("medium")
@@ -368,15 +372,71 @@ export function openPlanDetail(
     <Dialog size="medium" onClose={() => closeDialog(api)}>
       <DialogPad>
         <text fg={colors.text} bold>
-          {`Plan: ${plan.name}`}
+          {`Work: ${work.name}`}
         </text>
         {divider(colors)}
-        <DetailLine text={`Status: ${status} · Work id: ${plan.id}`} colors={colors} />
+        <DetailLine text={`Status: ${status}${agent}`} colors={colors} />
+        <DetailLine text={`Work id: ${work.workId}`} colors={colors} muted />
         <DetailLine text={`Updated: ${updated}`} colors={colors} muted />
-        <Show when={plan.planPath}>
-          <DetailLine text={plan.planPath!} colors={colors} muted />
+        <Show when={work.planPath}>
+          <DetailLine text={work.planPath!} colors={colors} muted />
         </Show>
         <box flexDirection="column" gap={0} paddingTop={1}>
+          <ActionRow label="Close" colors={colors} onPick={() => closeDialog(api)} />
+        </box>
+      </DialogPad>
+    </Dialog>
+  ))
+}
+
+function formatBytes(n: number): string {
+  if (!Number.isFinite(n) || n < 0) return "—"
+  if (n < 1024) return `${n} B`
+  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`
+}
+
+/**
+ * An OMO document. Text opens straight as a preview — the same one a Files
+ * `.md` row gets. Anything else (a screenshot in evidence) stays a metadata
+ * sheet: we list proof, we do not render it.
+ */
+export function openDocDetail(
+  api: TuiPluginApi,
+  doc: DocView,
+  projectRoot: string | readonly string[] | null | undefined,
+  colors: ThemeColors,
+): void {
+  const found = resolveProjectFile(projectRoot, doc.rel)
+  if (found && canPreviewPath(found.abs)) {
+    openTextPreview(api, colors, doc.name, found.rel, found.abs)
+    return
+  }
+  if (!found) toast(api, "File not found on disk", "warning")
+  const age = doc.updatedAt != null ? formatAge(Math.max(0, Date.now() - doc.updatedAt)) : ""
+
+  const Dialog = api.ui.Dialog
+  api.ui.dialog.setSize("medium")
+  api.ui.dialog.replace(() => (
+    <Dialog size="medium" onClose={() => closeDialog(api)}>
+      <DialogPad>
+        <text fg={colors.text} bold>
+          {doc.name}
+        </text>
+        {divider(colors)}
+        <DetailLine text={`Kind: ${DOC_KIND_LABEL[doc.kind]}`} colors={colors} />
+        <DetailLine
+          text={`Size: ${formatBytes(doc.sizeBytes)} · Updated: ${age ? `${age} ago` : "—"}`}
+          colors={colors}
+          muted
+        />
+        <DetailLine text={doc.rel} colors={colors} muted />
+        <box flexDirection="column" gap={0} paddingTop={1}>
+          <ActionRow
+            label="Copy path"
+            colors={colors}
+            onPick={() => copyRelativePath(api, doc.rel)}
+          />
           <ActionRow label="Close" colors={colors} onPick={() => closeDialog(api)} />
         </box>
       </DialogPad>

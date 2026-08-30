@@ -120,7 +120,10 @@ export function FoldHeader(props: {
   )
 }
 
-/** Brand + clickable tabs. Active tab is bold + primary; every tab is underlined. */
+/**
+ * Brand + clickable tabs. Active tab is bold + primary; every tab is underlined.
+ * `onBrand` makes the brand itself a control — the OMO group folds on it.
+ */
 export function BrandTabs(props: {
   brand: string
   tabs: readonly string[]
@@ -128,15 +131,18 @@ export function BrandTabs(props: {
   active: string | null
   colors: ThemeColors
   onPick: (tab: string) => void
+  onBrand?: () => void
 }): JSX.Element {
   const brand = () => props.colors.primary || props.colors.text
   const tabFg = (tab: string) =>
     props.active === tab ? props.colors.primary || props.colors.text : props.colors.textMuted
   return (
     <box flexDirection="row" gap={1}>
-      <text fg={brand()} bold>
-        {props.brand}
-      </text>
+      <box flexDirection="row" onMouseUp={props.onBrand}>
+        <text fg={brand()} bold underline={Boolean(props.onBrand)}>
+          {props.brand}
+        </text>
+      </box>
       <For each={props.tabs}>
         {(tab: string) => (
           <box flexDirection="row" gap={1} onMouseUp={() => props.onPick(tab)}>

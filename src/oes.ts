@@ -10,6 +10,8 @@ import { fileStamp, getOpenCodeConfigDir } from "./paths.js"
 export type OesOptions = {
   fileRows: number
   lineMax: number
+  /** Ceiling for the OMO group's rows. 0 keeps it collapsed to its summary line. */
+  omoRows: number
   /** Sessions compared under Perf → History. 0 hides the section. */
   perfHistory: number
   /** Rows per Perf section (models, tools, history). */
@@ -27,6 +29,7 @@ export type OesOptions = {
 export const OES_DEFAULTS: OesOptions = {
   fileRows: 8,
   lineMax: 31,
+  omoRows: 8,
   perfHistory: 3,
   perfRows: 5,
   perfTurns: 120,
@@ -67,6 +70,7 @@ export function pick(raw: Record<string, unknown> | null, base: OesOptions): Oes
   return {
     fileRows: clamp(raw.fileRows, 3, 20, base.fileRows),
     lineMax: clamp(raw.lineMax, 20, 64, base.lineMax),
+    omoRows: clamp(raw.omoRows, 0, 20, base.omoRows),
     perfHistory: clamp(raw.perfHistory, 0, 10, base.perfHistory),
     perfRows: clamp(raw.perfRows, 3, 20, base.perfRows),
     perfTurns: clamp(raw.perfTurns, 20, 500, base.perfTurns),

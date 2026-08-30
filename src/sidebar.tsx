@@ -1,7 +1,16 @@
 /** @jsxImportSource @opentui/solid */
 import { createEffect, createMemo, createSignal, For, on, Show, onCleanup, type JSX } from "solid-js"
+import { useTerminalDimensions } from "@opentui/solid"
 import type { TuiPluginApi, TuiTheme } from "@opencode-ai/plugin/tui"
-import { emptyOmo, planStatusGlyph } from "./omo.js"
+import {
+  currentTask,
+  emptyOmo,
+  workIsTerminal,
+  workStatusGlyph,
+  workStatusLabel,
+} from "./omo.js"
+import { ROW_MIN, ROW_RANK, packSections, panelRows, sliceWithOverflow } from "./layout.js"
+import { DOC_KIND_LABEL, groupDocs, readOmoDocs } from "./docs.js"
 import { emptyDb } from "./db.js"
 import {
   BrandTabs,
@@ -35,7 +44,7 @@ import {
 import { onGitMarksChange } from "./git.js"
 import { getOes } from "./oes.js"
 import { startMonitor } from "./monitor.js"
-import { openFileDetail, openPlanDetail, openToolDetail } from "./detail.js"
+import { openDocDetail, openFileDetail, openToolDetail, openWorkDetail } from "./detail.js"
 import { getOpenCodeDbPath } from "./paths.js"
 import {
   TICK_MS,
@@ -232,7 +241,9 @@ const KV_FOLD_DELEGATES = "oes.fold.delegates"
 const KV_FOLD_SESSIONS = "oes.fold.sessions"
 const KV_FOLD_TOOLS = "oes.fold.tools"
 const KV_FOLD_FILES = "oes.fold.files"
+const KV_FOLD_OMO = "oes.fold.omo"
 const KV_TAB = "oes.tab"
+const KV_OMO_TAB = "oes.omoTab"
 
 function mergeTools(
   dbTools: ToolView[],
@@ -269,16 +280,19 @@ function mergeTools(
     .slice(0, limit)
 }
 
+/** Two independent groups: OES is the core, OMO is an optional add-on below it. */
 const OES_TABS = ["sessions", "current", "perf"] as const
-const OMO_TABS = ["plans"] as const
-const TABS = [...OES_TABS, ...OMO_TABS] as const
-type Tab = (typeof TABS)[number]
+const OMO_TABS = ["works", "boulder", "docs"] as const
+type OesTab = (typeof OES_TABS)[number]
+type OmoTab = (typeof OMO_TABS)[number]
 
-const TAB_LABELS: Record<Tab, string> = {
+const TAB_LABELS: Record<string, string> = {
   sessions: "Sessions",
   current: "Current",
   perf: "Perf",
-  plans: "Plans",
+  works: "Works",
+  boulder: "Boulder",
+  docs: "Docs",
 }
 
 function emptyLive(): LiveSnapshot {
@@ -310,12 +324,12 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   )
   const [foldTools, setFoldTools] = createSignal(kvRead(props.api, KV_FOLD_TOOLS, false))
   const [foldFiles, setFoldFiles] = createSignal(kvRead(props.api, KV_FOLD_FILES, false))
-  const [tab, setTab] = createSignal<Tab>(kvReadOne(props.api, KV_TAB, "sessions", TABS))
-  const shown = createMemo((): Tab => {
-    const t = tab()
-    if (t === "plans" && !snap().omo.present) return "sessions"
-    return t
-  })
+  const [foldOmo, setFoldOmo] = createSignal(kvRead(props.api, KV_FOLD_OMO, false))
+  const [tab, setTab] = createSignal<OesTab>(kvReadOne(props.api, KV_TAB, "sessions", OES_TABS))
+  const [omoTab, setOmoTab] = createSignal<OmoTab>(
+    kvReadOne(props.api, KV_OMO_TAB, "works", OMO_TABS),
+  )
+  const dimensions = useTerminalDimensions()
   const [liveTools, setLiveTools] = createSignal<Record<string, ToolHit>>({})
   const [liveFiles, setLiveFiles] = createSignal<Record<string, FileView>>({})
   const [gitTick, setGitTick] = createSignal(0)
@@ -675,26 +689,231 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   const filesAll = createMemo(() => {
     gitTick()
     return decorateFiles(mergeFiles(snap().db.files ?? [], liveFiles()), projectDir(), {
-      git: shown() === "current" && !foldFiles(),
+      git: tab() === "current" && !foldFiles(),
     })
   })
-  const files = createMemo(() => filesAll().slice(0, oes().fileRows))
   const filesStat = createMemo(() => sumDiff(filesAll()))
 
   const pickTab = (next: string) => {
-    if (!(TABS as readonly string[]).includes(next)) return
-    const picked = next as Tab
+    if (!(OES_TABS as readonly string[]).includes(next)) return
+    const picked = next as OesTab
     setTab(picked)
     kvWriteOne(props.api, KV_TAB, picked)
-    if (picked === "current" || picked === "perf" || picked === "plans") monitor.refresh()
+    if (picked === "current" || picked === "perf") monitor.refresh()
     requestRender()
   }
 
-  const plans = createMemo(() => snap().omo.plans.slice(0, 8))
+  const pickOmoTab = (next: string) => {
+    if (!(OMO_TABS as readonly string[]).includes(next)) return
+    const picked = next as OmoTab
+    setOmoTab(picked)
+    kvWriteOne(props.api, KV_OMO_TAB, picked)
+    monitor.refresh()
+    requestRender()
+  }
+
+  const toggleOmo = () => {
+    setFoldOmo((prev) => {
+      const next = !prev
+      kvWrite(props.api, KV_FOLD_OMO, next)
+      return next
+    })
+    requestRender()
+  }
+
+  const omoPresent = createMemo(() => snap().omo.present)
+
+  /**
+   * Rows are handed out on every render: chrome that always costs a line is
+   * counted first, then `packSections` splits what is left. OMO shares the
+   * budget instead of pushing the core off screen, and folds itself to its
+   * summary line when even its minimum no longer fits.
+   */
+  const rowPlan = createMemo(() => {
+    const o = oes()
+    const t = tab()
+    const omo = omoPresent()
+    const sections: { key: string; want: number; min: number; rank: number }[] = []
+    let fixed = 2 // OES brand line + panel top padding
+    let blocks = 0
+
+    const header = () => {
+      blocks += 1
+      fixed += 1
+    }
+    const section = (folded: boolean, key: string, want: number, min: number, rank: number) => {
+      header()
+      if (!folded) sections.push({ key, want, min, rank })
+    }
+
+    if (t === "sessions") {
+      header()
+      fixed += foldAgents() ? 0 : 1
+      section(foldSessions(), "sessions", o.sessionRows, ROW_MIN.sessions, ROW_RANK.sessions)
+      if (omo) section(foldDelegates(), "delegates", 6, ROW_MIN.delegates, ROW_RANK.delegates)
+    } else if (t === "current") {
+      header()
+      fixed += foldAgents() ? 0 : 1
+      section(foldDelegates(), "delegates", 6, ROW_MIN.delegates, ROW_RANK.delegates)
+      section(foldTools(), "tools", o.toolRows, ROW_MIN.tools, ROW_RANK.tools)
+      section(foldFiles(), "files", o.fileRows, ROW_MIN.files, ROW_RANK.files)
+    } else {
+      // Perf lays out its own sections and already caps itself with perfRows.
+      fixed += 18
+    }
+    fixed += Math.max(0, blocks - 1) // one blank row between OES sections
+
+    if (omo) {
+      fixed += 2 // blank row above the group + its brand line
+      if (!foldOmo() && o.omoRows > 0) {
+        sections.push({ key: "omo", want: o.omoRows, min: ROW_MIN.omo, rank: ROW_RANK.omo })
+      }
+    }
+
+    return packSections(panelRows(dimensions().height), fixed, sections)
+  })
+
+  const rowsFor = (key: string, fallback: number): number => {
+    const v = rowPlan()[key]
+    return typeof v === "number" ? v : fallback
+  }
+
+  const files = createMemo(() => filesAll().slice(0, rowsFor("files", oes().fileRows)))
+  const omoRows = createMemo(() => (omoPresent() ? rowsFor("omo", 0) : 0))
+  const omoOpen = createMemo(() => !foldOmo() && omoRows() > 0)
+  const works = createMemo(() => snap().omo.works)
+
+  /** Paused and abandoned are deliberate stops — they must not keep pulsing. */
+  const workMark = (status: string, updatedAt: number | null): AgentMark => {
+    if (!workIsTerminal(status)) {
+      return composeMark({ lifecycle: status, ageMs: pulseAgeMs(now(), updatedAt) })
+    }
+    return workStatusLabel(status) === "error" ? "error" : "ready"
+  }
+
+  const omoSummary = createMemo(() => {
+    const b = snap().omo.boulder
+    const bits: string[] = []
+    if (b.name) bits.push(b.name)
+    if (b.counts.running > 0) bits.push(`${b.counts.running} run`)
+    else if (b.counts.total > 0) bits.push(`${b.counts.done}/${b.counts.total} done`)
+    const age = formatAge(pulseAgeMs(now(), b.updatedAt))
+    if (age) bits.push(age)
+    return clip(bits.join(" · ") || "no active work", oes().lineMax)
+  })
+
+  const workLines = createMemo((): RowData[] =>
+    works().map((w) => ({
+      kind: "agent",
+      mark: workMark(w.status, w.updatedAt),
+      glyph: workStatusGlyph(w.status) ?? undefined,
+      name: w.name,
+      suffix: formatAge(pulseAgeMs(now(), w.updatedAt)),
+      current: w.current,
+      onSelect: () => openWorkDetail(props.api, w, projectRoots(), colors()),
+    })),
+  )
+
+  /** Boulder is the one place that knows where a plan lives. */
+  const planPaths = createMemo(() => {
+    const seen = new Set<string>()
+    for (const w of works()) if (w.planPath) seen.add(w.planPath)
+    return [...seen]
+  })
+
+  /** Scanned only while the tab is open; `readOmoDocs` caches for a few seconds. */
+  const docs = createMemo(() => {
+    if (!omoOpen() || omoTab() !== "docs") return []
+    now()
+    return readOmoDocs(projectDir(), planPaths())
+  })
+
+  const docLines = createMemo((): RowData[] => {
+    const out: RowData[] = []
+    for (const group of groupDocs(docs())) {
+      out.push({
+        kind: "group",
+        mark: "ready",
+        glyph: "▾",
+        name: `${DOC_KIND_LABEL[group.kind]} (${group.items.length})`,
+      })
+      for (const d of group.items) {
+        const age = pulseAgeMs(now(), d.updatedAt)
+        out.push({
+          kind: "file",
+          mark: composeMark({ ageMs: age }),
+          glyph: "•",
+          name: d.name,
+          suffix: formatAge(age),
+          onSelect: () => openDocDetail(props.api, d, projectRoots(), colors()),
+        })
+      }
+    }
+    return out
+  })
+
+  /** The cockpit is a flat row list, so the row budget can just slice it. */
+  const boulderLines = createMemo((): RowData[] => {
+    const b = snap().omo.boulder
+    if (!b.name && b.counts.total === 0 && b.sessions.length === 0) return []
+    const out: RowData[] = [
+      {
+        kind: "agent",
+        mark: b.status ? workMark(b.status, b.updatedAt) : "queued",
+        glyph: (b.status ? workStatusGlyph(b.status) : "○") ?? undefined,
+        name: b.name || "work",
+        suffix: formatAge(pulseAgeMs(now(), b.updatedAt)),
+        current: true,
+      },
+    ]
+
+    const meta = [b.agent, b.status ? workStatusLabel(b.status) : null]
+      .filter((s): s is string => Boolean(s))
+      .join(" · ")
+    if (meta) out.push({ kind: "group", mark: "ready", glyph: " ", name: meta })
+
+    const task = currentTask(b)
+    if (task) {
+      out.push({
+        kind: "tool",
+        mark: "live",
+        name: task.label || task.title,
+        suffix:
+          task.startedAt != null ? formatDuration(Math.max(0, now() - task.startedAt)) : undefined,
+        flow: "tool",
+      })
+    }
+
+    if (b.counts.total > 0) {
+      const bits = [`${b.counts.running} run`, `${b.counts.done} done`]
+      if (b.counts.other > 0) bits.push(`${b.counts.other} other`)
+      out.push({ kind: "group", mark: "ready", glyph: " ", name: bits.join(" · ") })
+    }
+
+    for (const s of b.sessions) {
+      const sess = snap().db.byId[s.id]
+      const archived = sess?.status === "archived"
+      out.push({
+        kind: "delegate",
+        mark: rowMark(
+          archived ? "archived" : null,
+          archived,
+          Boolean(busy()[s.id]),
+          sess?.timeUpdated,
+          seen()[s.id],
+        ),
+        name: s.origin ? `${s.id.slice(0, 12)} · ${s.origin}` : s.id.slice(0, 12),
+        current: s.id === props.sessionId,
+        flow: rowFlow(s.id, Boolean(busy()[s.id])),
+        onSelect: () => selectSession(props.api, s.id),
+      })
+    }
+    return out
+  })
 
   /** Perf SQLite scan runs only while this tab is open. */
   const perf = createMemo(() => {
-    if (shown() !== "perf") return emptyPerf(props.sessionId)
+    if (tab() !== "perf") return emptyPerf(props.sessionId)
     const o = oes()
     const history = o.perfHistory > 0
       ? snap()
@@ -728,8 +947,21 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     />
   )
 
-  const DelegateRows = (list: DelegateView[]): JSX.Element => (
-    <For each={groupDelegates(list)}>
+  /** Every OMO tab draws through here, so the row budget is applied once. */
+  const OmoRows = (rows: RowData[]): JSX.Element => {
+    const cut = sliceWithOverflow(rows, omoRows())
+    return (
+      <box flexDirection="column" gap={0}>
+        <For each={cut.rows}>{(line) => <Row {...line} />}</For>
+        <Show when={cut.hidden > 0}>
+          <text fg={colors().textMuted}>{`  … +${cut.hidden} more`}</text>
+        </Show>
+      </box>
+    )
+  }
+
+  const DelegateRows = (list: DelegateView[], limit: number): JSX.Element => (
+    <For each={groupDelegates(list).slice(0, Math.max(0, limit))}>
       {(item) => {
         if (item.kind === "header") {
           return (
@@ -763,28 +995,16 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
 
   return (
     <box flexDirection="column" gap={1} paddingTop={1}>
-      <box flexDirection="column" gap={0}>
-        <BrandTabs
-          brand="OES"
-          tabs={OES_TABS}
-          labels={TAB_LABELS}
-          active={shown() === "plans" ? null : shown()}
-          colors={colors()}
-          onPick={pickTab}
-        />
-        <Show when={snap().omo.present}>
-          <BrandTabs
-            brand="OMO"
-            tabs={OMO_TABS}
-            labels={TAB_LABELS}
-            active={shown() === "plans" ? "plans" : null}
-            colors={colors()}
-            onPick={pickTab}
-          />
-        </Show>
-      </box>
+      <BrandTabs
+        brand="OES"
+        tabs={OES_TABS}
+        labels={TAB_LABELS}
+        active={tab()}
+        colors={colors()}
+        onPick={pickTab}
+      />
       <box flexDirection="column" gap={1} paddingLeft={1}>
-        <Show when={shown() === "sessions"}>
+        <Show when={tab() === "sessions"}>
         <box flexDirection="column" gap={1}>
         <box flexDirection="column" gap={0}>
           <FoldHeader
@@ -827,7 +1047,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
             />
             <Show when={!foldSessions()}>
               <box flexDirection="column" gap={0} paddingLeft={1}>
-                <For each={snap().db.recent}>
+                <For each={snap().db.recent.slice(0, rowsFor("sessions", oes().sessionRows))}>
                   {(s) => {
                     const isBusy = Boolean(busy()[s.id])
                     const mark = rowMark(
@@ -871,7 +1091,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
                 {snap().delegates.length === 0 ? (
                   <text fg={colors().textMuted}>• none</text>
                 ) : (
-                  DelegateRows(snap().delegates)
+                  DelegateRows(snap().delegates, rowsFor("delegates", 6))
                 )}
               </box>
             </Show>
@@ -880,7 +1100,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
         </box>
         </Show>
 
-        <Show when={shown() === "current"}>
+        <Show when={tab() === "current"}>
         <box flexDirection="column" gap={1}>
         <box flexDirection="column" gap={0}>
           <FoldHeader
@@ -929,7 +1149,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
                 {sessionDelegates().length === 0 ? (
                   <text fg={colors().textMuted}>• none</text>
                 ) : (
-                  DelegateRows(sessionDelegates())
+                  DelegateRows(sessionDelegates(), rowsFor("delegates", 6))
                 )}
               </box>
             </Show>
@@ -950,7 +1170,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
               {tools().length === 0 ? (
                 <text fg={colors().textMuted}>• none</text>
               ) : (
-                <For each={tools()}>
+                <For each={tools().slice(0, rowsFor("tools", oes().toolRows))}>
                   {(t) => {
                     const mark = toolMark(t.status)
                     const dir = toolFlow(t.status)
@@ -1008,31 +1228,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
         </box>
         </Show>
 
-        <Show when={shown() === "plans"}>
-          <box flexDirection="column" gap={0}>
-            {plans().length === 0 ? (
-              <text fg={colors().textMuted}>• none</text>
-            ) : (
-              <For each={plans()}>
-                {(p) => (
-                  <Row
-                    kind="agent"
-                    mark={composeMark({
-                      lifecycle: p.status,
-                      ageMs: pulseAgeMs(now(), p.updatedAt),
-                    })}
-                    glyph={planStatusGlyph(p.status) ?? undefined}
-                    name={p.name}
-                    current={p.current}
-                    onSelect={() => openPlanDetail(props.api, p, projectRoots(), colors())}
-                  />
-                )}
-              </For>
-            )}
-          </box>
-        </Show>
-
-        <Show when={shown() === "perf"}>
+        <Show when={tab() === "perf"}>
           <PerfPanel
             api={props.api}
             perf={perf()}
@@ -1047,6 +1243,55 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
           />
         </Show>
       </box>
+
+      <Show when={omoPresent()}>
+        <Show
+          when={omoOpen()}
+          fallback={
+            <box flexDirection="row" onMouseUp={toggleOmo}>
+              <text fg={colors().primary || colors().text} bold underline>
+                ▶ OMO
+              </text>
+              <text fg={colors().textMuted}>{`  ${omoSummary()}`}</text>
+            </box>
+          }
+        >
+          <box flexDirection="column" gap={0}>
+            <BrandTabs
+              brand="▼ OMO"
+              tabs={OMO_TABS}
+              labels={TAB_LABELS}
+              active={omoTab()}
+              colors={colors()}
+              onPick={pickOmoTab}
+              onBrand={toggleOmo}
+            />
+            <box flexDirection="column" gap={0} paddingLeft={1}>
+              <Show when={omoTab() === "works"}>
+                {workLines().length === 0 ? (
+                  <text fg={colors().textMuted}>• none</text>
+                ) : (
+                  OmoRows(workLines())
+                )}
+              </Show>
+              <Show when={omoTab() === "boulder"}>
+                {boulderLines().length === 0 ? (
+                  <text fg={colors().textMuted}>• no active work</text>
+                ) : (
+                  OmoRows(boulderLines())
+                )}
+              </Show>
+              <Show when={omoTab() === "docs"}>
+                {docLines().length === 0 ? (
+                  <text fg={colors().textMuted}>• none</text>
+                ) : (
+                  OmoRows(docLines())
+                )}
+              </Show>
+            </box>
+          </box>
+        </Show>
+      </Show>
 
       {err() && snap().db.main ? (
         <text fg={colors().textMuted}>{err()}</text>

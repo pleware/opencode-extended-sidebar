@@ -1,5 +1,6 @@
 # Changelog
 
+- **0.2.9** (2026-08-30) Split OES and OMO into stacked groups with Works, Boulder, and Docs tabs plus height-aware row trimming.
 - **0.2.8** (2026-08-30) Open OMO plan rows as a headed markdown preview and mark plan status with check glyphs.
 - **0.2.7** (2026-08-30) Keep file previews inside a terminal-sized scrollbox so Copy and Close stay on screen.
 - **0.2.6** (2026-08-30) Use a down-triangle glyph on Delegate group headers so they no longer look like rows.

@@ -48,15 +48,23 @@ Extended Sidebar puts it back on screen. It reads OpenCode's own SQLite database
 
 > When an orchestrator hands work off, the delegates show up as their own rows — tokens, status, live pulse, and a click to jump into any of them. Two or more agent names become group headers (`▾ oracle (6)`); a single agent stays a flat list. **Sessions** lists the project's boulder. **Current** lists only children of the current session — a new main session starts empty, even if `.omo/boulder.json` still has yesterday's tasks. A leftover boulder `running` does not keep the spinner up once the OpenCode session has gone idle.
 
-## ▤ OMO plans
+## ▤ OMO works, boulder and docs
 
-> When the project has oh-my-openagent, a second header line appears under OES:
+> When the project has oh-my-openagent, a **second group** appears below the OES one, with its own tabs and its own data:
 >
 > ```
-> OMO | Plans
+> OMO | Works | Boulder | Docs
 > ```
 >
-> **Plans** lists the latest boulder works by name (active first, then newest). Status is a glyph, not a pulse dot: **✓** done, **○** pending, **×** failed; a running work still spins. **Click a plan** to open its markdown file as a formatted, scrollable preview — the same preview as a Files `.md` row. A work without its own `active_plan` inherits the boulder one. Without `.omo/` the line is gone — no warning, no empty OMO chrome. The checklist itself stays out of the sidebar list.
+> It is a group, not a fourth OES tab, because oh-my-openagent is optional and must never take the panel away from the core. You can watch tools run and the boulder progress at the same time. Without `.omo/` the whole group is gone — no warning, no empty chrome.
+>
+> **Works** lists boulder runs, active first then newest. A run is keyed by its `work_id`, so the same plan executed twice stays two rows. Status is a glyph, not a pulse dot: **✓** done, **○** pending, **×** failed, **⏸** paused, **⊘** abandoned; a running work still spins. **Click a work** to open its plan markdown as a formatted, scrollable preview — the same preview as a Files `.md` row. A run without its own `active_plan` inherits the boulder one.
+>
+> **Boulder** is the active run itself: plan name and elapsed time, the orchestrator agent and work status, the task it is on right now with a live counter, a `run / done / other` tally, and the sessions bound to the run — marked **direct** when the session opened the work and **appended** when it was pulled in later. Click a session to jump into it.
+>
+> **Docs** is everything the run reads and writes, in one list grouped by kind — the **plan**, `.omo/drafts/`, `.omo/notepads/` (learnings, decisions, issues) and the **proof** in `.omo/evidence/<change>/`. Newest first inside each group, with the age on the right and the bullet lit by freshness, so you can see which notepad the agent is filling in right now. **Click any text document** to open it as a formatted, scrollable preview — the same one a Files `.md` row gets. A screenshot in evidence is listed, never rendered: it opens a metadata sheet with its size and relative path. The list is scanned only while the tab is open, so it costs nothing the rest of the time.
+>
+> Click **OMO** to fold the group. Folded, it is one line that still says what matters: `▶ OMO ⠋ refactor-auth · 2 run · 12m`. The plan checklist stays out of the sidebar — OpenCode already has its own UI for that.
 
 ## ◴ Where the time actually goes
 
@@ -68,16 +76,29 @@ Extended Sidebar puts it back on screen. It reads OpenCode's own SQLite database
 >
 > The numbers are measured, not estimated: each turn's timestamps come from its own message and parts. Perf reads more of the database than the other tabs, so it only runs while you are looking at it.
 
-## ▣ Three focused views
+## ▣ Two groups, six views
 
-> One header line, three scopes — and a second line when OMO is present:
+> The core group is always there. The OMO group joins it below when the project has one:
 >
 > ```
 > OES | Sessions | Current | Perf
-> OMO | Plans
+>   … core rows …
+>
+> OMO | Works | Boulder | Docs
+>   … boulder rows …
 > ```
 >
-> **Sessions** is the project view: where you are, where you have been, who else is running. **Current** is the deep view: this agent, the delegates it spawned (not the project's leftover boulder), its tools, its files. **Perf** is the timing view. **Plans** is the OMO view: recent works and their status. Your choice is remembered between restarts, as is every collapsed section. Clickable labels — tabs, fold headers, session rows — are underlined.
+> **Sessions** is the project view: where you are, where you have been, who else is running. **Current** is the deep view: this agent, the delegates it spawned (not the project's leftover boulder), its tools, its files. **Perf** is the timing view. The two groups pick their tab independently, and both choices are remembered between restarts, as is every collapsed section. Clickable labels — tabs, the OMO brand, fold headers, session rows — are underlined.
+
+## ⇕ Rows that fit the window
+
+> The panel measures the terminal and hands out rows per refresh, so a short window degrades on purpose instead of pushing content off screen. Row counts in `oes.json` are ceilings, not fixed counts: on a tall terminal you get all of them, on a short one the sections shrink.
+>
+> Shrinking follows a priority. Live activity survives longest — the tool feed on **Current**, the session list on **Sessions** — then Files, then Delegates and the OMO group, which give up rows together so the optional add-on never starves the core on its own. Nothing drops below a usable minimum while another section is still above its own. When even that no longer fits, the OMO group folds itself to its summary line and the core keeps its minimum.
+>
+> Nothing disappears quietly. Section headers keep the full count — `Files (12)` when only four rows are drawn — and a trimmed OMO list ends in `… +6 more`, so a truncated Docs index never hides a whole group of documents from you.
+>
+> Resizing the window re-slices what is already in memory: no new database read, and growing the terminal shows more immediately.
 
 ## ⊘ Privacy first
 
@@ -101,10 +122,12 @@ Every row is one glyph plus one colour: the glyph says *what* is happening, the 
 | `↓`                             | tokens are streaming in                                       |
 | `→`                             | a tool call is in flight                                      |
 | `•`                             | nothing in progress — finished, queued or archived            |
-| `▾`                             | Delegates: agent group header (`▼` is the section fold)       |
-| `×`                             | failed — an errored session, delegate, tool call or plan      |
-| `✓`                             | Plans: done                                                   |
-| `○`                             | Plans: pending / queued                                       |
+| `▾`                             | group header — Delegates by agent, Docs by kind (`▼` is the section fold) |
+| `×`                             | failed — an errored session, delegate, tool call or work      |
+| `✓`                             | Works: done                                                   |
+| `○`                             | Works: pending / queued                                       |
+| `⏸`                             | Works: paused                                                 |
+| `⊘`                             | Works: abandoned                                              |
 | `M` `A` `D` `R` `C` `U` `T` `?` | Files: git status — same letters as `git status --short`      |
 | `V`                             | Files: viewed (session read only) — not a git letter          |
 | `∴`                             | Perf: thinking — reasoning time and reasoning tokens          |
@@ -164,6 +187,7 @@ Everything works out of the box. When you want it tighter or roomier, drop an `o
 {
   "fileRows": 8,
   "lineMax": 31,
+  "omoRows": 8,
   "perfHistory": 3,
   "perfRows": 5,
   "perfTurns": 120,
@@ -177,18 +201,19 @@ Everything works out of the box. When you want it tighter or roomier, drop an `o
 
 | Key             | Default           | What it controls                                                    |
 | --------------- | ----------------- | ------------------------------------------------------------------- |
-| `fileRows`      | `8`               | file rows shown (the header total still counts every file)          |
+| `fileRows`      | `8`               | most file rows shown (the header total still counts every file)     |
 | `lineMax`       | `31`              | max characters per row — raise on a wide sidebar, lower if rows wrap |
+| `omoRows`       | `8`               | most rows for the OMO group (Works / Boulder / Docs); `0` keeps it folded to its summary line |
 | `perfHistory`   | `3`               | recent sessions compared under Perf → History; `0` hides it         |
 | `perfRows`      | `5`               | rows per Perf section (models, tools, history)                      |
 | `perfTurns`     | `120`             | recent turns Perf measures — more history, slower read              |
-| `sessionRows`   | `4`               | how many recent sessions the switcher lists                         |
+| `sessionRows`   | `4`               | most recent sessions the switcher lists                             |
 | `skipDirs`      | `["tmp", ".tmp"]` | directory names or relative prefixes hidden from Files              |
 | `skipGitignore` | `false`           | also hide Files matching the project's root `.gitignore` (opt-in)   |
-| `toolRows`      | `8`               | tool rows shown                                                     |
+| `toolRows`      | `8`               | most tool rows shown                                                |
 
 
-Every row — agents, sessions, delegates, tools, files — clips to `lineMax`. There is no per-section name width.
+Every row — agents, sessions, delegates, tools, files, works — clips to `lineMax`. There is no per-section name width. The row counts are ceilings: a short terminal trims below them (see **Rows that fit the window**), a tall one never goes above them.
 
 Changes are picked up on the next refresh — no restart needed.
 
@@ -198,7 +223,8 @@ Changes are picked up on the next refresh — no restart needed.
 | Source          | Path                                                          | Used for                                         |
 | --------------- | ------------------------------------------------------------- | ------------------------------------------------ |
 | OpenCode SQLite | `~/.local/share/opencode/opencode.db` (or `OPENCODE_DB_PATH`) | sessions, tokens, cost, tool parts, edited files, turn timings |
-| OMO boulder     | `<project>/.omo/boulder.json` (legacy `.sisyphus/`)           | delegates + plan names/status — OMO line hidden when absent |
+| OMO boulder     | `<project>/.omo/boulder.json` (legacy `.sisyphus/`)           | works, the active run, its tasks and sessions, delegates — OMO group hidden when absent |
+| OMO documents   | `<project>/.omo/{drafts,notepads,evidence}/` + the plan       | Docs: names, ages and sizes; contents only in a preview you click, scanned only while the tab is open |
 | `oes.json`      | plugin / user config / project                                | display limits                                   |
 
 
@@ -216,15 +242,16 @@ Perf times each assistant turn from its own records: waiting is the gap between 
 
 Cost is shown only when the provider reports it. Many gateways record `0`, and the sidebar will not invent a price from an online catalogue.
 
-`oh-my-openagent` is optional enrichment, never a requirement. Without `.omo/` the **OMO | Plans** line is gone, Delegates is hidden, and there are no warnings. Delegate pulse follows the OpenCode session row: a `task_sessions` entry left on `running` is treated as finished once that session is idle.
+`oh-my-openagent` is optional enrichment, never a requirement. Without `.omo/` the whole **OMO** group is gone, Delegates is hidden, and there are no warnings. Delegate pulse follows the OpenCode session row: a `task_sessions` entry left on `running` is treated as finished once that session is idle.
 
 ## Project layout
 
 ```text
 src/
   tui.tsx       # plugin entry (sidebar_content slot)
-  sidebar.tsx   # tabs, foldable sections, rows
-  detail.tsx    # file / tool / plan detail dialogs
+  sidebar.tsx   # OES + OMO groups, foldable sections, rows
+  layout.ts     # terminal-height row budget (pure)
+  detail.tsx    # file / tool / work / document detail dialogs
   preview.ts    # text/markdown preview helpers (no OpenTUI)
   clipboard.ts  # copy-to-clipboard helper (no deps)
   chrome.tsx    # brand tabs, fold headers, diff stats, kv persistence
@@ -240,7 +267,8 @@ src/
   pulse.ts      # live/stale detection, flow, tool labels, bars, sparklines
   sqlite.ts     # bun:sqlite | node:sqlite
   paths.ts      # XDG paths / OPENCODE_DB_PATH
-  omo.ts        # boulder / delegates / plans
+  omo.ts        # boulder / works / tasks / delegates
+  docs.ts       # .omo plan / drafts / notepads / evidence index
 oes.json        # display defaults
 test/           # bun:test — unit, SQLite/OMO fixtures, 5k-part bench
 ```
