@@ -21,7 +21,7 @@ export type MonitorHandle = {
 }
 
 export function startMonitor(opts: MonitorOptions): MonitorHandle {
-  const dbPath = opts.dbPath || getOpenCodeDbPath()
+  const dbPath = opts.dbPath || getOpenCodeDbPath(process.env, undefined, opts.projectRoot)
   const pollMs = opts.pollMs ?? 1500
   let lastFp = ""
   let stopped = false

@@ -466,9 +466,9 @@ export function openDocDetail(
 export function openPerfLog(
   api: TuiPluginApi,
   colors: ThemeColors,
-  opts: { dbPath: string; sessionId: string; turns: number; kind: PerfLogKind; now?: number },
+  opts: { dbPath: string; sessionId: string; turns: number; kind: PerfLogKind; now?: number; toolFilter?: string },
 ): void {
-  const log = readPerfLog({ ...opts, now: opts.now ?? Date.now() })
+  const log = readPerfLog({ ...opts, now: opts.now ?? Date.now(), toolFilter: opts.toolFilter })
   if (!log) {
     toast(api, "No perf stats to log", "warning")
     return

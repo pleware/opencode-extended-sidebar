@@ -327,9 +327,11 @@ export function perfLogKindLabel(kind: PerfLogKind): string {
   return kind === "tool" ? "tools" : kind
 }
 
-export function perfLogFileName(kind: PerfLogKind, generatedAt: number): string {
+export function perfLogFileName(kind: PerfLogKind, generatedAt: number, toolFilter?: string): string {
   const stamp = formatWhen(generatedAt).replace(/[: ]/g, "-")
-  return `perf-${perfLogKindLabel(kind)}-${stamp}.log`
+  const ms = String(generatedAt % 1000).padStart(3, "0")
+  const toolPart = toolFilter ? `-${toolFilter.replace(/[^a-z0-9_-]/gi, "_")}` : ""
+  return `perf-${perfLogKindLabel(kind)}${toolPart}-${stamp}-${ms}.log`
 }
 
 /** One dated event per turn / tool / idle gap. Exported for tests. */
@@ -469,8 +471,9 @@ export function formatPerfLog(
   sessionId: string,
   now: number,
   rows: PerfLogRow[],
+  titleOverride?: string,
 ): string {
-  const title = perfLogKindLabel(kind)
+  const title = titleOverride ?? perfLogKindLabel(kind)
   const head = [
     `# Perf ${title} log`,
     `# generated ${formatWhen(now)}`,
@@ -565,17 +568,25 @@ export function readPerfLog(opts: {
   kind: PerfLogKind
   now: number
   logDir?: string
+  /** When set, filter tool-phase rows to this bare tool name (e.g. "bash"). */
+  toolFilter?: string
 }): PerfLogDoc | null {
   if (!opts.dbPath || !fs.existsSync(opts.dbPath)) return null
   const load = (): PerfLogDoc | null => {
     const db = openReadonlyDb(opts.dbPath)
     if (!db) return null
     const { msgs, parts } = readRows(db, opts.sessionId, opts.turns, true)
-    const rows = collectPerfLogRows(opts.kind, msgs, parts)
-    const text = formatPerfLog(opts.kind, opts.sessionId, opts.now, rows)
-    const fileName = perfLogFileName(opts.kind, opts.now)
+    const allRows = collectPerfLogRows(opts.kind, msgs, parts)
+    const rows = opts.toolFilter
+      ? allRows.filter((r) => r.tool === opts.toolFilter)
+      : allRows
+    const kindLabel = opts.toolFilter
+      ? `${perfLogKindLabel(opts.kind)} · ${opts.toolFilter}`
+      : perfLogKindLabel(opts.kind)
+    const text = formatPerfLog(opts.kind, opts.sessionId, opts.now, rows, kindLabel)
+    const fileName = perfLogFileName(opts.kind, opts.now, opts.toolFilter)
     const written = writePerfLog(text, fileName, opts.logDir)
-    return { title: `${perfLogKindLabel(opts.kind)} log`, fileName, text, written }
+    return { title: `${kindLabel} log`, fileName, text, written }
   }
   return withDbRead(load, () => null)
 }

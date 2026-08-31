@@ -285,12 +285,13 @@ export function PerfPanel(props: PerfPanelProps): JSX.Element {
     props.perf.trend.length > 1 &&
     (trendWait().some((v) => v != null) || trendRate().some((v) => v != null))
 
-  const openLog = (kind: PerfLogKind) =>
+  const openLog = (kind: PerfLogKind, toolFilter?: string) =>
     openPerfLog(props.api, props.colors, {
       dbPath: props.dbPath,
       sessionId: props.currentSessionId,
       turns: props.turns,
       kind,
+      toolFilter,
     })
 
   const liveLabel = () => {
@@ -399,7 +400,7 @@ export function PerfPanel(props: PerfPanelProps): JSX.Element {
                         share={toolTotal() > 0 ? t.totalMs / toolTotal() : null}
                         colors={props.colors}
                         lineMax={props.lineMax}
-                        onSelect={() => openLog("tool")}
+                        onSelect={() => openLog("tool", t.name)}
                       />
                     )}
                   </For>

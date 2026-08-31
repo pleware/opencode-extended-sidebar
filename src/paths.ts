@@ -34,8 +34,30 @@ export function getOpenCodeRoot(env: Env = process.env, homedir = os.homedir()):
   return path.join(getDataDir(env, homedir), "opencode")
 }
 
-export function getOpenCodeDbPath(env: Env = process.env, homedir = os.homedir()): string {
+/** Local agentize DB path relative to a project root, or null when absent. */
+export function localAgentizeDbPath(projectRoot: string): string | null {
+  const p = path.join(projectRoot, ".agentize", "opencode", "opencode.db")
+  return fs.existsSync(p) ? p : null
+}
+
+/**
+ * Resolve the opencode.db path.
+ *
+ * Priority:
+ *   1. OPENCODE_DB_PATH env var
+ *   2. .agentize/opencode/opencode.db under projectRoot (when supplied)
+ *   3. XDG / home-based global path
+ */
+export function getOpenCodeDbPath(
+  env: Env = process.env,
+  homedir = os.homedir(),
+  projectRoot?: string | null,
+): string {
   if (env.OPENCODE_DB_PATH) return path.resolve(env.OPENCODE_DB_PATH)
+  if (projectRoot) {
+    const local = localAgentizeDbPath(projectRoot)
+    if (local) return local
+  }
   return path.join(getOpenCodeRoot(env, homedir), "opencode.db")
 }
 

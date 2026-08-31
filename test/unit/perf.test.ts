@@ -149,11 +149,34 @@ describe("perf log", () => {
 
   test("writes a dated sidecar without throwing", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "oes-perf-"))
+    // t0 = 1_700_000_000_000 → ms = 000
     const name = perfLogFileName("tool", t0)
-    expect(name).toBe("perf-tools-2023-11-14-22-13-20.log")
+    expect(name).toBe("perf-tools-2023-11-14-22-13-20-000.log")
     const abs = writePerfLog("hello\n", name, dir)
     expect(abs).toBe(path.join(dir, name))
     expect(fs.readFileSync(abs!, "utf8")).toBe("hello\n")
     fs.rmSync(dir, { recursive: true, force: true })
+  })
+
+  test("perfLogFileName adds tool name and ms when toolFilter set", () => {
+    const name = perfLogFileName("tool", t0 + 42, "bash")
+    expect(name).toBe("perf-tools-bash-2023-11-14-22-13-20-042.log")
+  })
+
+  test("toolFilter keeps only matching tool rows", () => {
+    const hinted: PartRow[] = [
+      { mid: "m1", kind: "tool", pstart: null, pend: null, tool: "bash", status: "completed", tstart: t0 + 3_000, tend: t0 + 4_000 },
+      { mid: "m1", kind: "tool", pstart: null, pend: null, tool: "read", status: "completed", tstart: t0 + 4_000, tend: t0 + 5_000 },
+    ]
+    const all = collectPerfLogRows("tool", msgs, hinted)
+    expect(all).toHaveLength(2)
+    // simulate toolFilter logic from readPerfLog
+    const filtered = all.filter((r) => r.tool === "bash")
+    expect(filtered).toHaveLength(1)
+    expect(filtered[0]?.tool).toBe("bash")
+    const text = formatPerfLog("tool", "ses", t0, filtered, "tools · bash")
+    expect(text).toContain("# Perf tools · bash log")
+    expect(text).toContain("bash")
+    expect(text).not.toContain("read")
   })
 })

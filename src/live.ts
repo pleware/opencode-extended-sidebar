@@ -162,7 +162,7 @@ export function readLiveSnapshot(opts: {
   dbPath?: string
   force?: boolean
 }): LiveSnapshot {
-  const dbPath = opts.dbPath || getOpenCodeDbPath()
+  const dbPath = opts.dbPath || getOpenCodeDbPath(process.env, undefined, opts.projectRoot)
   const cheap = computeFingerprint({
     dbPath,
     projectRoot: opts.projectRoot,
