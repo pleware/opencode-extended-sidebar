@@ -5,6 +5,7 @@
  * `## State` section, plus the approval row label. Pure text — no fs, no scan.
  */
 import path from "node:path"
+import type { SessionActivityState } from "../opencode/session.resolver.js"
 
 export type ApprovalItem = {
   /** Project-relative path. The panel must never show a root. */
@@ -14,6 +15,8 @@ export type ApprovalItem = {
   /** What happens after approval — e.g. `write .omo/plans/<slug>.md`. */
   pendingAction: string | null
   updatedAt: number | null
+  /** Planner session activity; null = no db / no writer session found. */
+  sessionState: SessionActivityState | null
 }
 
 /** Row label for an approval item — basename without the `.md` extension. */

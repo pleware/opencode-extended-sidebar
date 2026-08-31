@@ -1,6 +1,9 @@
 import { afterAll, describe, expect, test } from "bun:test"
+import fs from "node:fs"
+import path from "node:path"
 import {
   inferStatus,
+  sessionActivityState,
   sessionForPlanFile,
   toSessionView,
   type SessionRow,
@@ -121,5 +124,61 @@ describe("sessionForPlanFile", () => {
     const db = openReadonlyDb(fix.dbPath)!
     expect(sessionForPlanFile(db, null)).toBeNull()
     expect(sessionForPlanFile(db, "")).toBeNull()
+  })
+})
+
+describe("sessionActivityState", () => {
+  const t0 = 1_700_000_000_000
+  const fix = createFixtureDb({
+    sessions: [
+      { id: "ses_stream", project_id: "proj_1", time_updated: t0 + 1_000 },
+      { id: "ses_archived", project_id: "proj_1", time_updated: t0 + 1_000, time_archived: t0 + 500 },
+      { id: "ses_idle", project_id: "proj_1", time_updated: t0 - 10 * 60_000 },
+      { id: "ses_bg", project_id: "proj_1", time_updated: t0 - 10 * 60_000 },
+    ],
+  })
+
+  afterAll(() => fix.dispose())
+
+  const runContinuationDir = path.join(fix.dir, "run-continuation")
+  fs.mkdirSync(runContinuationDir, { recursive: true })
+  fs.writeFileSync(
+    path.join(runContinuationDir, "ses_bg.json"),
+    JSON.stringify({ sources: { "background-task": { state: "active" } } }),
+  )
+
+  const db = () => openReadonlyDb(fix.dbPath)!
+  const now = t0
+
+  test("unknown when no row exists", () => {
+    expect(sessionActivityState(db(), "ses_nope", { now })).toEqual({ running: false, state: "unknown" })
+  })
+
+  test("archived wins over a fresh time_updated", () => {
+    expect(sessionActivityState(db(), "ses_archived", { now })).toEqual({ running: false, state: "archived" })
+  })
+
+  test("fresh time_updated is streaming", () => {
+    expect(sessionActivityState(db(), "ses_stream", { now })).toEqual({ running: true, state: "streaming" })
+  })
+
+  test("stale time_updated without a marker is idle", () => {
+    expect(sessionActivityState(db(), "ses_idle", { now })).toEqual({ running: false, state: "idle" })
+  })
+
+  test("stale time_updated with an active run-continuation marker is awaiting-background", () => {
+    expect(sessionActivityState(db(), "ses_bg", { now, runContinuationDir })).toEqual({
+      running: true,
+      state: "awaiting-background",
+    })
+  })
+
+  test("a nonexistent run-continuation dir soft-fails to idle", () => {
+    expect(
+      sessionActivityState(db(), "ses_bg", {
+        now,
+        runContinuationDir: path.join(fix.dir, "does-not-exist"),
+      }),
+    ).toEqual({ running: false, state: "idle" })
   })
 })

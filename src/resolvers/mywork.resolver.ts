@@ -6,11 +6,19 @@
  * awaiting approval (optional, only when `.omo/` is present).
  */
 import type { OpenQuestion } from "./opencode/question.resolver.js"
+import type { SessionActivityState } from "./opencode/session.resolver.js"
 import type { ApprovalItem } from "./omo/plan.resolver.js"
 
 export type MyWorkItem =
   | { kind: "question"; sessionId: string; title: string; startedAt: number | null }
-  | { kind: "approval"; name: string; rel: string; pendingAction: string | null; updatedAt: number | null }
+  | {
+      kind: "approval"
+      name: string
+      rel: string
+      pendingAction: string | null
+      updatedAt: number | null
+      sessionState: SessionActivityState | null
+    }
 
 export type MyWorkKind = MyWorkItem["kind"]
 
@@ -74,5 +82,6 @@ export function toApprovalItems(approvals: readonly ApprovalItem[]): MyWorkItem[
     rel: a.rel,
     pendingAction: a.pendingAction,
     updatedAt: a.updatedAt,
+    sessionState: a.sessionState,
   }))
 }

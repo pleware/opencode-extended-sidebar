@@ -77,6 +77,7 @@ function scan(root: string): ApprovalItem[] {
           status,
           pendingAction: parsePlanPendingAction(text),
           updatedAt: statOf(abs),
+          sessionState: null,
         })
       }
     }

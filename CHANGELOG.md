@@ -1,5 +1,6 @@
 # Changelog
 
+- **0.2.19** (2026-08-31) Show the planner session state on pending-approval rows in My work (working/waiting/idle/archived/unknown) by enriching each approval via a new approvalState re.
 - **0.2.18** (2026-08-31) Make My work questions project-wide so a restart or session switch can no longer hide an open question, and widen the Sessions list with a sessionFetch revealer.
 - **0.2.17** (2026-08-31) Rename the pending-approval Continue row to Navigate to session and add an Approve row in its own category that sends an ok reply to the plan's writer session v.
 - **0.2.16** (2026-08-31) Extract every status-to-character mapping into a single pware.oc.ui.glyphs module (workStatusGlyph, markGlyph with queued rendering as the ◷ clock instead of th.

@@ -8,5 +8,6 @@
 export * from "./boulder.resolver.js"
 export * from "./plan.resolver.js"
 export * from "./approval.resolver.js"
+export * from "./approvalState.resolver.js"
 export * from "./doc.resolver.js"
 export * from "./config.resolver.js"

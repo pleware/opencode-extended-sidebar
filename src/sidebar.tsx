@@ -40,6 +40,7 @@ import {
   sliceWithOverflow,
 } from "./layout.js"
 import { DOC_KIND_LABEL, approvalContinueHint } from "./resolvers/index.js"
+import { enrichApprovalSessionStates, planSessionStateLabel } from "./resolvers/omo/approvalState.resolver.js"
 import { openReadonlyDb } from "./sqlite.js"
 import {
   GROUP_GLYPH,
@@ -695,7 +696,12 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   const myWorkApprovals = createMemo<MyWorkItem[]>(() => {
     if (tab() !== "mywork" || !omoPresent()) return []
     now() // re-scan while open; the plans cache TTL gates the filesystem read
-    return toApprovalItems(listPendingApprovals(projectDir()))
+    return toApprovalItems(
+      enrichApprovalSessionStates(listPendingApprovals(projectDir()), {
+        dbPath: snap().db.dbPath,
+        projectRoot: projectDir(),
+      }),
+    )
   })
 
   const myWorkItems = createMemo<MyWorkItem[]>(() => [
@@ -926,6 +932,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
             mark: "ready",
             glyph: myWorkGlyph("approval"),
             name: item.name,
+            suffix: planSessionStateLabel(item.sessionState) ?? undefined,
             waiting: true,
             onSelect: () => {
               const db = openReadonlyDb(snap().db.dbPath)

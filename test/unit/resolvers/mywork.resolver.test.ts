@@ -5,6 +5,7 @@ import {
   myWorkLabel,
   MY_WORK_ORDER,
   startWorkCommand,
+  toApprovalItems,
   toQuestionItems,
   type MyWorkItem,
 } from "../../../src/resolvers/mywork.resolver.js"
@@ -22,6 +23,7 @@ const approval: MyWorkItem = {
   rel: ".omo/drafts/plan.md",
   pendingAction: "write .omo/plans/plan.md",
   updatedAt: 2_000,
+  sessionState: null,
 }
 
 describe("myWorkLabel", () => {
@@ -41,6 +43,36 @@ describe("toQuestionItems", () => {
       { kind: "question", sessionId: "ses_1", title: "Plan approval?", startedAt: 1_000 },
       { kind: "question", sessionId: "ses_2", title: "Which lib?", startedAt: null },
     ])
+  })
+})
+
+describe("toApprovalItems", () => {
+  test("carries sessionState through from the approval read", () => {
+    const items = toApprovalItems([
+      {
+        rel: ".omo/drafts/plan.md",
+        name: "plan",
+        status: "awaiting-approval",
+        pendingAction: "write .omo/plans/plan.md",
+        updatedAt: 2_000,
+        sessionState: { running: true, state: "streaming" },
+      },
+      {
+        rel: ".omo/drafts/other.md",
+        name: "other",
+        status: "awaiting-approval",
+        pendingAction: null,
+        updatedAt: null,
+        sessionState: null,
+      },
+    ])
+    expect(items).toHaveLength(2)
+    const plan = items[0]
+    const other = items[1]
+    expect(plan?.kind).toBe("approval")
+    expect(other?.kind).toBe("approval")
+    if (plan?.kind === "approval") expect(plan.sessionState).toEqual({ running: true, state: "streaming" })
+    if (other?.kind === "approval") expect(other.sessionState).toBeNull()
   })
 })
 
