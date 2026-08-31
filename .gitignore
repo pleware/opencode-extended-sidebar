@@ -10,6 +10,7 @@ backlog.md
 myworkspace/
 .cursor/
 .agents/
+.hidden/
 skills-lock.json
 
 # agentize workspace (MassTrade)
