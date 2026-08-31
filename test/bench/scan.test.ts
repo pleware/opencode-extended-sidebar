@@ -6,10 +6,10 @@
  * B — queries: tools/files LIMIT 80, Perf 120 turns without History.
  */
 import { afterAll, describe, expect, test } from "bun:test"
-import { listSessionFiles, listToolEvents, readProjectFeed, sessionScanStamp } from "../../src/resolvers/opencode/index.js"
-import { computeFingerprint, readLiveSnapshot, resetLiveCache } from "../../src/resolvers/live/index.js"
-import { readPerfSnapshot } from "../../src/perf.js"
-import { openReadonlyDb, resetReadonlyDb } from "../../src/sqlite.js"
+import { listSessionFiles, listToolEvents, readProjectFeed, sessionScanStamp } from "../../src/pware.oc.opencode/resolver/index.js"
+import { computeFingerprint, readRuntimeSnapshot, resetRuntimeCache } from "../../src/pware.oc.runtime/resolver/index.js"
+import { readPerfSnapshot } from "../../src/pware.oc.perf/pware.oc.perf.reader.js"
+import { openReadonlyDb, resetReadonlyDb } from "../../src/pware.oc.core/pware.oc.core.sqlite.js"
 import { createFixtureDb, largeSessionSeed } from "../helpers/sqlite.js"
 
 /** Generous so CI/Windows cold starts do not flake; tighten locally if needed. */
@@ -50,7 +50,7 @@ const feedFix = createFixtureDb({
 })
 
 afterAll(() => {
-  resetLiveCache()
+  resetRuntimeCache()
   resetReadonlyDb()
   fix.dispose()
   feedFix.dispose()
@@ -79,10 +79,10 @@ describe("5k-part session budgets", () => {
     expect(ms).toBeLessThan(SCAN_STAMP_MS)
   })
 
-  test("readLiveSnapshot miss then hit", () => {
-    resetLiveCache()
+  test("readRuntimeSnapshot miss then hit", () => {
+    resetRuntimeCache()
     const miss = elapsed(() => {
-      const snap = readLiveSnapshot({
+      const snap = readRuntimeSnapshot({
         sessionId: "ses_bench",
         projectRoot: null,
         dbPath: fix.dbPath,
@@ -93,7 +93,7 @@ describe("5k-part session budgets", () => {
     expect(miss).toBeLessThan(SNAP_MISS_MS)
 
     const hit = elapsed(() => {
-      const snap = readLiveSnapshot({
+      const snap = readRuntimeSnapshot({
         sessionId: "ses_bench",
         projectRoot: null,
         dbPath: fix.dbPath,

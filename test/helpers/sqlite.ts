@@ -6,7 +6,7 @@ import { Database } from "bun:sqlite"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
-import { resetReadonlyDb } from "../../src/sqlite.js"
+import { resetReadonlyDb } from "../../src/pware.oc.core/pware.oc.core.sqlite.js"
 
 export type SessionSeed = {
   id: string

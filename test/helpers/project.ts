@@ -4,11 +4,11 @@
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
-import { resetOesCache } from "../../src/oes.js"
-import { resetLiveCache } from "../../src/resolvers/live/index.js"
-import { resetDocsCache } from "../../src/resolvers/omo/doc.resolver.js"
-import { resetPerfCache } from "../../src/perf.js"
-import { resetApprovalsCache } from "../../src/resolvers/omo/approval.resolver.js"
+import { resetOesCache } from "../../src/pware.oc.core/pware.oc.core.oes.js"
+import { resetRuntimeCache } from "../../src/pware.oc.runtime/resolver/index.js"
+import { resetDocsCache } from "../../src/pware.oc.omo/resolver/pware.oc.omo.resolver.doc.js"
+import { resetPerfCache } from "../../src/pware.oc.perf/pware.oc.perf.reader.js"
+import { resetApprovalsCache } from "../../src/pware.oc.omo/resolver/pware.oc.omo.resolver.approval.js"
 
 export type BoulderTask = {
   task_key?: string
@@ -72,7 +72,7 @@ export function createFixtureProject(opts?: {
     root,
     dispose: () => {
       resetOesCache()
-      resetLiveCache()
+      resetRuntimeCache()
       resetDocsCache()
       resetPerfCache()
       resetApprovalsCache()

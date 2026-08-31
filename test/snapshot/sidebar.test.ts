@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { listOpenQuestions, listSessionFiles, listToolEvents } from "../../src/resolvers/opencode/index.js"
-import { delegatesForSession, readLiveSnapshot, resetLiveCache } from "../../src/resolvers/live/index.js"
-import { readOmo } from "../../src/resolvers/omo/index.js"
-import { listPendingApprovals } from "../../src/resolvers/omo/index.js"
-import { openReadonlyDb, resetReadonlyDb } from "../../src/sqlite.js"
+import { listOpenQuestions, listSessionFiles, listToolEvents } from "../../src/pware.oc.opencode/resolver/index.js"
+import { delegatesForSession, readRuntimeSnapshot, resetRuntimeCache } from "../../src/pware.oc.runtime/resolver/index.js"
+import { readOmo } from "../../src/pware.oc.omo/resolver/index.js"
+import { listPendingApprovals } from "../../src/pware.oc.omo/resolver/index.js"
+import { openReadonlyDb, resetReadonlyDb } from "../../src/pware.oc.core/pware.oc.core.sqlite.js"
 import { boulderWithTask, createFixtureProject } from "../helpers/project.js"
 import { assertPrivacy } from "../helpers/privacy.js"
 import {
@@ -19,7 +19,7 @@ let dbFix: FixtureDb | null = null
 let projFix: ReturnType<typeof createFixtureProject> | null = null
 
 afterEach(() => {
-  resetLiveCache()
+  resetRuntimeCache()
   resetReadonlyDb()
   dbFix?.dispose()
   projFix?.dispose()
@@ -76,7 +76,7 @@ describe("no .omo — SQLite only", () => {
       ],
     })
     expect(readOmo(projFix.root).present).toBe(false)
-    const snap = readLiveSnapshot({
+    const snap = readRuntimeSnapshot({
       sessionId: "ses_main",
       projectRoot: projFix.root,
       dbPath: dbFix.dbPath,
@@ -114,7 +114,7 @@ describe("foreign boulder parent", () => {
       ],
     })
     expect(readOmo(projFix.root).present).toBe(true)
-    const snap = readLiveSnapshot({
+    const snap = readRuntimeSnapshot({
       sessionId: "ses_current",
       projectRoot: projFix.root,
       dbPath: dbFix.dbPath,
@@ -157,7 +157,7 @@ describe("finished child vs leftover boulder running", () => {
         },
       ],
     })
-    const snap = readLiveSnapshot({
+    const snap = readRuntimeSnapshot({
       sessionId: "ses_main",
       projectRoot: projFix.root,
       dbPath: dbFix.dbPath,
@@ -225,7 +225,7 @@ describe("boulder schema v2 views", () => {
         },
       ],
     })
-    const snap = readLiveSnapshot({
+    const snap = readRuntimeSnapshot({
       sessionId: "ses_main",
       projectRoot: projFix.root,
       dbPath: dbFix.dbPath,

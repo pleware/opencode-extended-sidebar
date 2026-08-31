@@ -49,6 +49,7 @@ src/
 │       ├── pware.oc.omo.resolver.boulder.ts
 │       ├── pware.oc.omo.resolver.plan.ts
 │       ├── pware.oc.omo.resolver.approval.ts
+│       ├── pware.oc.omo.resolver.approvalState.ts
 │       ├── pware.oc.omo.resolver.doc.ts
 │       └── pware.oc.omo.resolver.config.ts
 ├── pware.oc.runtime/                      # runtime composition: opencode + omo
@@ -146,6 +147,7 @@ Plugin registration: `id = "opencode-extended-sidebar"`, load toast,
 | `resolver/boulder.ts` | `boulder.json` → works/tasks/delegates/plan | `readOmo()`, `emptyOmo()`, `findBoulder()`, `findOmoWatchDirs()`, `isOmoPresent()`, `omoStamp()`, `currentTask()`, `workRowView()`, `workStatusLabel` |
 | `resolver/plan.ts` | plan markdown frontmatter parsing | `parsePlanStatus()`, `parsePlanPendingAction()`, `approvalName()` |
 | `resolver/approval.ts` | pending-approval scan (TTL, lazy) | `listPendingApprovals()`, `resetApprovalsCache()` |
+| `resolver/approvalState.ts` | planner session state for approval rows | `planSessionStateLabel()`, `enrichApprovalSessionStates()` |
 | `resolver/doc.ts` | docs index: plan/drafts/notepads/proof | `readOmoDocs()`, `groupDocs()`, `resetDocsCache()`, `DOC_KIND_LABEL` |
 | `resolver/config.ts` | `oh-my-openagent.json` team mode | `readOmoConfig()` |
 | `resolver/index.ts` | aggregate | barrel |
@@ -182,7 +184,7 @@ Plugin registration: `id = "opencode-extended-sidebar"`, load toast,
 - `test/unit/…` — `bun:test` against exported helpers. Paths and names follow
   the module map above (e.g. `test/unit/pware.oc.core/git/pware.oc.core.git.test.ts`).
 - `test/snapshot/sidebar.test.ts` — SQLite + `.omo` fixtures through
-  `readLiveSnapshot` / `delegatesForSession`.
+  `readRuntimeSnapshot` / `delegatesForSession`.
 - `test/bench/scan.test.ts` — 5k-part budgets (fingerprint, snapshot, tools/files, Perf).
 - `test/helpers/` — shared fixtures (`project.ts`, `sqlite.ts`) + `assertPrivacy`.
 
@@ -207,9 +209,8 @@ runs the scan budgets.
 The current flat `src/` tree maps 1:1 onto the module map. Content moves
 verbatim; the only intended content changes are `SPARK_FRAMES` returning from
 `pware.oc.ui.glyphs.tsx` to `pulse.ts` (removes the core→ui edge) and the
-full-consistency rename of the runtime symbols (`LiveSnapshot` →
-`RuntimeSnapshot`, `readLiveSnapshot` → `readRuntimeSnapshot`, `resetLiveCache`
-→ `resetRuntimeCache`).
+full-consistency rename of the runtime symbols to `RuntimeSnapshot`,
+`readRuntimeSnapshot`, `resetRuntimeCache`.
 
 | Current | Target |
 |---|---|
@@ -232,7 +233,10 @@ full-consistency rename of the runtime symbols (`LiveSnapshot` →
 | `resolvers/mywork.resolver.ts` | `pware.oc.runtime/pware.oc.runtime.mywork.ts` |
 | `resolvers/live/index.ts` | `pware.oc.runtime/resolver/index.ts` |
 | `resolvers/live/delegate.resolver.ts` | `pware.oc.runtime/resolver/pware.oc.runtime.resolver.delegate.ts` |
+| `resolvers/opencode/index.ts` | `pware.oc.opencode/resolver/index.ts` |
 | `resolvers/opencode/*.resolver.ts` | `pware.oc.opencode/resolver/pware.oc.opencode.resolver.*.ts` |
+| `resolvers/omo/index.ts` | `pware.oc.omo/resolver/index.ts` |
+| `resolvers/omo/approvalState.resolver.ts` | `pware.oc.omo/resolver/pware.oc.omo.resolver.approvalState.ts` |
 | `resolvers/omo/*.resolver.ts` | `pware.oc.omo/resolver/pware.oc.omo.resolver.*.ts` |
 | `perf.ts` | `pware.oc.perf/pware.oc.perf.reader.ts` |
 | `perfview.tsx` | `pware.oc.perf/pware.oc.perf.view.tsx` |
