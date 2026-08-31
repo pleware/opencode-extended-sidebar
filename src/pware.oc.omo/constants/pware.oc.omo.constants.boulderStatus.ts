@@ -11,6 +11,9 @@ export const BOULDER_STATUS_IN_PROGRESS = "in_progress"
 /** Boulder status: actively running. */
 export const BOULDER_STATUS_RUNNING = "running"
 
+/** Boulder status: live — the status boulder writes when a work starts. */
+export const BOULDER_STATUS_ACTIVE = "active"
+
 /** Boulder status: queued / waiting for a slot. */
 export const BOULDER_STATUS_PENDING = "pending"
 
@@ -33,6 +36,7 @@ export const BOULDER_STATUS_CANCELLED = "cancelled"
 export const BOULDER_STATUSES = [
   BOULDER_STATUS_IN_PROGRESS,
   BOULDER_STATUS_RUNNING,
+  BOULDER_STATUS_ACTIVE,
   BOULDER_STATUS_PENDING,
   BOULDER_STATUS_COMPLETED,
   BOULDER_STATUS_ERROR,

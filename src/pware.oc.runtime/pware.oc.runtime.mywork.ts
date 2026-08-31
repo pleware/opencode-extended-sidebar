@@ -7,26 +7,34 @@
  */
 import type { OpenQuestion } from "../pware.oc.opencode/resolver/pware.oc.opencode.resolver.question.js"
 import type { SessionActivityState } from "../pware.oc.opencode/resolver/pware.oc.opencode.resolver.session.js"
-import type { ApprovalItem } from "../pware.oc.omo/resolver/pware.oc.omo.resolver.plan.js"
+import type { ApprovalItem, ReviewState } from "../pware.oc.omo/resolver/pware.oc.omo.resolver.plan.js"
 
 export type MyWorkItem =
   | { kind: "question"; sessionId: string; title: string; startedAt: number | null }
   | {
-      kind: "pending" | "working" | "idle"
+      kind: "pending" | "working" | "drafting" | "idle"
       name: string
       rel: string
       pendingAction: string | null
       updatedAt: number | null
       sessionState: SessionActivityState | null
+      review: ReviewState | null
     }
 
 export type MyWorkKind = MyWorkItem["kind"]
 
-export const MY_WORK_ORDER: readonly MyWorkKind[] = ["question", "pending", "working", "idle"]
+export const MY_WORK_ORDER: readonly MyWorkKind[] = [
+  "question",
+  "pending",
+  "drafting",
+  "working",
+  "idle",
+]
 
 const MY_WORK_LABELS: Record<MyWorkKind, string> = {
   question: "Awaiting answer",
   pending: "Pending approval",
+  drafting: "Drafting",
   working: "Working",
   idle: "Idle",
 }
@@ -36,14 +44,17 @@ export function myWorkLabel(kind: MyWorkKind): string {
 }
 
 /**
- * Which approval group a plan belongs to, from its planner session state:
- * `working` while the session streams or awaits a background task, `idle`
- * when the session is idle or archived, `pending` when no session state is
- * known — the plan is genuinely just waiting for the user's sign-off.
+ * Which approval group a plan belongs to: `drafting` while its draft is still
+ * being written, otherwise from its planner session state — `working` while the
+ * session streams or awaits a background task, `idle` when the session is idle
+ * or archived, `pending` when no session state is known — the plan is
+ * genuinely just waiting for the user's sign-off.
  */
 export function approvalGroup(
+  status: string | null | undefined,
   state: SessionActivityState | null | undefined,
-): "pending" | "working" | "idle" {
+): "pending" | "working" | "drafting" | "idle" {
+  if ((status || "").toLowerCase() === "drafting") return "drafting"
   if (!state) return "pending"
   if (state.state === "streaming" || state.state === "awaiting-background") return "working"
   if (state.state === "idle" || state.state === "archived") return "idle"
@@ -99,11 +110,12 @@ export function toQuestionItems(questions: readonly OpenQuestion[]): MyWorkItem[
 /** Build the approval items from a pending-approval read. */
 export function toApprovalItems(approvals: readonly ApprovalItem[]): MyWorkItem[] {
   return approvals.map((a) => ({
-    kind: approvalGroup(a.sessionState),
+    kind: approvalGroup(a.status, a.sessionState),
     name: a.name,
     rel: a.rel,
     pendingAction: a.pendingAction,
     updatedAt: a.updatedAt,
     sessionState: a.sessionState,
+    review: a.review,
   }))
 }

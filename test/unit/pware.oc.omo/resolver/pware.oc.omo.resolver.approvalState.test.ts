@@ -73,6 +73,7 @@ function fixture(opts: {
     pendingAction: "write .omo/plans/approval-x.md",
     updatedAt: null,
     sessionState: null,
+    review: null,
   }
   held.push({ proj, db })
   return { proj, db, approval }

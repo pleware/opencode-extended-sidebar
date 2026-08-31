@@ -16,10 +16,13 @@ import {
   approvalName,
   parsePlanPendingAction,
   parsePlanStatus,
+  parseReviewBlock,
   type ApprovalItem,
 } from "./pware.oc.omo.resolver.plan.js"
 
 const PENDING_STATUS = new Set<string>(PLAN_PENDING_STATUSES)
+/** Draft still being written — shown in its own My work group, not pending approval. */
+const DRAFTING_STATUS = "drafting"
 const MAX_ITEMS = 40
 const TTL_MS = 2_000
 
@@ -50,8 +53,16 @@ function listMdFiles(base: string): string[] {
   return out
 }
 
-function scan(root: string): ApprovalItem[] {
-  const out: ApprovalItem[] = []
+type ScanResult = { pending: ApprovalItem[]; drafting: ApprovalItem[] }
+
+function sortApprovals(items: ApprovalItem[]): ApprovalItem[] {
+  items.sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0) || a.name.localeCompare(b.name))
+  return items.slice(0, MAX_ITEMS)
+}
+
+function scan(root: string): ScanResult {
+  const pending: ApprovalItem[] = []
+  const drafting: ApprovalItem[] = []
   const seen = new Set<string>()
   for (const omoDir of findOmoWatchDirs(root)) {
     for (const sub of ["drafts", "plans"]) {
@@ -65,32 +76,44 @@ function scan(root: string): ApprovalItem[] {
           continue
         }
         const status = parsePlanStatus(text)
-        if (!status || !PENDING_STATUS.has(status.toLowerCase())) continue
+        if (!status) continue
+        const lower = status.toLowerCase()
+        if (!PENDING_STATUS.has(lower) && lower !== DRAFTING_STATUS) continue
         seen.add(rel)
-        out.push({
+        const item: ApprovalItem = {
           rel,
           name: approvalName(rel),
           status,
           pendingAction: parsePlanPendingAction(text),
           updatedAt: statOf(abs),
           sessionState: null,
-        })
+          review: parseReviewBlock(text),
+        }
+        if (PENDING_STATUS.has(lower)) pending.push(item)
+        else drafting.push(item)
       }
     }
   }
-  out.sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0) || a.name.localeCompare(b.name))
-  return out.slice(0, MAX_ITEMS)
+  return { pending: sortApprovals(pending), drafting: sortApprovals(drafting) }
 }
 
-const approvalsCache = createStampCache<ApprovalItem[]>({ ttlMs: TTL_MS })
+const approvalsCache = createStampCache<ScanResult>({ ttlMs: TTL_MS })
 
 /** Drop the approval cache so the next read hits the filesystem. */
 export function resetApprovalsCache(): void {
   approvalsCache.reset()
 }
 
+/** Drafts/plans whose `status` says they are waiting for the user's sign-off. */
 export function listPendingApprovals(projectRoot: string | null | undefined): ApprovalItem[] {
   if (!projectRoot) return []
   const root = canonicalizePath(projectRoot)
-  return approvalsCache.get(root, () => scan(root))
+  return approvalsCache.get(root, () => scan(root)).pending
+}
+
+/** Drafts still being written (`status: drafting`) — visible, but not awaiting approval. */
+export function listDraftingApprovals(projectRoot: string | null | undefined): ApprovalItem[] {
+  if (!projectRoot) return []
+  const root = canonicalizePath(projectRoot)
+  return approvalsCache.get(root, () => scan(root)).drafting
 }

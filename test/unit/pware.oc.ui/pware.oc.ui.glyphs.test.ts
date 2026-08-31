@@ -5,6 +5,8 @@ import {
   flowGlyph,
   markGlyph,
   myWorkGlyph,
+  reviewLaneGlyph,
+  reviewStateSuffix,
   spinnerFrame,
   workStatusGlyph,
 } from "../../../src/pware.oc.ui/pware.oc.ui.glyphs.js"
@@ -73,11 +75,80 @@ describe("markGlyph", () => {
 })
 
 describe("myWorkGlyph", () => {
-  test("questions use ? and approvals use ! — plain ASCII", () => {
+  test("questions use ?, drafting the ellipsis, approvals ! — plain ASCII", () => {
     expect(myWorkGlyph("question")).toBe("?")
+    expect(myWorkGlyph("drafting")).toBe("…")
     expect(myWorkGlyph("pending")).toBe("!")
     expect(myWorkGlyph("working")).toBe("!")
     expect(myWorkGlyph("idle")).toBe("!")
+  })
+})
+
+describe("reviewLaneGlyph", () => {
+  test("terminal lane states have stable glyphs", () => {
+    expect(reviewLaneGlyph({ status: "approved", result: null })).toBe("✓")
+    expect(reviewLaneGlyph({ status: "changes_requested", result: null })).toBe("!")
+    expect(reviewLaneGlyph({ status: "inconclusive", result: null })).toBe("?")
+  })
+
+  test("pending is a dot, live lanes the ellipsis, unknown stays a dot", () => {
+    expect(reviewLaneGlyph({ status: "pending", result: null })).toBe("·")
+    expect(reviewLaneGlyph({ status: "launching", result: null })).toBe("…")
+    expect(reviewLaneGlyph({ status: "in_flight", result: null })).toBe("…")
+    expect(reviewLaneGlyph(null)).toBe("·")
+    expect(reviewLaneGlyph(undefined)).toBe("·")
+  })
+})
+
+describe("reviewStateSuffix", () => {
+  test("null when there is no review state", () => {
+    expect(reviewStateSuffix(null)).toBeNull()
+    expect(reviewStateSuffix(undefined)).toBeNull()
+  })
+
+  test("a live round shows R<id> plus the two lanes in order", () => {
+    expect(
+      reviewStateSuffix({
+        required: true,
+        roundId: "rnd-2",
+        roundStatus: "active",
+        planSha256: "abc",
+        lanes: {
+          momus: { status: "in_flight", result: null },
+          independent: { status: "approved", result: "pass" },
+        },
+      }),
+    ).toBe("Rrnd-2 …✓")
+  })
+
+  test("an active round without an id collapses to R…", () => {
+    expect(
+      reviewStateSuffix({
+        required: true,
+        roundId: null,
+        roundStatus: "active",
+        planSha256: null,
+        lanes: {
+          momus: { status: "launching", result: null },
+          independent: { status: "pending", result: null },
+        },
+      }),
+    ).toBe("R… …·")
+  })
+
+  test("terminal lanes without a round are just the two glyphs", () => {
+    expect(
+      reviewStateSuffix({
+        required: true,
+        roundId: null,
+        roundStatus: null,
+        planSha256: null,
+        lanes: {
+          momus: { status: "approved", result: null },
+          independent: { status: "changes_requested", result: null },
+        },
+      }),
+    ).toBe("✓!")
   })
 })
 

@@ -8,6 +8,14 @@
 import type { FileLetter } from "../pware.oc.opencode/pware.oc.opencode.files.js"
 import type { AgentMark, FlowDir } from "../pware.oc.core/pware.oc.core.pulse.js"
 import type { MyWorkKind } from "../pware.oc.runtime/pware.oc.runtime.mywork.js"
+import type { ReviewLane, ReviewState } from "../pware.oc.omo/resolver/pware.oc.omo.resolver.plan.js"
+import {
+  REVIEW_STATUS_APPROVED,
+  REVIEW_STATUS_CHANGES_REQUESTED,
+  REVIEW_STATUS_INCONCLUSIVE,
+  REVIEW_STATUS_PENDING,
+  ROUND_STATUS_ACTIVE,
+} from "../pware.oc.omo/constants/pware.oc.omo.constants.reviewStatus.js"
 import { toWorkLabel } from "../pware.oc.core/pware.oc.core.status.js"
 
 /** Same braille set as OpenCode TUI thinking spinner (`opentui-spinner`). */
@@ -56,7 +64,31 @@ export function workStatusGlyph(status: string): string | null {
 }
 
 export function myWorkGlyph(kind: MyWorkKind): string {
-  return kind === "question" ? "?" : "!"
+  if (kind === "question") return "?"
+  if (kind === "drafting") return "…"
+  return "!"
+}
+
+/** One ulw-plan review lane: ✓ approved, ! changes, ? inconclusive, … live, · pending. */
+export function reviewLaneGlyph(lane: ReviewLane | null | undefined): string {
+  const s = lane?.status
+  if (s === REVIEW_STATUS_APPROVED) return "✓"
+  if (s === REVIEW_STATUS_CHANGES_REQUESTED) return "!"
+  if (s === REVIEW_STATUS_INCONCLUSIVE) return "?"
+  if (s === REVIEW_STATUS_PENDING || !s) return "·"
+  return "…"
+}
+
+/**
+ * Compact review state for a plan row: `R<round> <momus><independent>` while a
+ * round is recorded, otherwise just the two lanes. Null when no review exists.
+ */
+export function reviewStateSuffix(review: ReviewState | null | undefined): string | null {
+  if (!review || (!review.required && !review.roundId && !review.roundStatus)) return null
+  const lanes = `${reviewLaneGlyph(review.lanes.momus)}${reviewLaneGlyph(review.lanes.independent)}`
+  if (review.roundId) return `R${review.roundId} ${lanes}`
+  if (review.roundStatus === ROUND_STATUS_ACTIVE) return `R… ${lanes}`
+  return lanes
 }
 
 export function fileLetterMark(letter: FileLetter | null | undefined): AgentMark {
