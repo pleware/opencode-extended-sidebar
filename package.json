@@ -1,6 +1,6 @@
 {
   "name": "opencode-extended-sidebar",
-  "version": "0.2.23",
+  "version": "0.2.24",
   "description": "OpenCode TUI sidebar: session switcher, live tools/files, click-for-detail dialogs with scrollable file preview, perf timing logs, a live self-cost status line (event/scan latency + renderer FPS), height-aware row trimming, a My work queue (open questions + plan approvals) and an optional OMO group with works, boulder and a document index (read-only)",
   "type": "module",
   "license": "MIT",

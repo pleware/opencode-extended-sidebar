@@ -1,5 +1,6 @@
 # Changelog
 
+- **0.2.24** (2026-08-31) Add a live plugin self-cost status line above the panel that samples event, scan and tick latency plus renderer FPS through a new perf.self reader, export it fr.
 - **0.2.23** (2026-08-31) Show the ulw-plan review lifecycle on My work approval rows (R<round> per-lane momus/independent glyphs) by parsing the draft frontmatter review block in plan.t.
 - **0.2.22** (2026-08-31) Enforce CRLF line endings via a repo .gitattributes (text=auto eol=crlf) so git stops warning about LF-to-CRLF conversions on Windows, and keep the shell hooks .
 - **0.2.21** (2026-08-31) Extract OpenCode and OMO string literals into documented per-domain constants (partType, eventType, toolName in core; planStatus, boulderStatus, backgroundTask,.
