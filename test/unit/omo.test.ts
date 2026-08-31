@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { currentTask, readOmo, workIsTerminal, workRowView, workStatusGlyph } from "../../src/omo.js"
+import {
+  currentTask,
+  isOmoPresent,
+  readOmo,
+  workIsTerminal,
+  workRowView,
+  workStatusGlyph,
+} from "../../src/omo.js"
 import { createFixtureProject, type FixtureProject } from "../helpers/project.js"
 
 const held: FixtureProject[] = []
@@ -191,6 +198,39 @@ describe("omo boulder", () => {
     expect(snap.works).toEqual([])
     expect(snap.boulder.counts.total).toBe(0)
     expect(currentTask(snap.boulder)).toBeNull()
+  })
+})
+
+describe("omo presence", () => {
+  test("the config marker alone — no boulder — is still an installed omo", () => {
+    const proj = createFixtureProject({ omo: true })
+    held.push(proj)
+    const snap = readOmo(proj.root)
+    expect(snap.present).toBe(true)
+    expect(snap.boulderPath).toBeNull()
+    expect(snap.works).toEqual([])
+    expect(snap.boulder.counts.total).toBe(0)
+    expect(currentTask(snap.boulder)).toBeNull()
+  })
+
+  test("the marker under .sisyphus counts too", () => {
+    const proj = createFixtureProject({ sisyphus: true })
+    held.push(proj)
+    expect(readOmo(proj.root).present).toBe(true)
+  })
+
+  test("a boulder without a marker still counts as present", () => {
+    const root = fixture({ status: "active", plan_name: "legacy" })
+    expect(readOmo(root).present).toBe(true)
+  })
+
+  test("isOmoPresent answers from the marker alone", () => {
+    const withMarker = createFixtureProject({ omo: true })
+    held.push(withMarker)
+    const without = createFixtureProject()
+    held.push(without)
+    expect(isOmoPresent(withMarker.root)).toBe(true)
+    expect(isOmoPresent(without.root)).toBe(false)
   })
 })
 

@@ -2,7 +2,7 @@
 /** Perf tab: where a session's wall clock goes, per model and per tool. */
 import { createMemo, createSignal, For, Show, type JSX } from "solid-js"
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
-import { FoldHeader, kvRead, makeFoldToggle, type ThemeColors } from "./chrome.js"
+import { ClickText, FoldHeader, kvRead, makeFoldToggle, type ThemeColors } from "./chrome.js"
 import { openPerfLog } from "./detail.js"
 import type { PerfLogKind } from "./perf.js"
 import {
@@ -74,9 +74,9 @@ function MetricRow(props: {
   return (
     <box flexDirection="row" onMouseUp={props.onSelect}>
       <text fg={props.glyphFg}>{`${props.glyph} `}</text>
-      <text fg={props.nameFg} bold={Boolean(props.bold)} underline={Boolean(props.onSelect)}>
+      <ClickText fg={props.nameFg} bold={Boolean(props.bold)} underline={Boolean(props.onSelect)}>
         {body().name}
-      </text>
+      </ClickText>
       <For each={body().chips}>
         {(chip) => (
           <text fg={props.chipFg ? props.chipFg(chip) : props.nameFg}>{` ${chip.text}`}</text>
@@ -102,9 +102,9 @@ function PhaseRow(props: {
   return (
     <box flexDirection="row" onMouseUp={props.onSelect}>
       <text fg={fg()}>{`${props.glyph} `}</text>
-      <text fg={props.colors.textMuted} underline={Boolean(props.onSelect)}>
+      <ClickText fg={props.colors.textMuted} underline={Boolean(props.onSelect)}>
         {props.label.padEnd(5)}
-      </text>
+      </ClickText>
       <text fg={fg()}>{` ${barGlyphs(props.share, barWidth())}`}</text>
       <text fg={props.colors.textMuted}>
         {` ${formatPercent(props.share).padStart(4)} ${formatSpan(props.ms).padStart(4)}`}

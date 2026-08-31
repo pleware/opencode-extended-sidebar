@@ -3,8 +3,8 @@ import { eventType } from "./events.js"
 import { basenameOf } from "./paths.js"
 import { normalizeStatus, toToolStatus } from "./status.js"
 
-export const LIVE_MS = 20_000
-export const STALE_MS = 40_000
+export const LIVE_MS = 5_000
+export const STALE_MS = 10_000
 export const TICK_MS = 300
 /** ↑/↓ blink half-period in ticks (300ms × 2 ≈ 600ms). */
 export const BLINK_FRAMES = 2

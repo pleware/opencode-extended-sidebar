@@ -1,7 +1,7 @@
 /** @jsxImportSource @opentui/solid */
 import { createEffect, createMemo, createSignal, For, on, Show, onCleanup, type JSX } from "solid-js"
 import { useTerminalDimensions } from "@opentui/solid"
-import type { TuiPluginApi, TuiTheme } from "@opencode-ai/plugin/tui"
+import type { TuiKeymap, TuiPluginApi, TuiTheme } from "@opencode-ai/plugin/tui"
 import {
   currentTask,
   emptyOmo,
@@ -10,9 +10,10 @@ import {
 } from "./omo.js"
 import { ROW_MIN, ROW_RANK, packSections, panelRows, sliceWithOverflow } from "./layout.js"
 import { DOC_KIND_LABEL, groupDocs, readOmoDocs } from "./docs.js"
-import { emptyDb, mergeTools } from "./db.js"
+import { emptyDb, emptyProjectFeed, mergeTools, readProjectFeed, type ProjectFeed } from "./db.js"
 import {
   BrandTabs,
+  ClickText,
   DiffStat,
   FoldHeader,
   kvRead,
@@ -181,9 +182,13 @@ function AgentLine(props: RowData & {
   return (
     <box flexDirection="row" onMouseUp={props.onSelect}>
       <text fg={glyphFg()}>{`${props.glyph ?? markGlyph(props.mark, props.frame ?? 0, props.flow)} `}</text>
-      <text fg={bodyFg()} bold={Boolean(props.current)} underline={Boolean(props.onSelect)}>
+      <ClickText
+        fg={bodyFg()}
+        bold={Boolean(props.current)}
+        underline={Boolean(props.onSelect)}
+      >
         {rest()}
-      </text>
+      </ClickText>
       <Show when={Boolean(props.diff && (props.diff.additions > 0 || props.diff.deletions > 0))}>
         <text> </text>
         <DiffStat
@@ -233,6 +238,25 @@ function selectSession(api: TuiPluginApi, sessionId: string | null | undefined):
   void go()
 }
 
+/** Open the host session switcher — the same dialog the `/sessions` command opens. */
+function openSessionSwitcher(api: TuiPluginApi): void {
+  try {
+    const dispatch = (api.keymap as TuiKeymap & { dispatchCommand?: (name: string) => void })
+      .dispatchCommand
+    if (typeof dispatch === "function") {
+      dispatch("session.list")
+      return
+    }
+  } catch {
+    // older host — command palette below
+  }
+  try {
+    api.command?.show()
+  } catch {
+    // host without a command palette
+  }
+}
+
 const KV_FOLD_AGENTS = "oes.fold.agents"
 const KV_FOLD_DELEGATES = "oes.fold.delegates"
 const KV_FOLD_SESSIONS = "oes.fold.sessions"
@@ -249,8 +273,8 @@ type OesTab = (typeof OES_TABS)[number]
 type OmoTab = (typeof OMO_TABS)[number]
 
 const TAB_LABELS: Record<string, string> = {
-  sessions: "Sessions",
-  current: "Current",
+  sessions: "Project",
+  current: "Session",
   perf: "Perf",
   works: "Works",
   boulder: "Boulder",
@@ -357,8 +381,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
         )
       }
       void Promise.resolve()
-        .then(() => fn({ path: { id: props.sessionId } }))
-        .catch(() => fn({ sessionID: props.sessionId }))
+        .then(() => fn({ sessionID: props.sessionId }))
         .then(take)
         .catch(() => {})
     } catch {
@@ -591,6 +614,30 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     return n
   })
 
+  /**
+   * Project-wide feed — tools/files from every main session. The DB queries run
+   * only while the Sessions tab is open; elsewhere the memo stays empty.
+   */
+  const projectFeed = createMemo<ProjectFeed>(() => {
+    if (tab() !== "sessions") return emptyProjectFeed()
+    const db = snap().db
+    const o = oes()
+    return readProjectFeed({
+      dbPath: db.dbPath,
+      sessionIds: db.recent.map((s) => s.id),
+      toolLimit: o.toolRows,
+      filter: fileFilter(projectDir()),
+    })
+  })
+  const projectToolsLive = createMemo(() => {
+    let n = 0
+    for (const t of projectFeed().tools) {
+      if (t.status === "running" || t.status === "pending") n += 1
+    }
+    return n
+  })
+  const projectFilesStat = createMemo(() => sumDiff(projectFeed().files))
+
   const toggleSessions = makeFoldToggle(props.api, KV_FOLD_SESSIONS, setFoldSessions, requestRender)
   const toggleFiles = makeFoldToggle(props.api, KV_FOLD_FILES, setFoldFiles, requestRender)
   const [filesExpanded, setFilesExpanded] = createSignal(false)
@@ -652,6 +699,9 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
       header()
       fixed += foldAgents() ? 0 : 1
       section(foldSessions(), "sessions", o.sessionRows, ROW_MIN.sessions, ROW_RANK.sessions)
+      const feed = projectFeed()
+      if (feed.tools.length > 0) section(foldTools(), "tools", o.toolRows, ROW_MIN.tools, ROW_RANK.tools)
+      if (feed.files.length > 0) section(foldFiles(), "files", o.fileRows, ROW_MIN.files, ROW_RANK.files)
       if (omo) section(foldDelegates(), "delegates", 6, ROW_MIN.delegates, ROW_RANK.delegates)
     } else if (t === "current") {
       header()
@@ -948,6 +998,8 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
               title="Sessions"
               open={!foldSessions()}
               count={snap().db.recent.length}
+              countLabel={`last ${snap().db.recent.length}`}
+              action={{ label: "switch", onPick: () => openSessionSwitcher(props.api) }}
               colors={colors()}
               onToggle={toggleSessions}
             />
@@ -976,6 +1028,72 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
                       />
                     )
                   }}
+                </For>
+              </box>
+            </Show>
+          </box>
+        </Show>
+
+        <Show when={projectFeed().tools.length > 0}>
+          <box flexDirection="column" gap={0}>
+            <FoldHeader
+              title="Tools"
+              open={!foldTools()}
+              count={projectFeed().tools.length}
+              live={projectToolsLive()}
+              colors={colors()}
+              onToggle={toggleTools}
+            />
+            <Show when={!foldTools()}>
+              <box flexDirection="column" gap={0} paddingLeft={1}>
+                <For each={projectFeed().tools.slice(0, rowsFor("tools", oes().toolRows))}>
+                  {(t) => {
+                    const mark = toolMark(t.status)
+                    const dir = toolFlow(t.status)
+                    const dur =
+                      t.status === "running" && t.startedAt != null
+                        ? formatDuration(Math.max(0, now() - t.startedAt))
+                        : formatDuration(t.durationMs)
+                    return (
+                      <Row
+                        kind="tool"
+                        mark={mark}
+                        name={t.name}
+                        suffix={dur}
+                        flow={dir}
+                        onSelect={() => openToolDetail(props.api, t, colors())}
+                      />
+                    )
+                  }}
+                </For>
+              </box>
+            </Show>
+          </box>
+        </Show>
+
+        <Show when={projectFeed().files.length > 0}>
+          <box flexDirection="column" gap={0}>
+            <FoldHeader
+              title="Files"
+              open={!foldFiles()}
+              count={projectFeed().files.length}
+              diff={projectFilesStat()}
+              colors={colors()}
+              onToggle={toggleFiles}
+            />
+            <Show when={!foldFiles()}>
+              <box flexDirection="column" gap={0} paddingLeft={1}>
+                <For each={projectFeed().files.slice(0, rowsFor("files", oes().fileRows))}>
+                  {(f) => (
+                    <Row
+                      kind="file"
+                      mark={fileLetterMark(f.letter)}
+                      glyph={f.letter ?? "•"}
+                      name={f.name}
+                      diff={{ additions: f.additions, deletions: f.deletions }}
+                      onSelect={() => openFileDetail(props.api, f, projectRoots(), colors())}
+                    />
+                  )}
                 </For>
               </box>
             </Show>
@@ -1130,9 +1248,9 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
               )}
               <Show when={filesHidden() > 0 || filesExpanded()}>
                 <box onMouseUp={() => setFilesExpanded(!filesExpanded())}>
-                  <text fg={colors().textMuted} underline>
+                  <ClickText fg={colors().textMuted} underline>
                     {filesExpanded() ? "… less" : `… ${filesHidden()} more`}
-                  </text>
+                  </ClickText>
                 </box>
               </Show>
             </box>
@@ -1164,9 +1282,9 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
           when={omoOpen()}
           fallback={
             <box flexDirection="row" onMouseUp={toggleOmo}>
-              <text fg={colors().primary || colors().text} bold underline>
+              <ClickText fg={colors().primary || colors().text} bold underline>
                 ▶ OMO
-              </text>
+              </ClickText>
               <text fg={colors().textMuted}>{`  ${omoSummary()}`}</text>
             </box>
           }

@@ -25,7 +25,7 @@ function writeOsc52(text: string): boolean {
 
 function pipe(command: string, args: string[], input: string | Buffer): Promise<boolean> {
   return new Promise((resolve) => {
-    let child
+    let child: ReturnType<typeof spawn>
     try {
       child = spawn(command, args, {
         windowsHide: true,
@@ -53,6 +53,10 @@ function pipe(command: string, args: string[], input: string | Buffer): Promise<
     child.on("error", () => finish(false))
     child.on("close", (code) => finish(code === 0))
     try {
+      if (!child.stdin) {
+        finish(false)
+        return
+      }
       child.stdin.end(input)
     } catch {
       finish(false)

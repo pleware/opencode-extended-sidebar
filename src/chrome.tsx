@@ -1,7 +1,44 @@
 /** @jsxImportSource @opentui/solid */
 /** Shared sidebar chrome: brand tabs, theme colours, fold headers, diff stats, kv persistence. */
-import { For, Show, type JSX } from "solid-js"
+import { createSignal, For, Show, type JSX } from "solid-js"
+import { TextAttributes } from "@opentui/core"
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
+
+/** OpenTUI has no bold/underline props on `<text>` — only the `attributes` bitmask. */
+export function textAttrs(bold?: boolean, underline?: boolean): number {
+  let a = 0
+  if (bold) a |= TextAttributes.BOLD
+  if (underline) a |= TextAttributes.UNDERLINE
+  return a
+}
+
+/**
+ * Clickable label: underlined only while the pointer hovers it.
+ * OpenTUI fires `over`/`out` on hit-test change, so the underline
+ * tracks the mouse instead of being baked in. `underline` marks
+ * clickability; without it the label never underlines.
+ */
+export function ClickText(props: {
+  fg?: string
+  bold?: boolean
+  /** Clickable — the underline appears while the pointer is over the label. */
+  underline?: boolean
+  onMouseUp?: () => void
+  children: JSX.Element
+}): JSX.Element {
+  const [hovered, setHovered] = createSignal(false)
+  return (
+    <text
+      fg={props.fg}
+      attributes={textAttrs(Boolean(props.bold), Boolean(props.underline) && hovered())}
+      onMouseUp={props.onMouseUp}
+      onMouseOver={() => setHovered(true)}
+      onMouseOut={() => setHovered(false)}
+    >
+      {props.children}
+    </text>
+  )
+}
 
 export type ThemeColors = {
   text: string
@@ -105,33 +142,46 @@ export function FoldHeader(props: {
   open: boolean
   count?: number
   live?: number
+  /** Overrides the `(N)` / `(live/N)` parenthetical, e.g. `last 4`. */
+  countLabel?: string
   suffix?: string
   diff?: { additions: number; deletions: number }
   colors: ThemeColors
   onToggle: () => void
   /** Title click opens a detail (fold stays on the chevron). */
   onDetail?: () => void
+  /** Extra clickable label at the end of the row, e.g. a switch action. */
+  action?: { label: string; onPick: () => void }
 }): JSX.Element {
   const rest = () => {
     const n = props.count
     const stat = props.suffix ? ` ${props.suffix}` : ""
     if (typeof n !== "number") return `${props.title}${stat}`
     const live = props.live ?? 0
-    const extra = live > 0 ? ` (${live}/${n})` : ` (${n})`
+    const extra = props.countLabel
+      ? ` (${props.countLabel})`
+      : live > 0
+        ? ` (${live}/${n})`
+        : ` (${n})`
     return `${props.title}${extra}${stat}`
   }
   const hasDiff = () =>
     Boolean(props.diff && (props.diff.additions > 0 || props.diff.deletions > 0))
   const chevron = () => (props.open ? "▼" : "▶")
+  const split = Boolean(props.onDetail || props.action)
   return (
-    <box flexDirection="row" onMouseUp={props.onDetail ? undefined : props.onToggle}>
-      <text fg={props.colors.text} underline={!props.onDetail} onMouseUp={props.onDetail ? props.onToggle : undefined}>
+    <box flexDirection="row" onMouseUp={split ? undefined : props.onToggle}>
+      <ClickText
+        fg={props.colors.text}
+        underline={!props.onDetail}
+        onMouseUp={split ? props.onToggle : undefined}
+      >
         {props.onDetail ? `${chevron()} ` : `${chevron()} ${rest()}`}
-      </text>
+      </ClickText>
       <Show when={props.onDetail}>
-        <text fg={props.colors.text} underline onMouseUp={props.onDetail}>
+        <ClickText fg={props.colors.text} underline onMouseUp={props.onDetail}>
           {rest()}
-        </text>
+        </ClickText>
       </Show>
       <Show when={hasDiff()}>
         <text> </text>
@@ -141,13 +191,24 @@ export function FoldHeader(props: {
           colors={props.colors}
         />
       </Show>
+      <Show when={props.action}>
+        <text> </text>
+        <ClickText
+          fg={props.colors.primary || props.colors.text}
+          underline
+          onMouseUp={props.action?.onPick}
+        >
+          {props.action?.label}
+        </ClickText>
+      </Show>
     </box>
   )
 }
 
 /**
- * Brand + clickable tabs. Active tab is bold + primary; every tab is underlined.
- * `onBrand` makes the brand itself a control — the OMO group folds on it.
+ * Brand + clickable tabs. Active tab is bold + primary; clickable labels
+ * underline on hover. `onBrand` makes the brand itself a control — the OMO
+ * group folds on it.
  */
 export function BrandTabs(props: {
   brand: string
@@ -164,17 +225,17 @@ export function BrandTabs(props: {
   return (
     <box flexDirection="row" gap={1}>
       <box flexDirection="row" onMouseUp={props.onBrand}>
-        <text fg={brand()} bold underline={Boolean(props.onBrand)}>
+        <ClickText fg={brand()} bold underline={Boolean(props.onBrand)}>
           {props.brand}
-        </text>
+        </ClickText>
       </box>
       <For each={props.tabs}>
         {(tab: string) => (
           <box flexDirection="row" gap={1} onMouseUp={() => props.onPick(tab)}>
             <text fg={props.colors.textMuted}>|</text>
-            <text fg={tabFg(tab)} bold={props.active === tab} underline>
+            <ClickText fg={tabFg(tab)} bold={props.active === tab} underline>
               {props.labels[tab] ?? tab}
-            </text>
+            </ClickText>
           </box>
         )}
       </For>

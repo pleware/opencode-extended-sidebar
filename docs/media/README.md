@@ -13,7 +13,7 @@ Demo assets referenced by the root `README.md`. Product and company marks live i
 1. Size the terminal to roughly `120x30` with the sidebar visible.
 2. Use a theme with clear diff colours so `+N −M` reads well.
 3. Capture 10–20 seconds covering, in order:
-   - clicking a row under the **Sessions** tab to switch session,
+   - clicking a row under the **Project** tab to switch session,
    - a tool starting and finishing (spinner, then duration),
    - the **Files** header total rising as edits land,
    - the **Perf** tab with its phase bars and per-model timings.

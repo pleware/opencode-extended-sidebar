@@ -31,7 +31,6 @@ function live(over: Partial<LiveSnapshot> = {}): LiveSnapshot {
     generatedAt: 0,
     fingerprint: "f",
     scanStamp: "s",
-    db,
     omo: emptyOmo(),
     omoConfig: { present: false, path: null, teamMode: null, agents: [] },
     delegates: [],

@@ -1,5 +1,6 @@
 # Changelog
 
+- **0.2.14** (2026-08-31) Add a Project tab rolling up tools and files across recent sessions (tab bar is now OES | Project | Session | Perf, old Current renamed to Session), show the wi.
 - **0.2.13** (2026-08-31) Filter Files through `.oesignore` and `.gitignore` with the `ignore` package, exclude `question` from Perf timing, and add a `… N more` Files expander.
 - **0.2.12** (2026-08-31) Add perf timing log feature and update project files.
 - **0.2.11** (2026-08-31) Open a dated Perf timing log when you click a Time phase, Models header, or slow-tool row.

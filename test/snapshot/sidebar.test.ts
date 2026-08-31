@@ -95,7 +95,7 @@ describe("no .omo — SQLite only", () => {
 })
 
 describe("foreign boulder parent", () => {
-  test("Current does not inherit another run's tasks", () => {
+  test("Session tab does not inherit another run's tasks", () => {
     projFix = createFixtureProject({
       boulder: boulderWithTask({ taskSessionId: "ses_foreign" }),
     })
@@ -125,7 +125,7 @@ describe("foreign boulder parent", () => {
 })
 
 describe("finished child vs leftover boulder running", () => {
-  test("Current and Sessions drop the spinner once SQLite is idle", () => {
+  test("Session and Project tabs drop the spinner once SQLite is idle", () => {
     projFix = createFixtureProject({
       boulder: boulderWithTask({
         taskSessionId: "ses_child",

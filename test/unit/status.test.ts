@@ -8,9 +8,10 @@ import {
   workIsTerminal,
   workStatusGlyph,
 } from "../../src/status.js"
+import type { CanonicalStatus } from "../../src/status.js"
 
 describe("normalizeStatus synonyms", () => {
-  const rows: Array<[string | null | undefined, string]> = [
+  const rows: Array<[string | null | undefined, CanonicalStatus]> = [
     [null, "unknown"],
     ["", "unknown"],
     ["running", "running"],

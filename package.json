@@ -1,6 +1,6 @@
 {
   "name": "opencode-extended-sidebar",
-  "version": "0.2.13",
+  "version": "0.2.14",
   "description": "OpenCode TUI sidebar: session switcher, live tools/files, click-for-detail dialogs with scrollable file preview, perf timing logs, height-aware row trimming and an optional OMO group with works, boulder and a document index (read-only)",
   "type": "module",
   "license": "MIT",
@@ -50,6 +50,7 @@
   "devDependencies": {
     "@opentui/core": "^0.5.9",
     "@opentui/solid": "^0.5.9",
+    "@types/bun": "^1.4.0",
     "solid-js": "^1.9.15"
   },
   "peerDependenciesMeta": {
@@ -69,6 +70,7 @@
   "scripts": {
     "prepare": "node scripts/install-git-hooks.mjs",
     "test": "bun test test/unit test/snapshot",
+    "typecheck": "tsc --noEmit",
     "bench": "bun test test/bench"
   },
   "dependencies": {

@@ -268,12 +268,22 @@ function collectWorks(raw: RawBoulder, projectRoot: string): WorkView[] {
   return out.slice(0, 20)
 }
 
-/** Boulder file only — drafts/notepads/evidence must not invalidate the hot path. */
+/**
+ * Boulder + omo config marker. Drafts/notepads/evidence must not invalidate the
+ * hot path, but the marker (`.omo/omo.jsonc`) must — its arrival is what turns
+ * the OMO group from hidden to visible.
+ */
 export function omoStamp(projectRoot?: string | null): string {
   if (!projectRoot) return "0"
-  const boulderPath = findBoulder(canonicalizePath(projectRoot))
-  if (!boulderPath) return "0"
-  return fileStamp(boulderPath)
+  const root = canonicalizePath(projectRoot)
+  const parts: string[] = []
+  const boulderPath = findBoulder(root)
+  if (boulderPath) parts.push(fileStamp(boulderPath))
+  for (const rel of [".omo/omo.jsonc", ".sisyphus/omo.jsonc"]) {
+    const p = path.join(root, rel)
+    if (fs.existsSync(p)) parts.push(fileStamp(p))
+  }
+  return parts.join("|") || "0"
 }
 
 export function findBoulder(projectRoot: string): string | null {
@@ -291,6 +301,14 @@ export function findOmoWatchDirs(projectRoot: string): string[] {
     if (fs.existsSync(p)) out.push(p)
   }
   return out
+}
+
+/** Installed omo means its config marker — `.omo/omo.jsonc` or `.sisyphus/omo.jsonc`. */
+export function isOmoPresent(projectRoot: string): boolean {
+  for (const rel of [".omo", ".sisyphus"]) {
+    if (fs.existsSync(path.join(projectRoot, rel, "omo.jsonc"))) return true
+  }
+  return false
 }
 
 function resolvePlanPath(projectRoot: string, activePlan: string | null): string | null {
@@ -395,13 +413,17 @@ export function readOmo(projectRoot: string | null | undefined): OmoSnapshot {
   if (!projectRoot) return emptyOmo()
   const root = canonicalizePath(projectRoot)
   const boulderPath = findBoulder(root)
-  if (!boulderPath) return emptyOmo()
+  // Installed omo (config marker) with no active run: present, but nothing to show.
+  if (!boulderPath) {
+    if (isOmoPresent(root)) return { ...emptyOmo(), present: true }
+    return emptyOmo()
+  }
 
   let raw: RawBoulder
   try {
     raw = JSON.parse(fs.readFileSync(boulderPath, "utf8")) as RawBoulder
   } catch {
-    return { ...emptyOmo(), boulderPath, stamp: fileStamp(boulderPath) }
+    return { ...emptyOmo(), present: true, boulderPath, stamp: fileStamp(boulderPath) }
   }
 
   const works = collectWorks(raw, root)

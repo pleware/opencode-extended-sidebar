@@ -30,6 +30,10 @@ export function createFixtureProject(opts?: {
   plans?: Record<string, string>
   files?: Record<string, string>
   mtimes?: Record<string, number>
+  /** Write `.omo/omo.jsonc` — the omo config marker, no boulder. */
+  omo?: boolean
+  /** Write `.sisyphus/omo.jsonc` — the marker under the legacy dir name. */
+  sisyphus?: boolean
 }): FixtureProject {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "oes-proj-"))
   if (opts?.gitignore != null) {
@@ -49,6 +53,14 @@ export function createFixtureProject(opts?: {
   for (const [rel, ms] of Object.entries(opts?.mtimes ?? {})) {
     const abs = path.join(root, rel)
     fs.utimesSync(abs, new Date(ms), new Date(ms))
+  }
+  if (opts?.omo) {
+    fs.mkdirSync(path.join(root, ".omo"), { recursive: true })
+    fs.writeFileSync(path.join(root, ".omo", "omo.jsonc"), "{}\n")
+  }
+  if (opts?.sisyphus) {
+    fs.mkdirSync(path.join(root, ".sisyphus"), { recursive: true })
+    fs.writeFileSync(path.join(root, ".sisyphus", "omo.jsonc"), "{}\n")
   }
   if (opts?.boulder) {
     const omo = path.join(root, ".omo")

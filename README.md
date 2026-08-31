@@ -26,7 +26,7 @@ OpenCode gives you one conversation at a time. Real work looks different: an orc
 
 ## ⇄ Session switcher
 
-> Recent sessions, one click away. Title, age, and whether it is still alive. Click to jump — no palette, no search.
+> Recent sessions, one click away. Title, age, and whether it is still alive. The header shows the window — `Sessions (last 4)` — plus a `switch` label that opens the host session switcher (the same `/sessions` command). Below the list, tools and files rolled up from those same recent sessions.
 
 ## ⊚ Live activity pulse
 
@@ -34,27 +34,27 @@ OpenCode gives you one conversation at a time. Real work looks different: an orc
 
 ## ≡ Tool feed that names things
 
-> Each row is labelled with what actually ran — command, file, pattern, or task — plus how long it took. Running calls tick live; failures show `×`. Click a tool for a metadata sheet (never args or output).
+> Each row is labelled with what actually ran — command, file, pattern, or task — plus how long it took. Running calls tick live; failures show `×`. Click a tool for a metadata sheet (never args or output). **Project** carries the same feed rolled up from the sessions above.
 
 ## ± File changes with diff stats
 
-> Files this session touched, with `+N −M` and git letters (`M` `A` `D` `R` `C` `U` `T` `?`). **V** means viewed — a session read with no git status. Click Markdown for a scrollable preview; other files open a detail sheet.
+> Files this session touched, with `+N −M` and git letters (`M` `A` `D` `R` `C` `U` `T` `?`). **V** means viewed — a session read with no git status. Click Markdown for a scrollable preview; other files open a detail sheet. **Project** merges the same list across the sessions above.
 >
 > Scratch dirs (`tmp/`, `.tmp/`, `.omo/`) and boilerplate filenames are hidden via the plugin's default `.oesignore`. The project's own `.oesignore` (gitignore format) is honoured automatically when present; set `skipGitignore` to also honour the project's `.gitignore`.
 
 ## ⋔ Delegates and sub-agents
 
-> When an orchestrator hands work off, delegates appear as their own rows — tokens, status, pulse, click to jump. **Sessions** lists the project's boulder. **Current** lists only children of this session.
+> When an orchestrator hands work off, delegates appear as their own rows — tokens, status, pulse, click to jump. **Project** lists the project's boulder. **Session** lists only this session's children.
 
 ## ▤ OMO works, boulder and docs
 
-> When the project has oh-my-openagent, a second group appears below the core:
+> When the project has oh-my-openagent — its `.omo/omo.jsonc` config marker — a second group appears below the core:
 >
 > ```
 > OMO | Works | Boulder | Docs
 > ```
 >
-> Without `.omo/` the group is gone — no warning, no empty chrome. **Works** lists boulder runs. **Boulder** is the active run: plan, elapsed time, current task, bound sessions. **Docs** indexes the plan, drafts, notepads and evidence; click a text file to preview it. Click **OMO** to fold the group to one summary line.
+> Without the marker the group is gone — no warning, no empty chrome. An installed omo with no active run still shows the group with empty **Works** and **Boulder** (`• none`, `• no active work`); the moment `boulder.json` appears the rows fill in. **Works** lists boulder runs. **Boulder** is the active run: plan, elapsed time, current task, bound sessions. **Docs** indexes the plan, drafts, notepads and evidence; click a text file to preview it. Click **OMO** to fold the group to one summary line.
 
 ## ◴ Where the time actually goes
 
@@ -63,11 +63,11 @@ OpenCode gives you one conversation at a time. Real work looks different: an orc
 ## ▣ Two groups, six views
 
 > ```
-> OES | Sessions | Current | Perf
+> OES | Project | Session | Perf
 > OMO | Works | Boulder | Docs
 > ```
 >
-> **Sessions** is the project. **Current** is this agent, its delegates, tools and files. **Perf** is timing. Tabs and folds are remembered. Clickable labels are underlined.
+> **Project** is the project-wide view — recent sessions plus the tools and files every one of them touched. **Session** is this agent, its delegates, tools and files. **Perf** is timing. Tabs and folds are remembered. Clickable labels underline on hover.
 
 ## ⇕ Rows that fit the window
 
@@ -109,8 +109,8 @@ Arrows blink about twice per second — only the glyph, not the text. They expir
 
 | Colour                 | Theme key                   | Meaning                                          |
 | ---------------------- | --------------------------- | ------------------------------------------------ |
-| green                  | `success`                   | receiving tokens, or active within the last 20 s |
-| yellow                 | `warning`                   | waiting on the model, or last seen 20–40 s ago   |
+| green                  | `success`                   | receiving tokens, or active within the last 5 s  |
+| yellow                 | `warning`                   | waiting on the model, or last seen 5–10 s ago    |
 | accent                 | `primary`                   | tool in flight — also the current row            |
 | red                    | `error`                     | failed                                           |
 | muted                  | `textMuted`                 | idle, done or archived                           |
@@ -121,7 +121,7 @@ Arrows blink about twice per second — only the glyph, not the text. They expir
 | muted `?` `V`          | `textMuted`                 | Files: untracked, or viewed                      |
 | accent `∴`             | `primary`                   | Perf: thinking                                   |
 
-While an arrow is lit it drives the colour. The current session is **bold**. Clickable labels are **underlined**. On Perf the same arrows mean measured time: wait, stream, tools.
+While an arrow is lit it drives the colour. The current session is **bold**. Clickable labels **underline on hover**. On Perf the same arrows mean measured time: wait, stream, tools.
 
 ## Install
 
@@ -211,7 +211,7 @@ Issues and pull requests are welcome. Constraints: read-only OpenCode data, no p
 
 Every commit patch-bumps `package.json` and prepends one English sentence to [CHANGELOG.md](CHANGELOG.md). Write that sentence as the first line of the commit message.
 
-`bun test` runs unit and fixture tests. `bun run bench` times the 5k-part scan.
+`bun test` runs unit and fixture tests. `bun run typecheck` checks types with `tsc --noEmit`. `bun run bench` times the 5k-part scan.
 
 ## License
 

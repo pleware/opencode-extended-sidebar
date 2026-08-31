@@ -142,12 +142,12 @@ describe("composeMark", () => {
   })
   test("pulse from age", () => {
     expect(composeMark({ ageMs: 1_000 })).toBe("live")
-    expect(composeMark({ ageMs: 25_000 })).toBe("stale")
+    expect(composeMark({ ageMs: 7_000 })).toBe("stale")
     expect(composeMark({ ageMs: 50_000 })).toBe("idle")
   })
   test("running ages out instead of sticking as stale", () => {
     expect(composeMark({ lifecycle: "running", ageMs: 1_000 })).toBe("live")
-    expect(composeMark({ lifecycle: "in_progress", ageMs: 25_000 })).toBe("stale")
+    expect(composeMark({ lifecycle: "in_progress", ageMs: 7_000 })).toBe("stale")
     expect(composeMark({ lifecycle: "running", ageMs: 50_000 })).toBe("idle")
     expect(composeMark({ lifecycle: "active", ageMs: null })).toBe("stale")
   })

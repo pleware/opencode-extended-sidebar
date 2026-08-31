@@ -8,7 +8,7 @@ import { SyntaxStyle } from "@opentui/core"
 import { useTerminalDimensions } from "@opentui/solid"
 import type { TuiPluginApi, TuiTheme } from "@opencode-ai/plugin/tui"
 import { copyText } from "./clipboard.js"
-import { type ThemeColors } from "./chrome.js"
+import { ClickText, textAttrs, type ThemeColors } from "./chrome.js"
 import type { ToolView } from "./db.js"
 import type { FileView } from "./files.js"
 import { readPerfLog, type PerfLogKind } from "./perf.js"
@@ -71,9 +71,9 @@ function ActionRow(props: {
         if (!props.disabled) props.onPick()
       }}
     >
-      <text fg={fg()} underline={!props.disabled}>
+      <ClickText fg={fg()} underline={!props.disabled}>
         {props.label}
-      </text>
+      </ClickText>
     </box>
   )
 }
@@ -197,7 +197,7 @@ function PreviewDialog(props: {
     <DialogPad>
       <box flexDirection="column" gap={0} flexShrink={0}>
         <box flexDirection="row" justifyContent="space-between" gap={1}>
-          <text fg={props.colors.text} bold>
+          <text fg={props.colors.text} attributes={textAttrs(true)}>
             {props.heading ?? "Preview"}
           </text>
           <text fg={props.colors.text}>{props.title}</text>
@@ -304,7 +304,7 @@ export function openFileDetail(
   api.ui.dialog.replace(() => (
     <SizedDialog api={api} size="large" >
       <DialogPad>
-        <text fg={colors.text} bold>
+        <text fg={colors.text} attributes={textAttrs(true)}>
           {header}
         </text>
         {divider(colors)}
@@ -352,7 +352,7 @@ export function openToolDetail(api: TuiPluginApi, tool: ToolView, colors: ThemeC
   api.ui.dialog.replace(() => (
     <SizedDialog api={api} size="medium" >
       <DialogPad>
-        <text fg={colors.text} bold>
+        <text fg={colors.text} attributes={textAttrs(true)}>
           {header}
         </text>
         {divider(colors)}
@@ -391,7 +391,7 @@ export function openWorkDetail(
   api.ui.dialog.replace(() => (
     <SizedDialog api={api} size="medium" >
       <DialogPad>
-        <text fg={colors.text} bold>
+        <text fg={colors.text} attributes={textAttrs(true)}>
           {`Work: ${work.name}`}
         </text>
         {divider(colors)}
@@ -438,7 +438,7 @@ export function openDocDetail(
   api.ui.dialog.replace(() => (
     <SizedDialog api={api} size="medium" >
       <DialogPad>
-        <text fg={colors.text} bold>
+        <text fg={colors.text} attributes={textAttrs(true)}>
           {doc.name}
         </text>
         {divider(colors)}

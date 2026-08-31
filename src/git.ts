@@ -91,10 +91,16 @@ export function relToGitRoot(posixPath: string, root: string): string {
   return lower.replace(/^\.\//, "")
 }
 
-function relsFrom(posixPaths: string[], root: string): string[] {
+/** Pathspecs for `git status`: repo paths only, deduped, capped. Exported for tests. */
+export function relsFrom(posixPaths: string[], root: string): string[] {
+  const base = root.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase()
   const seen = new Set<string>()
   const out: string[] = []
   for (const p of posixPaths) {
+    const file = p.replace(/\\/g, "/")
+    // git aborts the whole status with exit 128 on a single outside-repo
+    // pathspec — sessions touch temp/config files outside the tree all the time.
+    if (!file.toLowerCase().startsWith(`${base}/`)) continue
     const rel = relToGitRoot(p, root)
     if (!rel || seen.has(rel)) continue
     seen.add(rel)
@@ -146,7 +152,7 @@ export function resetGitCache(): void {
 }
 
 function runGit(root: string, rels: string[], key: string, gen: number): void {
-  let child
+  let child: ReturnType<typeof spawn>
   try {
     child = spawn(
       "git",
@@ -199,6 +205,9 @@ export function readGitMarksFor(
     return { root, marks: new Map() }
   }
   const rels = relsFrom(posixPaths, root)
+  if (rels.length === 0) {
+    return { root, marks: new Map() }
+  }
   const pathKey = rels.slice().sort().join("\0")
   const stamp = gitStatusStamp(projectRoot)
   const key = `${root}|${stamp}|${pathKey}`
