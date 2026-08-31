@@ -7,7 +7,6 @@ import {
   toToolStatus,
   toWorkLabel,
   workIsTerminal,
-  workStatusGlyph,
 } from "../../src/status.js"
 import type { CanonicalStatus } from "../../src/status.js"
 
@@ -57,12 +56,7 @@ describe("mappers", () => {
     expect(toWorkLabel("queued")).toBe("pending")
     expect(toWorkLabel("custom")).toBe("custom")
   })
-  test("glyphs and terminal", () => {
-    expect(workStatusGlyph("completed")).toBe("✓")
-    expect(workStatusGlyph("failed")).toBe("×")
-    expect(workStatusGlyph("in_progress")).toBeNull()
-    expect(workStatusGlyph("pending")).toBe("◷")
-    expect(workStatusGlyph("queued")).toBe("◷")
+  test("terminal and lifecycle", () => {
     expect(workIsTerminal("paused")).toBe(true)
     expect(workIsTerminal("active")).toBe(false)
     expect(isRunningLifecycle("in_progress")).toBe(true)

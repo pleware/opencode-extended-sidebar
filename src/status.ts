@@ -45,18 +45,6 @@ export function toWorkLabel(raw: string | null | undefined): string {
   return c
 }
 
-export function workStatusGlyph(status: string): string | null {
-  const s = toWorkLabel(status)
-  if (s === "done") return "✓"
-  if (s === "error") return "×"
-  if (s === "running") return null
-  // A plain clock, not the emoji hourglass — one cell, monochrome.
-  if (s === "pending") return "◷"
-  if (s === "paused") return "║"
-  if (s === "abandoned") return "⊘"
-  return "○"
-}
-
 /** Queued / waiting work — boulder writes no `status` while a task waits for a slot. */
 export function isPendingWork(status: string | null | undefined): boolean {
   return normalizeStatus(status) === "pending"

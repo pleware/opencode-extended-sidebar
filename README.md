@@ -48,7 +48,7 @@ OpenCode gives you one conversation at a time. Real work looks different: an orc
 
 ## ? My work — what is waiting on you
 
-> One queue of things that need **your** action, shown first in the core group. Open `question` tools from the current and recent sessions appear as `?` rows — click to jump to the session and answer. OMO plans and drafts with `status: awaiting-approval` appear as `!` rows (plan name only, no extension) — click for a **Continue / Docs** menu plus **start work** execution options (`start work`, `start work --make-pr`, `start work --ship`): Continue jumps to the session that wrote the plan (disabled with a muted reason when no session is found), Docs opens the draft as a preview, start work launches the OMO plan in the current session. When `.omo/` is absent the approval section is simply gone; the question queue works on OpenCode alone.
+> One queue of things that need **your** action, shown first in the core group. Open `question` tools from the current and recent sessions appear as `?` rows — click to jump to the session and answer. OMO plans and drafts with `status: awaiting-approval` appear as `!` rows (plan name only, no extension) — click for a native, searchable picker: **Continue** jumps to the session that wrote the plan (a muted reason is shown when no session is found), **Docs** opens the draft as a preview, and **start work** rows (`start work`, `start work --make-pr`, `start work --ship`) launch the OMO plan in the current session. When `.omo/` is absent the approval section is simply gone; the question queue works on OpenCode alone.
 
 ## ▤ OMO works, boulder and docs
 
@@ -101,7 +101,7 @@ The glyph says *what* is happening; the colour says *how fresh* it is. Both come
 | `◷`                             | queued — waiting for a concurrency slot                       |
 | `▾`                             | group header (`▼` is the section fold)                       |
 | `×`                             | failed                                                        |
-| `✓` `◷` `║` `⊘`                 | Works: done / waiting / paused / abandoned                   |
+| `✓` `◷` `║` `⊘` `○`             | Works: done / waiting / paused / abandoned / unknown        |
 | `?` `!`                         | My work: awaiting an answer / pending approval               |
 | `M` `A` `D` `R` `C` `U` `T` `?` | Files: git status — same letters as `git status --short`      |
 | `V`                             | Files: viewed (session read only)                             |

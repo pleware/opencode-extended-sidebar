@@ -16,10 +16,6 @@ export type MyWorkKind = MyWorkItem["kind"]
 
 export const MY_WORK_ORDER: readonly MyWorkKind[] = ["question", "approval"]
 
-export function myWorkGlyph(kind: MyWorkKind): string {
-  return kind === "question" ? "?" : "!"
-}
-
 export function myWorkLabel(kind: MyWorkKind): string {
   return kind === "question" ? "Awaiting answer" : "Pending approval"
 }

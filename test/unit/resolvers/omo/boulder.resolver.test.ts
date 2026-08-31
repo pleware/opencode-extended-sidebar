@@ -5,7 +5,6 @@ import {
   readOmo,
   workIsTerminal,
   workRowView,
-  workStatusGlyph,
 } from "../../../../src/resolvers/omo/boulder.resolver.js"
 import { createFixtureProject, type FixtureProject } from "../../../helpers/project.js"
 
@@ -245,21 +244,6 @@ describe("omo presence", () => {
     held.push(without)
     expect(isOmoPresent(withMarker.root)).toBe(true)
     expect(isOmoPresent(without.root)).toBe(false)
-  })
-})
-
-describe("workStatusGlyph", () => {
-  test("maps done / pending / error; running stays a spinner", () => {
-    expect(workStatusGlyph("completed")).toBe("✓")
-    expect(workStatusGlyph("queued")).toBe("◷")
-    expect(workStatusGlyph("failed")).toBe("×")
-    expect(workStatusGlyph("in_progress")).toBeNull()
-    expect(workStatusGlyph("unknown")).toBe("○")
-  })
-
-  test("paused and abandoned get their own glyph", () => {
-    expect(workStatusGlyph("paused")).toBe("║")
-    expect(workStatusGlyph("abandoned")).toBe("⊘")
   })
 })
 

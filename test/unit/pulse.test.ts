@@ -3,7 +3,6 @@ import {
   applyFlow,
   composeMark,
   flowFromEvent,
-  flowGlyph,
   formatDuration,
   formatSpan,
   formatTokens,
@@ -31,14 +30,6 @@ describe("toEpochMs / stampMs", () => {
     expect(toEpochMs(null)).toBeNull()
     expect(stampMs(1_700_000_000)).toBe(1_700_000_000_000)
     expect(stampMs(null)).toBeNull()
-  })
-})
-
-describe("flowGlyph", () => {
-  test("wait recv tool arrows", () => {
-    expect(flowGlyph("wait")).toBe("↑")
-    expect(flowGlyph("recv")).toBe("↓")
-    expect(flowGlyph("tool")).toBe("→")
   })
 })
 

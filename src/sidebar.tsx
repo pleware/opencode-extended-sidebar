@@ -14,7 +14,6 @@ import {
   listOpenQuestions,
   listPendingApprovals,
   mergeTools,
-  myWorkGlyph,
   myWorkLabel,
   readOmoDocs,
   readProjectFeed,
@@ -23,7 +22,6 @@ import {
   toApprovalItems,
   toQuestionItems,
   workRowView,
-  workStatusGlyph,
   workStatusLabel,
   type DelegateView,
   type DocView,
@@ -35,6 +33,14 @@ import {
 import { ROW_MIN, ROW_RANK, packSections, panelRows, sliceShown, sliceWithOverflow } from "./layout.js"
 import { DOC_KIND_LABEL, approvalContinueHint } from "./resolvers/index.js"
 import { openReadonlyDb } from "./sqlite.js"
+import {
+  GROUP_GLYPH,
+  fileLetterMark,
+  flowBlinkOn,
+  markGlyph,
+  myWorkGlyph,
+  workStatusGlyph,
+} from "./pware.oc.ui.glyphs.js"
 import {
   BrandTabs,
   ClickText,
@@ -56,7 +62,6 @@ import {
   mergeFiles,
   shortFileName,
   sumDiff,
-  type FileLetter,
   type FileView,
 } from "./files.js"
 import { onGitMarksChange } from "./git.js"
@@ -71,7 +76,6 @@ import {
   activeFlow,
   applyFlow,
   composeMark,
-  flowBlinkOn,
   flowColor,
   flowFromEvent,
   formatAge,
@@ -79,7 +83,6 @@ import {
   formatTokens,
   formatUsd,
   hottestMark,
-  markGlyph,
   phaseAgeMs,
   pulseAgeMs,
   sessionBusyFromEvent,
@@ -97,13 +100,6 @@ export type SidebarProps = {
   sessionId: string
   api: TuiPluginApi
   theme: TuiTheme
-}
-
-function fileLetterMark(letter: FileLetter | null | undefined): AgentMark {
-  if (letter === "D" || letter === "U") return "error"
-  if (letter === "M" || letter === "T" || letter === "R" || letter === "C") return "stale"
-  if (letter === "A") return "live"
-  return "ready"
 }
 
 function markColor(
@@ -871,7 +867,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
       out.push({
         kind: "group",
         mark: "ready",
-        glyph: "▾",
+        glyph: GROUP_GLYPH,
         name: `${DOC_KIND_LABEL[group.kind]} (${group.items.length})`,
       })
       for (const d of group.items) {
@@ -895,7 +891,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
       out.push({
         kind: "group",
         mark: "ready",
-        glyph: "▾",
+        glyph: GROUP_GLYPH,
         name: `${myWorkLabel(group.kind)} (${group.items.length})`,
       })
       for (const item of group.items) {
@@ -920,9 +916,8 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
             onSelect: () => {
               const db = openReadonlyDb(snap().db.dbPath)
               const sessionId = db ? sessionForPlanFile(db, item.rel) : null
-              openApprovalDialog(props.api, colors(), {
+              openApprovalDialog(props.api, {
                 title: item.name,
-                rel: item.rel,
                 sessionId,
                 continueHint: approvalContinueHint(sessionId, Boolean(db)),
                 onContinue: (sid) => selectSession(props.api, sid),
@@ -953,7 +948,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     if (!b.name && b.counts.total === 0 && b.sessions.length === 0) return []
     const header = b.status
       ? workRowView({ status: b.status, updatedAt: b.updatedAt }, now())
-      : { mark: "queued" as const, glyph: "○", suffix: formatAge(pulseAgeMs(now(), b.updatedAt)) }
+      : { mark: "idle" as const, glyph: undefined, suffix: formatAge(pulseAgeMs(now(), b.updatedAt)) }
     const out: RowData[] = [
       {
         kind: "agent",
@@ -1069,7 +1064,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
             <Row
               kind="group"
               mark={hottestMark(item.members.map(delegateMark))}
-              glyph="▾"
+              glyph={GROUP_GLYPH}
               name={`${agentDisplayName(item.agent)} (${item.count})`}
             />
           )

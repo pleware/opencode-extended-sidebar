@@ -1,23 +1,18 @@
 /** Pulse + lifecycle mark for agent rows. Evaluated against wall clock. */
 import { eventType } from "./events.js"
 import { basenameOf } from "./paths.js"
+import { SPARK_FRAMES } from "./pware.oc.ui.glyphs.js"
 import { normalizeStatus, toToolStatus } from "./status.js"
 
 export const LIVE_MS = 5_000
 export const STALE_MS = 10_000
 export const TICK_MS = 300
-/** ↑/↓ blink half-period in ticks (300ms × 2 ≈ 600ms). */
-export const BLINK_FRAMES = 2
 /** Downstream tokens still count as recv. */
 export const FLOW_RECV_MS = 2_000
 /** Keep ↑ after step.started while the runner is still busy. */
 export const FLOW_WAIT_MS = 15_000
 /** Tool call stays → until success/fail or timeout. */
 export const FLOW_TOOL_MS = 30_000
-/** Same braille set as OpenCode TUI thinking spinner (`opentui-spinner`). */
-export const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"] as const
-/** Eighth blocks for sparklines. */
-export const SPARK_FRAMES = ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"] as const
 
 /** LLM direction: wait = request out, recv = tokens in, tool = tool in flight. */
 export type FlowDir = "wait" | "recv" | "tool"
@@ -100,21 +95,6 @@ export function hottestMark(marks: readonly AgentMark[]): AgentMark {
   return error ? "error" : "ready"
 }
 
-export function spinnerFrame(frame: number): string {
-  const i = ((frame % SPINNER_FRAMES.length) + SPINNER_FRAMES.length) % SPINNER_FRAMES.length
-  return SPINNER_FRAMES[i] ?? "⠋"
-}
-
-export function flowBlinkOn(frame: number): boolean {
-  return Math.floor(Math.abs(frame) / BLINK_FRAMES) % 2 === 0
-}
-
-export function flowGlyph(dir: FlowDir): string {
-  if (dir === "recv") return "↓"
-  if (dir === "wait") return "↑"
-  return "→"
-}
-
 export type FlowColors = {
   text: string
   success: string
@@ -126,14 +106,6 @@ export function flowColor(dir: FlowDir, colors: FlowColors): string {
   if (dir === "recv") return colors.success
   if (dir === "wait") return colors.warning || colors.text
   return colors.primary || colors.text
-}
-
-export function markGlyph(mark: AgentMark, frame = 0, flow?: FlowDir | null): string {
-  if (mark === "error") return "×"
-  if (mark === "ready" || mark === "queued" || mark === "archived") return "•"
-  if (flow === "recv" || flow === "wait" || flow === "tool") return flowGlyph(flow)
-  if (mark === "live" || mark === "stale") return spinnerFrame(frame)
-  return "•"
 }
 
 export function activeFlow(

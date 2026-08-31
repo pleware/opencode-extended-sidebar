@@ -9,7 +9,7 @@
 import { createEffect, createMemo, For, Show, type JSX } from "solid-js"
 import { SyntaxStyle } from "@opentui/core"
 import { useTerminalDimensions } from "@opentui/solid"
-import type { TuiPluginApi, TuiTheme } from "@opencode-ai/plugin/tui"
+import type { TuiDialogSelectOption, TuiPluginApi, TuiTheme } from "@opencode-ai/plugin/tui"
 import { copyText } from "./clipboard.js"
 import { ClickText, textAttrs, type ThemeColors } from "./chrome.js"
 import type { ToolView } from "./resolvers/opencode/tool.resolver.js"
@@ -416,16 +416,18 @@ export function openWorkDetail(
 }
 
 /**
- * Pending-approval menu: Continue jumps to the session that wrote the plan,
- * Docs opens the draft as a preview, and the three start-work rows launch the
- * OMO plan in the current session (plain / --make-pr / --ship).
+ * Pending-approval menu as a native host DialogSelect: Continue jumps to the
+ * session that wrote the plan (muted hint in the row when no session is
+ * found), Docs opens the draft as a preview, and the three start-work rows
+ * launch the OMO plan in the current session (plain / --make-pr / --ship).
+ * Searchable + keyboard-navigable — the same picker the host uses.
  */
+type ApprovalAction = "continue" | "docs" | StartWorkMode
+
 export function openApprovalDialog(
   api: TuiPluginApi,
-  colors: ThemeColors,
   opts: {
     title: string
-    rel: string | null
     sessionId: string | null
     /** Muted reason shown under Continue when it is disabled. */
     continueHint?: string | null
@@ -434,59 +436,50 @@ export function openApprovalDialog(
     onDocs: () => void
   },
 ): void {
-  openDialog(api, "medium", () => (
-    <DialogPad>
-      <text fg={colors.text} attributes={textAttrs(true)}>
-        {opts.title}
-      </text>
-      {divider(colors)}
-      <Show when={opts.rel}>
-        <DetailLine text={opts.rel!} colors={colors} muted />
-      </Show>
-      <box flexDirection="column" gap={0} paddingTop={1}>
-        <ActionRow
-          label="Continue"
-          colors={colors}
-          disabled={!opts.sessionId}
-          onPick={() => {
-            if (opts.sessionId) {
-              closeDialog(api)
-              opts.onContinue(opts.sessionId)
-            }
-          }}
-        />
-        <Show when={!opts.sessionId && opts.continueHint}>
-          <DetailLine text={opts.continueHint!} colors={colors} muted />
-        </Show>
-        <ActionRow label="Docs" colors={colors} onPick={opts.onDocs} />
-        <ActionRow
-          label={startWorkCommand("plain", opts.title)}
-          colors={colors}
-          onPick={() => {
-            closeDialog(api)
-            opts.onStartWork("plain")
-          }}
-        />
-        <ActionRow
-          label={startWorkCommand("make-pr", opts.title)}
-          colors={colors}
-          onPick={() => {
-            closeDialog(api)
-            opts.onStartWork("make-pr")
-          }}
-        />
-        <ActionRow
-          label={startWorkCommand("ship", opts.title)}
-          colors={colors}
-          onPick={() => {
-            closeDialog(api)
-            opts.onStartWork("ship")
-          }}
-        />
-        <ActionRow label="Close" colors={colors} onPick={() => closeDialog(api)} />
-      </box>
-    </DialogPad>
-  ))
+  const options: TuiDialogSelectOption<ApprovalAction>[] = [
+    {
+      title: "Continue",
+      value: "continue",
+      description: opts.sessionId ? undefined : (opts.continueHint ?? "Continue unavailable"),
+      onSelect: () => {
+        if (opts.sessionId) {
+          closeDialog(api)
+          opts.onContinue(opts.sessionId)
+          return
+        }
+        toast(api, opts.continueHint ?? "No session wrote this plan", "warning")
+      },
+    },
+    { title: "Docs", value: "docs", onSelect: opts.onDocs },
+    {
+      title: startWorkCommand("plain", opts.title),
+      value: "plain",
+      category: "Start work",
+      onSelect: () => {
+        closeDialog(api)
+        opts.onStartWork("plain")
+      },
+    },
+    {
+      title: startWorkCommand("make-pr", opts.title),
+      value: "make-pr",
+      category: "Start work",
+      onSelect: () => {
+        closeDialog(api)
+        opts.onStartWork("make-pr")
+      },
+    },
+    {
+      title: startWorkCommand("ship", opts.title),
+      value: "ship",
+      category: "Start work",
+      onSelect: () => {
+        closeDialog(api)
+        opts.onStartWork("ship")
+      },
+    },
+  ]
+  openDialog(api, "medium", () => <api.ui.DialogSelect title={opts.title} options={options} />)
 }
 
 function formatBytes(n: number): string {

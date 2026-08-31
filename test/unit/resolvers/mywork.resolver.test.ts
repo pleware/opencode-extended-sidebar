@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test"
 import {
   approvalContinueHint,
   groupMyWork,
-  myWorkGlyph,
   myWorkLabel,
   MY_WORK_ORDER,
   startWorkCommand,
@@ -23,13 +22,6 @@ const approval: MyWorkItem = {
   pendingAction: "write .omo/plans/plan.md",
   updatedAt: 2_000,
 }
-
-describe("myWorkGlyph", () => {
-  test("questions use ? and approvals use ! — plain ASCII", () => {
-    expect(myWorkGlyph("question")).toBe("?")
-    expect(myWorkGlyph("approval")).toBe("!")
-  })
-})
 
 describe("myWorkLabel", () => {
   test("labels map to the two actionable groups", () => {

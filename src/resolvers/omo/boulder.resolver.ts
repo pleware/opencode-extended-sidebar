@@ -9,9 +9,10 @@ import fs from "node:fs"
 import path from "node:path"
 import { canonicalizePath, fileStamp, resolveProjectFile } from "../../paths.js"
 import { composeMark, formatAge, pulseAgeMs, toEpochMs, type AgentMark } from "../../pulse.js"
-import { taskRank, toWorkLabel, workIsTerminal, workStatusGlyph } from "../../status.js"
+import { workStatusGlyph } from "../../pware.oc.ui.glyphs.js"
+import { taskRank, toWorkLabel, workIsTerminal } from "../../status.js"
 
-export { workIsTerminal, workStatusGlyph }
+export { workIsTerminal }
 export { toWorkLabel as workStatusLabel }
 
 export type PlanStep = { checked: boolean; text: string }

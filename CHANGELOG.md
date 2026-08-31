@@ -1,5 +1,6 @@
 # Changelog
 
+- **0.2.16** (2026-08-31) Extract every status-to-character mapping into a single pware.oc.ui.glyphs module (workStatusGlyph, markGlyph with queued rendering as the ◷ clock instead of th.
 - **0.2.15** (2026-08-31) Extract the resolution layer into src/resolvers: per-entity opencode (session/tool/file/question/todo) and omo (boulder/plan/approval/doc/config) resolver modul.
 - **0.2.14** (2026-08-31) Add a Project tab rolling up tools and files across recent sessions (tab bar is now OES | Project | Session | Perf, old Current renamed to Session), show the wi.
 - **0.2.13** (2026-08-31) Filter Files through `.oesignore` and `.gitignore` with the `ignore` package, exclude `question` from Perf timing, and add a `… N more` Files expander.

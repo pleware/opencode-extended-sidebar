@@ -12,10 +12,10 @@ import {
   type SessionPerf,
   type ToolPerf,
 } from "./perf.js"
+import { THINK_GLYPH, flowGlyph, spinnerFrame } from "./pware.oc.ui.glyphs.js"
 import {
   barGlyphs,
   flowColor,
-  flowGlyph,
   formatDuration,
   formatPercent,
   formatRate,
@@ -26,7 +26,6 @@ import {
   tokenSummary,
   shortMiddle,
   sparkline,
-  spinnerFrame,
   type Chip,
   type FlowDir,
 } from "./pulse.js"
@@ -39,7 +38,7 @@ const KV_FOLD_HISTORY = "oes.fold.perf.history"
 
 const PHASES: Array<{ key: PerfPhase; glyph: string; label: string }> = [
   { key: "wait", glyph: flowGlyph("wait"), label: "wait" },
-  { key: "think", glyph: "∴", label: "think" },
+  { key: "think", glyph: THINK_GLYPH, label: "think" },
   { key: "recv", glyph: flowGlyph("recv"), label: "recv" },
   { key: "tool", glyph: flowGlyph("tool"), label: "tools" },
   { key: "idle", glyph: "·", label: "idle" },
@@ -137,7 +136,7 @@ function ModelRow(props: {
   const chips = () => stacked().chips
   const chipFg = (chip: Chip): string => {
     if (chip.text.startsWith("↑")) return flowColor("wait", props.colors)
-    if (chip.text.startsWith("∴")) return props.colors.primary || props.colors.text
+    if (chip.text.startsWith(THINK_GLYPH)) return props.colors.primary || props.colors.text
     if (chip.text.startsWith("↓")) return flowColor("recv", props.colors)
     return props.colors.textMuted
   }
