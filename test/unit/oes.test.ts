@@ -3,6 +3,7 @@ import { OES_DEFAULTS, pick } from "../../src/oes.js"
 
 describe("pick", () => {
   test("clamps numeric ranges", () => {
+    expect(OES_DEFAULTS.sessionRows).toBe(6)
     const hi = pick({ fileRows: 99, lineMax: 9, perfTurns: 1, sessionRows: 99 }, OES_DEFAULTS)
     expect(hi.fileRows).toBe(20)
     expect(hi.lineMax).toBe(20)
@@ -43,5 +44,16 @@ describe("pick", () => {
     )
     expect(pick({ toolRows: 20, toolFetch: 20 }, OES_DEFAULTS).toolFetch).toBe(20)
     expect(pick({ toolRows: 20 }, OES_DEFAULTS).toolFetch).toBe(20)
+  })
+
+  test("sessionFetch is a separate fetch window, clamped to [sessionRows, 80]", () => {
+    expect(OES_DEFAULTS.sessionFetch).toBe(20)
+    expect(pick({ sessionRows: 6, sessionFetch: 3 }, OES_DEFAULTS).sessionFetch).toBe(6)
+    expect(pick({ sessionRows: 6, sessionFetch: 999 }, OES_DEFAULTS).sessionFetch).toBe(80)
+    expect(pick({ sessionFetch: "nope" } as Record<string, unknown>, OES_DEFAULTS).sessionFetch).toBe(
+      OES_DEFAULTS.sessionFetch,
+    )
+    expect(pick({ sessionRows: 12, sessionFetch: 12 }, OES_DEFAULTS).sessionFetch).toBe(12)
+    expect(pick({ sessionRows: 12 }, OES_DEFAULTS).sessionFetch).toBe(OES_DEFAULTS.sessionFetch)
   })
 })

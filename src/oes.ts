@@ -18,7 +18,10 @@ export type OesOptions = {
   perfRows: number
   /** How many recent turns Perf scans. Higher = longer history, slower read. */
   perfTurns: number
+  /** Rows the Sessions list shows before the `… +N more` revealer. */
   sessionRows: number
+  /** Sessions fetched for the Sessions window. Distinct from `sessionRows`. */
+  sessionFetch: number
   /** Hide Files that match the project's root .gitignore. Off by default. */
   skipGitignore: boolean
   toolRows: number
@@ -33,7 +36,8 @@ export const OES_DEFAULTS: OesOptions = {
   perfHistory: 3,
   perfRows: 5,
   perfTurns: 120,
-  sessionRows: 4,
+  sessionRows: 6,
+  sessionFetch: 20,
   skipGitignore: false,
   toolRows: 5,
   toolFetch: 20,
@@ -52,6 +56,7 @@ function clamp(n: unknown, min: number, max: number, fallback: number): number {
 export function pick(raw: Record<string, unknown> | null, base: OesOptions): OesOptions {
   if (!raw) return base
   const toolRows = clamp(raw.toolRows, 3, 20, base.toolRows)
+  const sessionRows = clamp(raw.sessionRows, 2, 12, base.sessionRows)
   return {
     fileRows: clamp(raw.fileRows, 3, 20, base.fileRows),
     lineMax: clamp(raw.lineMax, 20, 64, base.lineMax),
@@ -59,7 +64,8 @@ export function pick(raw: Record<string, unknown> | null, base: OesOptions): Oes
     perfHistory: clamp(raw.perfHistory, 0, 10, base.perfHistory),
     perfRows: clamp(raw.perfRows, 3, 20, base.perfRows),
     perfTurns: clamp(raw.perfTurns, 20, 500, base.perfTurns),
-    sessionRows: clamp(raw.sessionRows, 2, 12, base.sessionRows),
+    sessionRows,
+    sessionFetch: clamp(raw.sessionFetch, sessionRows, 80, base.sessionFetch),
     skipGitignore: typeof raw.skipGitignore === "boolean" ? raw.skipGitignore : base.skipGitignore,
     toolRows,
     toolFetch: clamp(raw.toolFetch, toolRows, 80, base.toolFetch),

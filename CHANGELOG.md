@@ -1,5 +1,6 @@
 # Changelog
 
+- **0.2.18** (2026-08-31) Make My work questions project-wide so a restart or session switch can no longer hide an open question, and widen the Sessions list with a sessionFetch revealer.
 - **0.2.17** (2026-08-31) Rename the pending-approval Continue row to Navigate to session and add an Approve row in its own category that sends an ok reply to the plan's writer session v.
 - **0.2.16** (2026-08-31) Extract every status-to-character mapping into a single pware.oc.ui.glyphs module (workStatusGlyph, markGlyph with queued rendering as the ◷ clock instead of th.
 - **0.2.15** (2026-08-31) Extract the resolution layer into src/resolvers: per-entity opencode (session/tool/file/question/todo) and omo (boulder/plan/approval/doc/config) resolver modul.

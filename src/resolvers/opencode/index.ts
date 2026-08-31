@@ -30,6 +30,8 @@ export * from "./question.resolver.js"
 export type DbSnapshot = {
   present: boolean
   dbPath: string
+  /** Project of the current session — scopes project-wide reads (questions). */
+  projectId: string | null
   current: SessionView | null
   /** Orchestrator: parent if current is a child, otherwise current. */
   main: SessionView | null
@@ -38,7 +40,7 @@ export type DbSnapshot = {
   siblings: SessionView[]
   /** Sessions keyed by id — current, main, and any looked-up delegates. */
   byId: Record<string, SessionView>
-  /** Recent main (parent_id null) sessions in this project. */
+  /** Recent main (parent_id null) sessions in this project — the `sessionFetch` window. */
   recent: SessionView[]
   todos: TodoRow[]
   /** Current session tool parts — name + status only, no args/outputs. */
@@ -52,6 +54,7 @@ export function emptyDb(dbPath: string, error: string | null = null): DbSnapshot
   return {
     present: false,
     dbPath,
+    projectId: null,
     current: null,
     main: null,
     parent: null,
@@ -101,7 +104,7 @@ export function readDbSnapshot(opts: {
     const oes = getOes(opts.projectRoot)
     const recent = listRecentMainSessions(db, {
       projectId: row.project_id,
-      limit: oes.sessionRows,
+      limit: oes.sessionFetch,
     }).map((r) => toSessionView(r, now))
     for (const v of [current, parent, main, ...children, ...extra, ...recent]) {
       if (v) byId[v.id] = v
@@ -110,6 +113,7 @@ export function readDbSnapshot(opts: {
     return {
       present: true,
       dbPath: opts.dbPath,
+      projectId: row.project_id,
       current,
       main,
       parent,

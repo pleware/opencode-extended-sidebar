@@ -417,11 +417,12 @@ export function openWorkDetail(
 
 /**
  * Pending-approval menu as a native host DialogSelect: Navigate to session
- * jumps to the session that wrote the plan, Approve sends an `ok` reply to
- * that same session (muted hint in the rows when no session is found), Docs
- * opens the draft as a preview, and the three start-work rows launch the OMO
- * plan in the current session (plain / --make-pr / --ship). Searchable +
- * keyboard-navigable — the same picker the host uses.
+ * jumps to the session that wrote the plan, and the Plan options group holds
+ * Approve — sending an `ok` reply to that same session — plus the three
+ * start-work rows that launch the OMO plan in the current session
+ * (plain / --make-pr / --ship); Docs opens the draft as a preview. A muted
+ * hint is shown under the session-bound rows when no session is found.
+ * Searchable + keyboard-navigable — the same picker the host uses.
  */
 type ApprovalAction = "continue" | "approve" | "docs" | StartWorkMode
 
@@ -456,7 +457,7 @@ export function openApprovalDialog(
     {
       title: "Approve",
       value: "approve",
-      category: "Approve",
+      category: "Plan options",
       description: opts.sessionId ? undefined : (opts.continueHint ?? "Approve unavailable"),
       onSelect: () => {
         if (opts.sessionId) {
@@ -471,7 +472,7 @@ export function openApprovalDialog(
     {
       title: startWorkCommand("plain", opts.title),
       value: "plain",
-      category: "Start work",
+      category: "Plan options",
       onSelect: () => {
         closeDialog(api)
         opts.onStartWork("plain")
@@ -480,7 +481,7 @@ export function openApprovalDialog(
     {
       title: startWorkCommand("make-pr", opts.title),
       value: "make-pr",
-      category: "Start work",
+      category: "Plan options",
       onSelect: () => {
         closeDialog(api)
         opts.onStartWork("make-pr")
@@ -489,7 +490,7 @@ export function openApprovalDialog(
     {
       title: startWorkCommand("ship", opts.title),
       value: "ship",
-      category: "Start work",
+      category: "Plan options",
       onSelect: () => {
         closeDialog(api)
         opts.onStartWork("ship")

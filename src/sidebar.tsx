@@ -30,7 +30,15 @@ import {
   type ProjectFeed,
   type StartWorkMode,
 } from "./resolvers/index.js"
-import { ROW_MIN, ROW_RANK, packSections, panelRows, sliceShown, sliceWithOverflow } from "./layout.js"
+import {
+  ROW_MIN,
+  ROW_RANK,
+  SESSION_MORE_STEP,
+  packSections,
+  panelRows,
+  sliceShown,
+  sliceWithOverflow,
+} from "./layout.js"
 import { DOC_KIND_LABEL, approvalContinueHint } from "./resolvers/index.js"
 import { openReadonlyDb } from "./sqlite.js"
 import {
@@ -676,17 +684,11 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
 
   const omoPresent = createMemo(() => snap().omo.present)
 
-  /** Open questions across current + recent sessions — the "answer me" queue. */
+  /** Open `question` tools anywhere in this project — the "answer me" queue. */
   const myWorkQuestions = createMemo<MyWorkItem[]>(() => {
     if (tab() !== "mywork") return []
     const db = snap().db
-    const ids = [db.current?.id, ...db.recent.map((s) => s.id)].filter(
-      (x): x is string => typeof x === "string" && x.length > 0,
-    )
-    return toQuestionItems(listOpenQuestions({ dbPath: db.dbPath, sessionIds: ids }), (sid) => {
-      if (db.current?.id === sid) return db.current.title || "current"
-      return db.recent.find((s) => s.id === sid)?.title || "session"
-    })
+    return toQuestionItems(listOpenQuestions({ dbPath: db.dbPath, projectId: db.projectId }))
   })
 
   /** OMO drafts/plans awaiting approval — only when omo is present. */
@@ -703,34 +705,26 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
 
   /** OMO `start work` — the command endpoint first, a plain chat message as fallback. */
   const runStartWork = (mode: StartWorkMode, planName: string): void => {
-    const chat = (props.api as TuiPluginApi & {
-      client?: {
-        chat?: {
-          command?: (arg: unknown) => Promise<{ error?: unknown } | undefined> | { error?: unknown } | undefined
-          promptAsync?: (arg: unknown) => Promise<unknown> | unknown
-        }
-      }
-    }).client?.chat
-    if (!chat) return
+    const client = props.api.client
     const text = startWorkCommand(mode, planName)
     const flag = mode === "make-pr" ? "--make-pr" : mode === "ship" ? "--ship" : ""
-    const args =
-      [planName, flag].map((s) => s.trim()).filter(Boolean).join(" ") || undefined
+    const args = [planName, flag].map((s) => s.trim()).filter(Boolean).join(" ") || ""
     const go = async () => {
       try {
-        if (typeof chat.command === "function") {
-          const res = await chat.command({
-            sessionID: props.sessionId,
-            command: "start-work",
-            arguments: args,
-          })
-          if (res && !res.error) return
-        }
+        const res = await client.session.command({
+          sessionID: props.sessionId,
+          command: "start-work",
+          arguments: args,
+        })
+        if (res && !res.error) return
       } catch {
         // command not registered — send as a plain message below
       }
       try {
-        await chat.promptAsync?.({ sessionID: props.sessionId, parts: [{ type: "text", text }] })
+        await client.session.promptAsync({
+          sessionID: props.sessionId,
+          parts: [{ type: "text", text }],
+        })
       } catch {
         // host without message send
       }
@@ -740,17 +734,18 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
 
   /** OMO plan approve — answer the writer session with the `ok` the planner waits for. */
   const approvePlan = (sessionId: string): void => {
-    const chat = (props.api as TuiPluginApi & {
-      client?: {
-        chat?: { promptAsync?: (arg: unknown) => Promise<unknown> | unknown }
+    const client = props.api.client
+    const go = async () => {
+      try {
+        await client.session.promptAsync({
+          sessionID: sessionId,
+          parts: [{ type: "text", text: "ok" }],
+        })
+      } catch {
+        // host without message send
       }
-    }).client?.chat
-    if (!chat?.promptAsync) return
-    try {
-      void chat.promptAsync({ sessionID: sessionId, parts: [{ type: "text", text: "ok" }] })
-    } catch {
-      // host without message send
     }
+    void go()
   }
 
   /**
@@ -830,6 +825,10 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   )
   const toolsSlice = createMemo(() =>
     sliceShown(tools(), rowsFor("tools", oes().toolRows) + toolsMore()),
+  )
+  const [sessionsMore, setSessionsMore] = createSignal(0)
+  const sessionsSlice = createMemo(() =>
+    sliceShown(snap().db.recent, rowsFor("sessions", oes().sessionRows) + sessionsMore()),
   )
 
   const omoRows = createMemo(() => (omoPresent() ? rowsFor("omo", 0) : 0))
@@ -1171,7 +1170,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
             />
             <Show when={!foldSessions()}>
               <box flexDirection="column" gap={0} paddingLeft={1}>
-                <For each={snap().db.recent.slice(0, rowsFor("sessions", oes().sessionRows))}>
+                <For each={sessionsSlice().rows}>
                   {(s) => {
                     const isBusy = Boolean(busy()[s.id])
                     const mark = rowMark(
@@ -1195,6 +1194,13 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
                     )
                   }}
                 </For>
+                <Show when={sessionsSlice().hidden > 0}>
+                  <box onMouseUp={() => setSessionsMore(sessionsMore() + SESSION_MORE_STEP)}>
+                    <ClickText fg={colors().textMuted} underline>
+                      {`… +${sessionsSlice().hidden} more`}
+                    </ClickText>
+                  </box>
+                </Show>
               </box>
             </Show>
           </box>

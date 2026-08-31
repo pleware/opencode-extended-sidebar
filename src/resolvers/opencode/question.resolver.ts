@@ -1,25 +1,30 @@
 /**
  * pware.oc.core.opencode.resolver.question
  *
- * Open `question` tool parts across the given sessions — the "waiting on my
- * answer" queue. A question is open while its state has no end time and its
- * status is running or pending. Lazy read, gated on the My work tab; soft-fails
- * to [] on a missing/locked DB. The question text and options stay in the
- * `part.data` blob — never read, never shown.
+ * Open `question` tool parts across a project — the "waiting on my answer"
+ * queue. A question is open while its state has no end time and its status is
+ * running or pending. Scanned **project-wide** (every non-archived session of
+ * the project), not just the current+recent window, so an open question keeps
+ * showing after a restart or a session switch. Lazy read, gated on the My work
+ * tab; soft-fails to [] on a missing/locked DB. The question text and options
+ * stay in the `part.data` blob — never read, never shown.
  */
 import fs from "node:fs"
 import { str } from "../../paths.js"
 import { toEpochMs } from "../../pulse.js"
-import { openReadonlyDb, uniqueIds, withDbRead } from "../../sqlite.js"
+import { openReadonlyDb, withDbRead } from "../../sqlite.js"
 import { toToolStatus } from "../../status.js"
 
 export type OpenQuestion = {
   sessionId: string
+  /** The session's own title — the question's session may sit outside the recent window. */
+  title: string
   startedAt: number | null
 }
 
 type OpenQuestionRow = {
   session_id: string
+  title: string | null
   time_created: number
   status: string | null
   tstart: number | null
@@ -28,29 +33,30 @@ type OpenQuestionRow = {
 
 export function listOpenQuestions(opts: {
   dbPath: string
-  sessionIds: string[]
+  projectId: string | null
 }): OpenQuestion[] {
-  const clean = uniqueIds(opts.sessionIds)
-  if (!opts.dbPath || clean.length === 0 || !fs.existsSync(opts.dbPath)) return []
+  if (!opts.dbPath || !opts.projectId || !fs.existsSync(opts.dbPath)) return []
   return withDbRead(() => {
     const db = openReadonlyDb(opts.dbPath)
     if (!db) return []
-    const placeholders = clean.map(() => "?").join(",")
     let rows: OpenQuestionRow[] = []
     try {
       rows = db.all<OpenQuestionRow>(
-        `SELECT session_id,
-                time_created,
-                json_extract(data,'$.state.status') AS status,
-                json_extract(data,'$.state.time.start') AS tstart,
-                json_extract(data,'$.state.time.end') AS tend
-         FROM part
-         WHERE session_id IN (${placeholders})
-           AND json_extract(data,'$.type') = 'tool'
-           AND json_extract(data,'$.tool') = 'question'
-         ORDER BY time_created DESC
+        `SELECT p.session_id,
+                s.title AS title,
+                p.time_created,
+                json_extract(p.data,'$.state.status') AS status,
+                json_extract(p.data,'$.state.time.start') AS tstart,
+                json_extract(p.data,'$.state.time.end') AS tend
+         FROM part p
+         JOIN session s ON s.id = p.session_id
+         WHERE json_extract(p.data,'$.type') = 'tool'
+           AND json_extract(p.data,'$.tool') = 'question'
+           AND (s.time_archived IS NULL OR s.time_archived = 0)
+           AND s.project_id = ?
+         ORDER BY p.time_created DESC
          LIMIT 80`,
-        ...clean,
+        opts.projectId,
       )
     } catch {
       return []
@@ -63,7 +69,11 @@ export function listOpenQuestions(opts: {
         str(row.status) || (end != null ? "completed" : start != null ? "running" : null),
       )
       if (status !== "running" && status !== "pending") continue
-      out.push({ sessionId: row.session_id, startedAt: start ?? toEpochMs(row.time_created) })
+      out.push({
+        sessionId: row.session_id,
+        title: str(row.title) || "untitled",
+        startedAt: start ?? toEpochMs(row.time_created),
+      })
     }
     return out
   }, () => [])

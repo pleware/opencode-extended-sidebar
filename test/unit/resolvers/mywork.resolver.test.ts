@@ -5,6 +5,7 @@ import {
   myWorkLabel,
   MY_WORK_ORDER,
   startWorkCommand,
+  toQuestionItems,
   type MyWorkItem,
 } from "../../../src/resolvers/mywork.resolver.js"
 
@@ -27,6 +28,19 @@ describe("myWorkLabel", () => {
   test("labels map to the two actionable groups", () => {
     expect(myWorkLabel("question")).toBe("Awaiting answer")
     expect(myWorkLabel("approval")).toBe("Pending approval")
+  })
+})
+
+describe("toQuestionItems", () => {
+  test("carries session id, title and start through from the row", () => {
+    const items = toQuestionItems([
+      { sessionId: "ses_1", title: "Plan approval?", startedAt: 1_000 },
+      { sessionId: "ses_2", title: "Which lib?", startedAt: null },
+    ])
+    expect(items).toEqual([
+      { kind: "question", sessionId: "ses_1", title: "Plan approval?", startedAt: 1_000 },
+      { kind: "question", sessionId: "ses_2", title: "Which lib?", startedAt: null },
+    ])
   })
 })
 

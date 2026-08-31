@@ -8,6 +8,15 @@ describe("listOpenQuestions", () => {
     sessions: [
       { id: "ses_q1", project_id: "proj_1", title: "Q1", time_created: t0, time_updated: t0 + 600 },
       { id: "ses_q2", project_id: "proj_1", title: "Q2", time_created: t0, time_updated: t0 + 700 },
+      { id: "ses_other", project_id: "proj_2", title: "Other project", time_created: t0, time_updated: t0 + 800 },
+      {
+        id: "ses_archived",
+        project_id: "proj_1",
+        title: "Archived",
+        time_created: t0,
+        time_updated: t0 + 900,
+        time_archived: t0 + 950,
+      },
     ],
     parts: [
       {
@@ -38,21 +47,53 @@ describe("listOpenQuestions", () => {
           state: { status: "running", time: { start: t0 + 300 } },
         },
       },
+      {
+        id: "prt_other_open",
+        session_id: "ses_other",
+        time_created: t0 + 400,
+        data: {
+          type: "tool",
+          tool: "question",
+          callID: "call_other",
+          state: { status: "pending", time: { start: t0 + 400 } },
+        },
+      },
+      {
+        id: "prt_archived_open",
+        session_id: "ses_archived",
+        time_created: t0 + 500,
+        data: {
+          type: "tool",
+          tool: "question",
+          callID: "call_arch",
+          state: { status: "running", time: { start: t0 + 500 } },
+        },
+      },
     ],
   })
 
   afterAll(() => fix.dispose())
 
-  test("returns only open question parts with their session id", () => {
-    const out = listOpenQuestions({ dbPath: fix.dbPath, sessionIds: ["ses_q1", "ses_q2"] })
+  test("returns open question parts of this project, with title and start", () => {
+    const out = listOpenQuestions({ dbPath: fix.dbPath, projectId: "proj_1" })
     expect(out.map((q) => q.sessionId)).toEqual(["ses_q1"])
+    expect(out[0]?.title).toBe("Q1")
     expect(out[0]?.startedAt).toBe(t0 + 100)
   })
 
-  test("empty sessionIds and a missing db both yield []", () => {
-    expect(listOpenQuestions({ dbPath: fix.dbPath, sessionIds: [] })).toEqual([])
-    expect(
-      listOpenQuestions({ dbPath: "C:/nope/missing.db", sessionIds: ["ses_q1"] }),
-    ).toEqual([])
+  test("a question in another project stays out of this queue", () => {
+    const out = listOpenQuestions({ dbPath: fix.dbPath, projectId: "proj_2" })
+    expect(out.map((q) => q.sessionId)).toEqual(["ses_other"])
+  })
+
+  test("an open question in an archived session is dropped", () => {
+    const out = listOpenQuestions({ dbPath: fix.dbPath, projectId: "proj_1" })
+    expect(out.some((q) => q.sessionId === "ses_archived")).toBe(false)
+  })
+
+  test("missing db, unknown project or null projectId all yield []", () => {
+    expect(listOpenQuestions({ dbPath: fix.dbPath, projectId: null })).toEqual([])
+    expect(listOpenQuestions({ dbPath: fix.dbPath, projectId: "proj_nope" })).toEqual([])
+    expect(listOpenQuestions({ dbPath: "C:/nope/missing.db", projectId: "proj_1" })).toEqual([])
   })
 })

@@ -15,6 +15,9 @@ export function panelRows(termHeight: number): number {
   return Math.max(PANEL_MIN_ROWS, Math.floor(h) - PANEL_CHROME)
 }
 
+/** Rows the Sessions `… +N more` revealer adds per click. */
+export const SESSION_MORE_STEP = 4
+
 /** Rows a section keeps before it is worth folding instead. */
 export const ROW_MIN = {
   delegates: 2,

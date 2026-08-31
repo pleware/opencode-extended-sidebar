@@ -56,15 +56,12 @@ export function groupMyWork(
   return out
 }
 
-/** Build the question items from an open-question read, resolving session titles. */
-export function toQuestionItems(
-  questions: readonly OpenQuestion[],
-  titleOf: (sessionId: string) => string,
-): MyWorkItem[] {
+/** Build the question items from an open-question read (title comes from the row). */
+export function toQuestionItems(questions: readonly OpenQuestion[]): MyWorkItem[] {
   return questions.map((q) => ({
     kind: "question",
     sessionId: q.sessionId,
-    title: titleOf(q.sessionId),
+    title: q.title,
     startedAt: q.startedAt,
   }))
 }

@@ -333,8 +333,9 @@ describe("My work queue", () => {
       ],
     })
 
-    const questions = listOpenQuestions({ dbPath: dbFix.dbPath, sessionIds: ["ses_main", "ses_old"] })
+    const questions = listOpenQuestions({ dbPath: dbFix.dbPath, projectId: "proj_a" })
     expect(questions.map((q) => q.sessionId)).toEqual(["ses_main"])
+    expect(questions[0]?.title).toBe("main")
     expect(questions[0]?.startedAt).toBe(NOW - 1_000)
     // The question text and options live in state.input — never read, never shown.
     assertPrivacy({ questions })
@@ -364,6 +365,6 @@ describe("My work queue", () => {
       ],
     })
     expect(listPendingApprovals(projFix.root)).toEqual([])
-    expect(listOpenQuestions({ dbPath: dbFix.dbPath, sessionIds: ["ses_main"] })).toHaveLength(1)
+    expect(listOpenQuestions({ dbPath: dbFix.dbPath, projectId: "proj_a" })).toHaveLength(1)
   })
 })

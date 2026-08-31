@@ -26,7 +26,7 @@ OpenCode gives you one conversation at a time. Real work looks different: an orc
 
 ## ⇄ Session switcher
 
-> Recent sessions, one click away. Title, age, and whether it is still alive. The header shows the window — `Sessions (last 4)` — plus a `switch` label that opens the host session switcher (the same `/sessions` command). Below the list, tools and files rolled up from those same recent sessions.
+> Recent sessions, one click away. Title, age, and whether it is still alive. The header shows the window — `Sessions (last 6)` — plus a `switch` label that opens the host session switcher (the same `/sessions` command). When more sessions were fetched, a clickable `… +N more` reveals the next four per click. Below the list, tools and files rolled up from those same recent sessions.
 
 ## ⊚ Live activity pulse
 
@@ -48,7 +48,7 @@ OpenCode gives you one conversation at a time. Real work looks different: an orc
 
 ## ? My work — what is waiting on you
 
-> One queue of things that need **your** action, shown first in the core group. Open `question` tools from the current and recent sessions appear as `?` rows — click to jump to the session and answer. OMO plans and drafts with `status: awaiting-approval` appear as `!` rows (plan name only, no extension) — click for a native, searchable picker: **Navigate to session** jumps to the session that wrote the plan, **Approve** sends `ok` to that same session (both show a muted reason when no session is found), **Docs** opens the draft as a preview, and **start work** rows (`start work`, `start work --make-pr`, `start work --ship`) launch the OMO plan in the current session. When `.omo/` is absent the approval section is simply gone; the question queue works on OpenCode alone.
+> One queue of things that need **your** action, shown first in the core group. Open `question` tools anywhere in the project appear as `?` rows — click to jump to the session and answer. OMO plans and drafts with `status: awaiting-approval` appear as `!` rows (plan name only, no extension) — click for a native, searchable picker: **Navigate to session** jumps to the session that wrote the plan (a muted reason is shown when no session is found), **Docs** opens the draft as a preview, and the **Plan options** group holds **Approve** — sending `ok` to that same session — plus **start work** rows (`start work`, `start work --make-pr`, `start work --ship`) that launch the OMO plan in the current session. When `.omo/` is absent the approval section is simply gone; the question queue works on OpenCode alone.
 
 ## ▤ OMO works, boulder and docs
 
@@ -75,7 +75,7 @@ OpenCode gives you one conversation at a time. Real work looks different: an orc
 
 ## ⇕ Rows that fit the window
 
-> `oes.json` row counts are ceilings. A short terminal trims live activity last, then Files, then Delegates and OMO. The Tool Calls feed shows the latest `toolRows` and ends in a clickable `… +N more` that reveals another `toolRows` per click (up to `toolFetch`); a trimmed Files list ends in a `… +N more` that expands to every file.
+> `oes.json` row counts are ceilings. A short terminal trims live activity last, then Files, then Delegates and OMO. The Tool Calls feed shows the latest `toolRows` and ends in a clickable `… +N more` that reveals another `toolRows` per click (up to `toolFetch`); the Sessions list shows `sessionRows` and reveals four more per click (up to `sessionFetch`); a trimmed Files list ends in a `… +N more` that expands to every file.
 
 ## ⊘ Privacy first
 
@@ -160,7 +160,8 @@ Later files win:
   "perfHistory": 3,
   "perfRows": 5,
   "perfTurns": 120,
-  "sessionRows": 4,
+  "sessionRows": 6,
+  "sessionFetch": 20,
   "skipGitignore": false,
   "toolRows": 5,
   "toolFetch": 20
@@ -175,7 +176,8 @@ Later files win:
 | `perfHistory`   | `3`                              | sessions under Perf → History; `0` hides it          |
 | `perfRows`      | `5`                              | rows per Perf section                                  |
 | `perfTurns`     | `120`                            | recent turns Perf measures                            |
-| `sessionRows`   | `4`                              | sessions in the switcher                              |
+| `sessionRows`   | `6`                              | sessions shown before the `… +N more` revealer |
+| `sessionFetch`  | `20`                             | sessions fetched for the switcher window; distinct from `sessionRows` |
 | `skipGitignore` | `false`                          | also honour the project's root `.gitignore` (`.oesignore` is always honoured) |
 | `toolRows`      | `5`                              | most tool-call rows shown; the `… +N more` control reveals another `toolRows` per click |
 | `toolFetch`     | `20`                             | tool-call history kept behind the `… +N more` revealer; distinct from `toolRows` |
