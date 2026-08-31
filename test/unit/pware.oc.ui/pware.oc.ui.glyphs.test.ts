@@ -75,7 +75,9 @@ describe("markGlyph", () => {
 describe("myWorkGlyph", () => {
   test("questions use ? and approvals use ! — plain ASCII", () => {
     expect(myWorkGlyph("question")).toBe("?")
-    expect(myWorkGlyph("approval")).toBe("!")
+    expect(myWorkGlyph("pending")).toBe("!")
+    expect(myWorkGlyph("working")).toBe("!")
+    expect(myWorkGlyph("idle")).toBe("!")
   })
 })
 

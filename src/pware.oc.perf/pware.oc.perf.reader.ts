@@ -11,6 +11,8 @@ import { createStampCache } from "../pware.oc.core/pware.oc.core.cache.js"
 import { finiteNum } from "../pware.oc.core/pware.oc.core.paths.js"
 import { formatDuration, formatWhen, shortToolLabel, toEpochMs } from "../pware.oc.core/pware.oc.core.pulse.js"
 import { openReadonlyDb, withDbRead, type SqlDb } from "../pware.oc.core/pware.oc.core.sqlite.js"
+import { PART_TYPE_REASONING, PART_TYPE_TEXT, PART_TYPE_TOOL } from "../pware.oc.core/constants/pware.oc.core.constants.partType.js"
+import { TOOL_QUESTION } from "../pware.oc.core/constants/pware.oc.core.constants.toolName.js"
 
 /** Where the session's wall clock goes. `idle` is whatever the phases do not claim. */
 export type PerfPhase = "wait" | "think" | "recv" | "tool" | "idle"
@@ -255,7 +257,7 @@ function avg(total: number, n: number): number | null {
 }
 
 /** Tools that pause for a human rather than do work — never tool timing. */
-const NON_TOOLS = new Set(["question"])
+const NON_TOOLS = new Set<string>([TOOL_QUESTION])
 
 function countsAsTool(tool: string | null | undefined): boolean {
   return !NON_TOOLS.has((tool || "").trim().toLowerCase())
@@ -608,16 +610,16 @@ function collectParts(rows: PartRow[]): {
   const tools = new Map<string, ToolPerf>()
   for (const row of rows) {
     const kind = row.kind || ""
-    if (kind !== "text" && kind !== "reasoning" && kind !== "tool") continue
+    if (kind !== PART_TYPE_TEXT && kind !== PART_TYPE_REASONING && kind !== PART_TYPE_TOOL) continue
     const mid = String(row.mid || "")
     if (!mid) continue
     const b = byMsg.get(mid) ?? newBucket()
 
-    if (kind === "text" || kind === "reasoning") {
+    if (kind === PART_TYPE_TEXT || kind === PART_TYPE_REASONING) {
       const start = toEpochMs(row.pstart)
       const end = toEpochMs(row.pend)
       if (start != null && (b.firstOut == null || start < b.firstOut)) b.firstOut = start
-      if (kind === "reasoning") {
+      if (kind === PART_TYPE_REASONING) {
         b.thinkMs += span(start, end)
       } else {
         if (start != null && (b.textStart == null || start < b.textStart)) b.textStart = start

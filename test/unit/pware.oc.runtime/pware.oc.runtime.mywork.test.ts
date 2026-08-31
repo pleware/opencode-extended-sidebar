@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import {
   approvalContinueHint,
+  approvalGroup,
   groupMyWork,
   myWorkLabel,
   MY_WORK_ORDER,
@@ -18,7 +19,7 @@ const question: MyWorkItem = {
 }
 
 const approval: MyWorkItem = {
-  kind: "approval",
+  kind: "pending",
   name: "plan.md",
   rel: ".omo/drafts/plan.md",
   pendingAction: "write .omo/plans/plan.md",
@@ -27,9 +28,29 @@ const approval: MyWorkItem = {
 }
 
 describe("myWorkLabel", () => {
-  test("labels map to the two actionable groups", () => {
+  test("labels map to the four actionable groups", () => {
     expect(myWorkLabel("question")).toBe("Awaiting answer")
-    expect(myWorkLabel("approval")).toBe("Pending approval")
+    expect(myWorkLabel("pending")).toBe("Pending approval")
+    expect(myWorkLabel("working")).toBe("Working")
+    expect(myWorkLabel("idle")).toBe("Idle")
+  })
+})
+
+describe("approvalGroup", () => {
+  test("running sessions group as working", () => {
+    expect(approvalGroup({ running: true, state: "streaming" })).toBe("working")
+    expect(approvalGroup({ running: true, state: "awaiting-background" })).toBe("working")
+  })
+
+  test("stopped sessions group as idle", () => {
+    expect(approvalGroup({ running: false, state: "idle" })).toBe("idle")
+    expect(approvalGroup({ running: false, state: "archived" })).toBe("idle")
+  })
+
+  test("unknown or missing session state groups as pending", () => {
+    expect(approvalGroup({ running: false, state: "unknown" })).toBe("pending")
+    expect(approvalGroup(null)).toBe("pending")
+    expect(approvalGroup(undefined)).toBe("pending")
   })
 })
 
@@ -47,7 +68,7 @@ describe("toQuestionItems", () => {
 })
 
 describe("toApprovalItems", () => {
-  test("carries sessionState through from the approval read", () => {
+  test("carries sessionState through and maps it to the group kind", () => {
     const items = toApprovalItems([
       {
         rel: ".omo/drafts/plan.md",
@@ -63,28 +84,42 @@ describe("toApprovalItems", () => {
         status: "awaiting-approval",
         pendingAction: null,
         updatedAt: null,
+        sessionState: { running: false, state: "idle" },
+      },
+      {
+        rel: ".omo/drafts/lone.md",
+        name: "lone",
+        status: "awaiting-approval",
+        pendingAction: null,
+        updatedAt: null,
         sessionState: null,
       },
     ])
-    expect(items).toHaveLength(2)
+    expect(items.map((i) => i.kind)).toEqual(["working", "idle", "pending"])
     const plan = items[0]
-    const other = items[1]
-    expect(plan?.kind).toBe("approval")
-    expect(other?.kind).toBe("approval")
-    if (plan?.kind === "approval") expect(plan.sessionState).toEqual({ running: true, state: "streaming" })
-    if (other?.kind === "approval") expect(other.sessionState).toBeNull()
+    expect(plan?.kind).toBe("working")
+    if (plan?.kind !== "question") expect(plan.sessionState).toEqual({ running: true, state: "streaming" })
+    const lone = items[2]
+    if (lone?.kind !== "question") expect(lone.sessionState).toBeNull()
   })
 })
 
 describe("groupMyWork", () => {
-  test("keeps question before approval and drops empty kinds", () => {
-    expect(groupMyWork([approval, question]).map((g) => g.kind)).toEqual(["question", "approval"])
+  test("orders question, pending, working, idle and drops empty kinds", () => {
+    const working: MyWorkItem = { ...approval, kind: "working" }
+    const idle: MyWorkItem = { ...approval, kind: "idle" }
+    expect(groupMyWork([idle, approval, working, question]).map((g) => g.kind)).toEqual([
+      "question",
+      "pending",
+      "working",
+      "idle",
+    ])
     expect(groupMyWork([question]).map((g) => g.kind)).toEqual(["question"])
     expect(groupMyWork([])).toEqual([])
   })
 
   test("order constant matches the grouped order", () => {
-    expect(MY_WORK_ORDER).toEqual(["question", "approval"])
+    expect(MY_WORK_ORDER).toEqual(["question", "pending", "working", "idle"])
   })
 })
 

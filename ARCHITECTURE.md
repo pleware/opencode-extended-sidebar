@@ -28,6 +28,11 @@ src/
 │   ├── pware.oc.core.pulse.ts
 │   ├── pware.oc.core.sqlite.ts
 │   ├── pware.oc.core.status.ts
+│   ├── constants/                         # OpenCode host string literals
+│   │   ├── index.ts
+│   │   ├── pware.oc.core.constants.partType.ts
+│   │   ├── pware.oc.core.constants.eventType.ts
+│   │   └── pware.oc.core.constants.toolName.ts
 │   └── git/                               # project git + ignore rules
 │       ├── index.ts
 │       ├── pware.oc.core.git.ts
@@ -44,6 +49,13 @@ src/
 │       └── pware.oc.opencode.resolver.todo.ts
 ├── pware.oc.omo/                          # oh-my-openagent domain: .omo/.sisyphus files
 │   ├── index.ts
+│   ├── constants/                         # OMO string literals
+│   │   ├── index.ts
+│   │   ├── pware.oc.omo.constants.planStatus.ts
+│   │   ├── pware.oc.omo.constants.boulderStatus.ts
+│   │   ├── pware.oc.omo.constants.backgroundTask.ts
+│   │   ├── pware.oc.omo.constants.reviewStatus.ts
+│   │   └── pware.oc.omo.constants.verdict.ts
 │   └── resolver/
 │       ├── index.ts
 │       ├── pware.oc.omo.resolver.boulder.ts
@@ -121,6 +133,14 @@ Plugin registration: `id = "opencode-extended-sidebar"`, load toast,
 | `sqlite.ts` | readonly `bun:sqlite` / `node:sqlite` handle | `openReadonlyDb()`, `withDbRead()`, `resetReadonlyDb()`, `uniqueIds()` |
 | `status.ts` | canonical lifecycle/tool/work status | `normalizeStatus()`, `toToolStatus()`, `toWorkLabel()`, `isPendingWork()`, `workIsTerminal()`, `taskRank()` |
 
+### `pware.oc.core/constants` — OpenCode host string literals
+
+| Module | Responsibility | Key exports |
+|---|---|---|
+| `partType.ts` | `part.data.type` values (SDK `Part` union) | `PART_TYPE_TEXT`, `PART_TYPE_REASONING`, `PART_TYPE_TOOL`, `PART_TYPE_STEP_START`, `PART_TYPE_STEP_FINISH`, `PART_TYPE_SNAPSHOT`, `PART_TYPE_PATCH`, `PART_TYPE_AGENT`, `PART_TYPE_SUBTASK`, `PART_TYPE_RETRY`, `PART_TYPE_COMPACTION`, `PART_TYPE_FILE`, `PART_TYPES`, `PartType` |
+| `eventType.ts` | host event `type` strings (SDK `Event` + stream) | per-value `EVENT_*` consts, `EVENT_TYPES`, `EventType` |
+| `toolName.ts` | tool names by file-touch + special non-file tools | per-value `TOOL_*` consts, `WRITE_TOOLS`, `READ_TOOLS`, `NON_FILE_TOOLS`, `ToolName` |
+
 ### `pware.oc.core/git` — project git + ignore
 
 | Module | Responsibility | Key exports |
@@ -133,7 +153,7 @@ Plugin registration: `id = "opencode-extended-sidebar"`, load toast,
 | Module | Responsibility | Key exports |
 |---|---|---|
 | `files.ts` | `FileView`: basename + diff stats only | `FileView`, `FileLetter`, `filesFromEvent()`, `filesFromPatchJson()`, `fileHitFromExtracted()`, `decorateFiles()`, `mergeFiles()`, `sumDiff()`, `shortFileName()`, `formatDiffStat()` |
-| `resolver/session.ts` | session rows → `SessionView`, hierarchy queries | `toSessionView()`, `inferStatus()`, `getSessionById()`, `listChildSessions()`, `listRecentMainSessions()`, `getSessionsByIds()`, `sessionScanStamp()`, `sessionForPlanFile()` |
+| `resolver/session.ts` | session rows → `SessionView`, hierarchy queries | `toSessionView()`, `inferStatus()`, `sessionActivityState()`, `getSessionById()`, `listChildSessions()`, `listRecentMainSessions()`, `getSessionsByIds()`, `sessionScanStamp()`, `sessionForPlanFile()` |
 | `resolver/tool.ts` | tool parts → `ToolView`, metadata only | `listToolEvents()`, `listRecentToolEvents()`, `mergeTools()`, `normalizeToolStatus` |
 | `resolver/file.ts` | file-touch parts → `FileView` | `listSessionFiles()`, `listRecentSessionFiles()` |
 | `resolver/question.ts` | open `question` queue | `listOpenQuestions()` |
@@ -147,17 +167,27 @@ Plugin registration: `id = "opencode-extended-sidebar"`, load toast,
 | `resolver/boulder.ts` | `boulder.json` → works/tasks/delegates/plan | `readOmo()`, `emptyOmo()`, `findBoulder()`, `findOmoWatchDirs()`, `isOmoPresent()`, `omoStamp()`, `currentTask()`, `workRowView()`, `workStatusLabel` |
 | `resolver/plan.ts` | plan markdown frontmatter parsing | `parsePlanStatus()`, `parsePlanPendingAction()`, `approvalName()` |
 | `resolver/approval.ts` | pending-approval scan (TTL, lazy) | `listPendingApprovals()`, `resetApprovalsCache()` |
-| `resolver/approvalState.ts` | planner session state for approval rows | `planSessionStateLabel()`, `enrichApprovalSessionStates()` |
+| `resolver/approvalState.ts` | planner session state for approval rows | `planSessionStateLabel()`, `enrichApprovalSessionStates()`, `readRunContinuationState()`, `firstRunContinuationDir()` |
 | `resolver/doc.ts` | docs index: plan/drafts/notepads/proof | `readOmoDocs()`, `groupDocs()`, `resetDocsCache()`, `DOC_KIND_LABEL` |
 | `resolver/config.ts` | `oh-my-openagent.json` team mode | `readOmoConfig()` |
 | `resolver/index.ts` | aggregate | barrel |
+
+### `pware.oc.omo/constants` — OMO string literals
+
+| Module | Responsibility | Key exports |
+|---|---|---|
+| `planStatus.ts` | plan frontmatter `status:` values awaiting sign-off | `PLAN_PENDING_STATUSES`, `PlanPendingStatus` (+ per-value consts) |
+| `boulderStatus.ts` | raw boulder.json work/task status values | `BOULDER_STATUSES`, `BoulderStatus` (+ per-value consts) |
+| `backgroundTask.ts` | `.omo/run-continuation` background-task state values | `BACKGROUND_TASK_STATES`, `BackgroundTaskState` |
+| `reviewStatus.ts` | `ulw-plan` review-lifecycle status values | `REVIEW_STATUSES`, `TERMINAL_REVIEW_STATUSES`, `ReviewStatus`, `ROUND_STATUS_ACTIVE` (+ per-value consts) |
+| `verdict.ts` | review lane verdict values | `VERDICTS`, `Verdict` (+ per-value consts) |
 
 ### `pware.oc.runtime` — runtime composition
 
 | Module | Responsibility | Key exports |
 |---|---|---|
 | `pware.oc.runtime.monitor.ts` | watch boulder + poll SQLite stamps, fingerprint-driven | `startMonitor()`, `MonitorHandle` |
-| `pware.oc.runtime.mywork.ts` | the "My work" queue (questions + approvals) | `MyWorkItem`, `groupMyWork()`, `toQuestionItems()`, `toApprovalItems()`, `approvalContinueHint()`, `startWorkCommand()`, `StartWorkMode` |
+| `pware.oc.runtime.mywork.ts` | the "My work" queue (questions + approvals) | `MyWorkItem`, `groupMyWork()`, `approvalGroup()`, `toQuestionItems()`, `toApprovalItems()`, `approvalContinueHint()`, `startWorkCommand()`, `StartWorkMode` |
 | `resolver/index.ts` | unified runtime snapshot | `RuntimeSnapshot`, `readRuntimeSnapshot()`, `computeFingerprint()`, `resetRuntimeCache()` |
 | `resolver/delegate.ts` | delegate enrichment + grouping | `enrichDelegates()`, `reconcileDelegateStatus()`, `groupDelegates()`, `delegatesForSession()` |
 

@@ -110,6 +110,7 @@ import {
   type FlowEntry,
   type ToolHit,
 } from "../pware.oc.core/pware.oc.core.pulse.js"
+import { PART_TYPE_TEXT } from "../pware.oc.core/constants/pware.oc.core.constants.partType.js"
 
 export type SidebarProps = {
   sessionId: string
@@ -735,7 +736,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
       try {
         await client.session.promptAsync({
           sessionID: props.sessionId,
-          parts: [{ type: "text", text }],
+          parts: [{ type: PART_TYPE_TEXT, text }],
         })
       } catch {
         // host without message send
@@ -751,7 +752,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
       try {
         await client.session.promptAsync({
           sessionID: sessionId,
-          parts: [{ type: "text", text: "ok" }],
+          parts: [{ type: PART_TYPE_TEXT, text: "ok" }],
         })
       } catch {
         // host without message send
@@ -936,7 +937,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
           out.push({
             kind: "file",
             mark: "ready",
-            glyph: myWorkGlyph("approval"),
+            glyph: myWorkGlyph(item.kind),
             name: item.name,
             suffix: planSessionStateLabel(item.sessionState) ?? undefined,
             waiting: true,

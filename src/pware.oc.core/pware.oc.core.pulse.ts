@@ -2,6 +2,24 @@
 import { eventType } from "./pware.oc.core.events.js"
 import { basenameOf } from "./pware.oc.core.paths.js"
 import { normalizeStatus, toToolStatus } from "./pware.oc.core.status.js"
+import {
+  EVENT_MESSAGE_PART_UPDATED,
+  EVENT_PART_DELTA,
+  EVENT_REASONING_DELTA,
+  EVENT_REASONING_STARTED,
+  EVENT_SESSION_IDLE,
+  EVENT_SESSION_STATUS,
+  EVENT_STEP_ENDED,
+  EVENT_STEP_FAILED,
+  EVENT_STEP_STARTED,
+  EVENT_TEXT_DELTA,
+  EVENT_TEXT_STARTED,
+  EVENT_TOOL_CALLED,
+  EVENT_TOOL_ENDED,
+  EVENT_TOOL_FAILED,
+  EVENT_TOOL_SUCCESS,
+} from "./constants/pware.oc.core.constants.eventType.js"
+import { TOOL_BASH, TOOL_TASK } from "./constants/pware.oc.core.constants.toolName.js"
 
 export const LIVE_MS = 5_000
 export const STALE_MS = 10_000
@@ -179,46 +197,46 @@ export function flowFromEvent(
   if (!type) return { id, dir: null }
 
   if (
-    type.includes("session.idle") ||
-    type.endsWith(".step.ended") ||
-    type.endsWith(".step.failed")
+    type.includes(EVENT_SESSION_IDLE) ||
+    type.endsWith("." + EVENT_STEP_ENDED) ||
+    type.endsWith("." + EVENT_STEP_FAILED)
   ) {
     return { id, dir: "clear" }
   }
 
-  if (type.includes("tool.called")) return { id, dir: "tool" }
+  if (type.includes(EVENT_TOOL_CALLED)) return { id, dir: "tool" }
   if (
-    type.includes("tool.success") ||
-    type.includes("tool.failed") ||
-    type.includes("tool.ended")
+    type.includes(EVENT_TOOL_SUCCESS) ||
+    type.includes(EVENT_TOOL_FAILED) ||
+    type.includes(EVENT_TOOL_ENDED)
   ) {
     return { id, dir: "wait" }
   }
 
   if (
-    type.includes("text.delta") ||
-    type.includes("reasoning.delta") ||
-    type.includes("part.delta") ||
+    type.includes(EVENT_TEXT_DELTA) ||
+    type.includes(EVENT_REASONING_DELTA) ||
+    type.includes(EVENT_PART_DELTA) ||
     type.endsWith(".delta")
   ) {
     return { id, dir: "recv" }
   }
 
   if (
-    type.includes("step.started") ||
-    type.includes("text.started") ||
-    type.includes("reasoning.started")
+    type.includes(EVENT_STEP_STARTED) ||
+    type.includes(EVENT_TEXT_STARTED) ||
+    type.includes(EVENT_REASONING_STARTED)
   ) {
     return { id, dir: "wait" }
   }
 
-  if (type.includes("part.updated")) {
+  if (type.includes(EVENT_MESSAGE_PART_UPDATED)) {
     const kind = partKind(evt)
     if (kind.includes("tool")) return { id, dir: "tool" }
     return { id, dir: "recv" }
   }
 
-  if (type === "session.status" || type.endsWith("session.status")) {
+  if (type === EVENT_SESSION_STATUS || type.endsWith(EVENT_SESSION_STATUS)) {
     const flag = sessionBusyFromEvent(evt)
     if (flag.busy === false) return { id: flag.id ?? id, dir: "clear" }
     if (flag.busy === true) return { id: flag.id ?? id, dir: "wait" }
@@ -236,7 +254,7 @@ export function sessionBusyFromEvent(evt: unknown): { id: string | null; busy: b
       : o
   const id = sessionIdFromEvent(evt)
   const kind = String(o.type ?? "").toLowerCase()
-  if (kind === "session.idle" || kind.endsWith("session.idle")) {
+  if (kind === EVENT_SESSION_IDLE || kind.endsWith(EVENT_SESSION_IDLE)) {
     return { id, busy: false }
   }
   const status = props.status
@@ -488,7 +506,7 @@ export function preferToolLabel(next: string, prev?: string | null): string {
   if (!b) return a
   const bare = (s: string) => {
     const t = s.toLowerCase()
-    return t === "task" || t === "tool" || t === "bash" || t === "unknown"
+    return t === TOOL_TASK || t === "tool" || t === TOOL_BASH || t === "unknown"
   }
   return bare(a) && !bare(b) ? b : a
 }
@@ -559,15 +577,15 @@ function toolIdFromEvent(evt: unknown): string | null {
 
 function toolStatusFromEvent(evt: unknown): ToolHit["status"] | null {
   const type = eventType(evt)
-  if (type.includes("tool.failed")) return "error"
-  if (type.includes("tool.success") || type.includes("tool.ended")) return "completed"
-  if (type.includes("tool.called")) return "running"
+  if (type.includes(EVENT_TOOL_FAILED)) return "error"
+  if (type.includes(EVENT_TOOL_SUCCESS) || type.includes(EVENT_TOOL_ENDED)) return "completed"
+  if (type.includes(EVENT_TOOL_CALLED)) return "running"
   for (const bag of eventBags(evt)) {
     const state = bag.state && typeof bag.state === "object" ? (bag.state as Record<string, unknown>) : null
     const mapped = toToolStatus(String(state?.status ?? bag.status ?? ""))
     if (mapped === "error" || mapped === "completed" || mapped === "running") return mapped
   }
-  if (type.includes("part.updated") && partKind(evt).includes("tool")) return null
+  if (type.includes(EVENT_MESSAGE_PART_UPDATED) && partKind(evt).includes("tool")) return null
   return null
 }
 

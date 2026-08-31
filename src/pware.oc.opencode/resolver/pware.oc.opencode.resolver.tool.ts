@@ -8,6 +8,7 @@ import { preferToolLabel, shortToolLabel, toEpochMs, type ToolHit } from "../../
 import { str } from "../../pware.oc.core/pware.oc.core.paths.js"
 import { uniqueIds, type SqlDb } from "../../pware.oc.core/pware.oc.core.sqlite.js"
 import { toToolStatus, type ToolStatus } from "../../pware.oc.core/pware.oc.core.status.js"
+import { PART_TYPE_TOOL } from "../../pware.oc.core/constants/pware.oc.core.constants.partType.js"
 
 export type { ToolStatus }
 
@@ -122,7 +123,7 @@ export function listToolEvents(db: SqlDb, sessionId: string, limit = TOOL_ROWS):
       `SELECT ${toolColumns()}
        FROM part
        WHERE session_id = ?
-         AND json_extract(data,'$.type') = 'tool'
+         AND json_extract(data,'$.type') = '${PART_TYPE_TOOL}'
        ORDER BY time_created DESC
        LIMIT ${TOOL_SCAN}`,
       sessionId,
@@ -144,7 +145,7 @@ export function listRecentToolEvents(db: SqlDb, sessionIds: string[], limit = TO
       `SELECT ${toolColumns()}
        FROM part
        WHERE session_id IN (${placeholders})
-         AND json_extract(data,'$.type') = 'tool'
+         AND json_extract(data,'$.type') = '${PART_TYPE_TOOL}'
        ORDER BY time_created DESC
        LIMIT ${TOOL_SCAN}`,
       ...clean,

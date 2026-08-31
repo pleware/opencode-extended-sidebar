@@ -4,8 +4,6 @@
  * Session rows → SessionView plus the hierarchy queries (current, children,
  * siblings, recent mains, lookups by id). Read-only against opencode.db.
  */
-import fs from "node:fs"
-import path from "node:path"
 import { basenameOf, str } from "../../pware.oc.core/pware.oc.core.paths.js"
 import { uniqueIds, type SqlDb } from "../../pware.oc.core/pware.oc.core.sqlite.js"
 
@@ -90,38 +88,24 @@ export function getSessionById(db: SqlDb, id: string): SessionRow | null {
   )
 }
 
-/** The run-continuation marker's background-task state, or null when absent/bad. */
-function readBackgroundState(dir: string, sessionId: string): string | null {
-  try {
-    const raw = JSON.parse(
-      fs.readFileSync(path.join(dir, `${sessionId}.json`), "utf8"),
-    ) as { sources?: { "background-task"?: { state?: unknown } } }
-    const state = raw?.sources?.["background-task"]?.state
-    return typeof state === "string" ? state : null
-  } catch {
-    return null
-  }
-}
-
 /**
  * Is this session still working, and how? Streaming = a fresh `time_updated`;
- * awaiting-background = stale in SQLite but its run-continuation marker says a
- * background task is active; idle/archived/unknown otherwise.
+ * awaiting-background = stale in SQLite but the caller's already-resolved
+ * `backgroundTaskActive` (`.omo/run-continuation` marker) is true;
+ * idle/archived/unknown otherwise. The omo layer resolves the marker — this
+ * opencode function never reads omo files.
  */
 export function sessionActivityState(
   db: SqlDb,
   sessionId: string,
-  opts?: { runContinuationDir?: string | null; now?: number },
+  opts?: { backgroundTaskActive?: boolean | null; now?: number },
 ): SessionActivityState {
   const row = getSessionById(db, sessionId)
   if (!row) return { running: false, state: "unknown" }
   if (row.time_archived) return { running: false, state: "archived" }
   const now = opts?.now ?? Date.now()
   if (now - row.time_updated <= RUNNING_MS) return { running: true, state: "streaming" }
-  if (opts?.runContinuationDir) {
-    const state = readBackgroundState(opts.runContinuationDir, sessionId)
-    if (state === "active") return { running: true, state: "awaiting-background" }
-  }
+  if (opts?.backgroundTaskActive) return { running: true, state: "awaiting-background" }
   return { running: false, state: "idle" }
 }
 

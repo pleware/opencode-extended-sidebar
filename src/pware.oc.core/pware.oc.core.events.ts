@@ -1,4 +1,24 @@
 /** Host event type + kind. Never reads request or response bodies. */
+import {
+  EVENT_FILE_EDITED,
+  EVENT_MESSAGE_PART_UPDATED,
+  EVENT_PART_DELTA,
+  EVENT_REASONING_DELTA,
+  EVENT_REASONING_STARTED,
+  EVENT_SESSION_CREATED,
+  EVENT_SESSION_DIFF,
+  EVENT_SESSION_IDLE,
+  EVENT_SESSION_STATUS,
+  EVENT_SESSION_UPDATED,
+  EVENT_STEP_ENDED,
+  EVENT_STEP_FAILED,
+  EVENT_STEP_STARTED,
+  EVENT_TEXT_DELTA,
+  EVENT_TOOL_CALLED,
+  EVENT_TOOL_ENDED,
+  EVENT_TOOL_FAILED,
+  EVENT_TOOL_SUCCESS,
+} from "./constants/pware.oc.core.constants.eventType.js"
 
 export type EventKind = "flow" | "tool" | "file" | "db-refresh"
 
@@ -10,31 +30,32 @@ export function eventType(evt: unknown): string {
 export function eventKind(type: string): EventKind | null {
   const t = (type || "").toLowerCase()
   if (!t) return null
-  if (t.includes("file.edited") || t.includes("session.diff")) return "file"
+  if (t.includes(EVENT_FILE_EDITED) || t.includes(EVENT_SESSION_DIFF)) return "file"
   if (
-    t.includes("tool.called") ||
-    t.includes("tool.success") ||
-    t.includes("tool.failed") ||
-    t.includes("tool.ended")
+    t.includes(EVENT_TOOL_CALLED) ||
+    t.includes(EVENT_TOOL_SUCCESS) ||
+    t.includes(EVENT_TOOL_FAILED) ||
+    t.includes(EVENT_TOOL_ENDED)
   ) {
     return "tool"
   }
   if (
-    t.includes("session.status") ||
-    t.includes("session.idle") ||
-    t.includes("session.created") ||
-    t.includes("session.updated") ||
-    t.includes("part.updated") ||
-    t.includes("step.started") ||
-    t.includes("step.ended") ||
-    t.includes("step.failed")
+    t.includes(EVENT_SESSION_STATUS) ||
+    t.includes(EVENT_SESSION_IDLE) ||
+    t.includes(EVENT_SESSION_CREATED) ||
+    t.includes(EVENT_SESSION_UPDATED) ||
+    t.includes(EVENT_MESSAGE_PART_UPDATED) ||
+    t.includes(EVENT_STEP_STARTED) ||
+    t.includes(EVENT_STEP_ENDED) ||
+    t.includes(EVENT_STEP_FAILED)
   ) {
     return "db-refresh"
   }
   if (
-    t.includes("text.delta") ||
-    t.includes("reasoning") ||
-    t.includes("part.delta") ||
+    t.includes(EVENT_TEXT_DELTA) ||
+    t.includes(EVENT_REASONING_DELTA) ||
+    t.includes(EVENT_REASONING_STARTED) ||
+    t.includes(EVENT_PART_DELTA) ||
     t.endsWith(".delta")
   ) {
     return "flow"

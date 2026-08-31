@@ -11,6 +11,7 @@ import { canonicalizePath, fileStamp, resolveProjectFile } from "../../pware.oc.
 import { composeMark, formatAge, pulseAgeMs, toEpochMs, type AgentMark } from "../../pware.oc.core/pware.oc.core.pulse.js"
 import { workStatusGlyph } from "../../pware.oc.ui/pware.oc.ui.glyphs.js"
 import { taskRank, toWorkLabel, workIsTerminal } from "../../pware.oc.core/pware.oc.core.status.js"
+import { BOULDER_STATUS_PENDING, BOULDER_STATUS_RUNNING } from "../constants/pware.oc.omo.constants.boulderStatus.js"
 
 export { workIsTerminal }
 export { toWorkLabel as workStatusLabel }
@@ -330,7 +331,7 @@ function collectTasks(raw: Record<string, RawTask> | undefined): TaskView[] {
       sessionId: stripSessionPrefix(t.session_id),
       agent: t.agent ?? null,
       category: t.category ?? null,
-      status: (t.status || "").toLowerCase() || (t.started_at ? "running" : "pending"),
+      status: (t.status || "").toLowerCase() || (t.started_at ? BOULDER_STATUS_RUNNING : BOULDER_STATUS_PENDING),
       startedAt: parseStamp(t.started_at),
       endedAt: parseStamp(t.ended_at),
       elapsedMs: typeof t.elapsed_ms === "number" && Number.isFinite(t.elapsed_ms) ? t.elapsed_ms : null,

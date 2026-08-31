@@ -14,6 +14,7 @@ import { str } from "../../pware.oc.core/pware.oc.core.paths.js"
 import { toEpochMs } from "../../pware.oc.core/pware.oc.core.pulse.js"
 import { openReadonlyDb, withDbRead } from "../../pware.oc.core/pware.oc.core.sqlite.js"
 import { toToolStatus } from "../../pware.oc.core/pware.oc.core.status.js"
+import { PART_TYPE_TOOL } from "../../pware.oc.core/constants/pware.oc.core.constants.partType.js"
 
 export type OpenQuestion = {
   sessionId: string
@@ -50,7 +51,7 @@ export function listOpenQuestions(opts: {
                 json_extract(p.data,'$.state.time.end') AS tend
          FROM part p
          JOIN session s ON s.id = p.session_id
-         WHERE json_extract(p.data,'$.type') = 'tool'
+         WHERE json_extract(p.data,'$.type') = '${PART_TYPE_TOOL}'
            AND json_extract(p.data,'$.tool') = 'question'
            AND (s.time_archived IS NULL OR s.time_archived = 0)
            AND s.project_id = ?

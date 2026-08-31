@@ -8,6 +8,8 @@ import { getOes, OES_DEFAULTS } from "../pware.oc.core/pware.oc.core.oes.js"
 import { eventKind, eventType } from "../pware.oc.core/pware.oc.core.events.js"
 import { basenameOf, finiteNum } from "../pware.oc.core/pware.oc.core.paths.js"
 import { sessionIdFromEvent } from "../pware.oc.core/pware.oc.core.pulse.js"
+import { READ_TOOLS, WRITE_TOOLS } from "../pware.oc.core/constants/pware.oc.core.constants.toolName.js"
+import { PART_TYPE_PATCH } from "../pware.oc.core/constants/pware.oc.core.constants.partType.js"
 
 export { basenameOf }
 
@@ -199,18 +201,20 @@ export function filesFromEvent(evt: unknown, sessionId: string, filter?: FileFil
   return out
 }
 
-const WRITE_TOOLS = new Set(["edit", "write", "multiedit", "apply_edit", "applyedit", "delete", "remove"])
-const READ_TOOLS = new Set(["read", "view", "read_file", "readfile"])
+const WRITE_TOOL_SET = new Set<string>(WRITE_TOOLS)
+const READ_TOOL_SET = new Set<string>(READ_TOOLS)
 
 function touchOfTool(tool: string): FileTouch | null {
-  if (READ_TOOLS.has(tool)) return "read"
-  if (WRITE_TOOLS.has(tool)) return "write"
+  if (READ_TOOL_SET.has(tool)) return "read"
+  if (WRITE_TOOL_SET.has(tool)) return "write"
   return null
 }
 
 const FILEPATH_RE = /"(?:filePath|filepath)"\s*:\s*"((?:\\.|[^"\\])+)"/
-const TOOL_FILE_RE =
-  /"tool"\s*:\s*"(edit|write|multiedit|apply_edit|applyedit|delete|remove|read|view|read_file|readfile)"/i
+const TOOL_FILE_RE = new RegExp(
+  `"tool"\\s*:\\s*"(${[...WRITE_TOOLS, ...READ_TOOLS].join("|")})"`,
+  "i",
+)
 
 function unescapeJsonString(s: string): string {
   try {
@@ -224,7 +228,7 @@ const PATCH_FILES_RE = /"files"\s*:\s*\[([^\]]*)\]/
 
 /** Paths from `part` type patch `{ files: [...] }`. No bodies. */
 export function filesFromPatchData(data: string, at: number, filter?: FileFilter): FileView[] {
-  if (!/"type"\s*:\s*"patch"/.test(data)) return []
+  if (!new RegExp(`"type"\\s*:\\s*"${PART_TYPE_PATCH}"`).test(data)) return []
   const block = data.match(PATCH_FILES_RE)?.[1]
   if (!block) return []
   const out: FileView[] = []

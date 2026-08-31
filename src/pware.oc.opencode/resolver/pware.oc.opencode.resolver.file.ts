@@ -9,6 +9,7 @@ import { fileHitFromExtracted, filesFromPatchJson, type FileFilter, type FileVie
 import { str } from "../../pware.oc.core/pware.oc.core.paths.js"
 import { toEpochMs } from "../../pware.oc.core/pware.oc.core.pulse.js"
 import { uniqueIds, type SqlDb } from "../../pware.oc.core/pware.oc.core.sqlite.js"
+import { PART_TYPE_PATCH } from "../../pware.oc.core/constants/pware.oc.core.constants.partType.js"
 
 const FILE_SCAN = 80
 
@@ -77,7 +78,7 @@ function fileViewsFromRows(rows: readonly SessionFileRow[], filter?: FileFilter)
   }
   for (const row of rows) {
     const at = toEpochMs(row.time_updated) ?? toEpochMs(row.time_created) ?? 0
-    if (str(row.kind) === "patch") {
+    if (str(row.kind) === PART_TYPE_PATCH) {
       for (const f of filesFromPatchJson(row.files, at, filter)) add(f)
       continue
     }

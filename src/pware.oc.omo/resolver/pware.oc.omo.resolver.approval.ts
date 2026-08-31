@@ -10,6 +10,7 @@ import fs from "node:fs"
 import path from "node:path"
 import { createStampCache } from "../../pware.oc.core/pware.oc.core.cache.js"
 import { canonicalizePath } from "../../pware.oc.core/pware.oc.core.paths.js"
+import { PLAN_PENDING_STATUSES } from "../constants/pware.oc.omo.constants.planStatus.js"
 import { findOmoWatchDirs } from "./pware.oc.omo.resolver.boulder.js"
 import {
   approvalName,
@@ -18,12 +19,7 @@ import {
   type ApprovalItem,
 } from "./pware.oc.omo.resolver.plan.js"
 
-const PENDING_STATUS = new Set([
-  "awaiting-approval",
-  "pending-approval",
-  "pending_approval",
-  "pending",
-])
+const PENDING_STATUS = new Set<string>(PLAN_PENDING_STATUSES)
 const MAX_ITEMS = 40
 const TTL_MS = 2_000
 

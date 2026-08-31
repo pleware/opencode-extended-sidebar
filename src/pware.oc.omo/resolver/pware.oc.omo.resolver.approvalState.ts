@@ -14,6 +14,7 @@ import {
   type SessionActivityState,
 } from "../../pware.oc.opencode/resolver/pware.oc.opencode.resolver.session.js"
 import { openReadonlyDb, withDbRead } from "../../pware.oc.core/pware.oc.core.sqlite.js"
+import { BACKGROUND_TASK_ACTIVE } from "../constants/pware.oc.omo.constants.backgroundTask.js"
 import { findOmoWatchDirs } from "./pware.oc.omo.resolver.boulder.js"
 import type { ApprovalItem } from "./pware.oc.omo.resolver.plan.js"
 
@@ -30,12 +31,35 @@ export function planSessionStateLabel(state: SessionActivityState | null): strin
   return state ? STATE_LABELS[state.state] : null
 }
 
-function firstRunContinuationDir(projectRoot: string): string | null {
+/** First existing `.omo`/`.sisyphus` run-continuation directory, or null. */
+export function firstRunContinuationDir(projectRoot: string): string | null {
   for (const omoDir of findOmoWatchDirs(projectRoot)) {
     const p = path.join(omoDir, "run-continuation")
     if (fs.existsSync(p)) return p
   }
   return null
+}
+
+/**
+ * The `.omo/run-continuation` background-task state for a session, or null when
+ * absent/unreadable. Lives in the omo layer — opencode must not read omo files.
+ */
+export function readRunContinuationState(
+  projectRoot: string | null | undefined,
+  sessionId: string,
+): string | null {
+  if (!projectRoot) return null
+  const dir = firstRunContinuationDir(projectRoot)
+  if (!dir) return null
+  try {
+    const raw = JSON.parse(
+      fs.readFileSync(path.join(dir, `${sessionId}.json`), "utf8"),
+    ) as { sources?: { "background-task"?: { state?: unknown } } }
+    const state = raw?.sources?.["background-task"]?.state
+    return typeof state === "string" ? state : null
+  } catch {
+    return null
+  }
 }
 
 function blank(items: readonly ApprovalItem[]): ApprovalItem[] {
@@ -50,7 +74,6 @@ export function enrichApprovalSessionStates(
   const dbPath = opts.dbPath
   const projectRoot = opts.projectRoot
   if (!dbPath || !projectRoot || !fs.existsSync(dbPath)) return blank(items)
-  const runContinuationDir = firstRunContinuationDir(projectRoot)
   return withDbRead(
     () => {
       const db = openReadonlyDb(dbPath)
@@ -58,7 +81,10 @@ export function enrichApprovalSessionStates(
       return items.map((item) => {
         const sessionId = sessionForPlanFile(db, item.rel)
         const sessionState = sessionId
-          ? sessionActivityState(db, sessionId, { runContinuationDir, now: opts.now })
+          ? sessionActivityState(db, sessionId, {
+              backgroundTaskActive: readRunContinuationState(projectRoot, sessionId) === BACKGROUND_TASK_ACTIVE,
+              now: opts.now,
+            })
           : null
         return { ...item, sessionState }
       })

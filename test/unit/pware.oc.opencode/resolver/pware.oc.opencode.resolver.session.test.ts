@@ -1,6 +1,4 @@
 import { afterAll, describe, expect, test } from "bun:test"
-import fs from "node:fs"
-import path from "node:path"
 import {
   inferStatus,
   sessionActivityState,
@@ -140,13 +138,6 @@ describe("sessionActivityState", () => {
 
   afterAll(() => fix.dispose())
 
-  const runContinuationDir = path.join(fix.dir, "run-continuation")
-  fs.mkdirSync(runContinuationDir, { recursive: true })
-  fs.writeFileSync(
-    path.join(runContinuationDir, "ses_bg.json"),
-    JSON.stringify({ sources: { "background-task": { state: "active" } } }),
-  )
-
   const db = () => openReadonlyDb(fix.dbPath)!
   const now = t0
 
@@ -166,19 +157,17 @@ describe("sessionActivityState", () => {
     expect(sessionActivityState(db(), "ses_idle", { now })).toEqual({ running: false, state: "idle" })
   })
 
-  test("stale time_updated with an active run-continuation marker is awaiting-background", () => {
-    expect(sessionActivityState(db(), "ses_bg", { now, runContinuationDir })).toEqual({
+  test("stale time_updated with an active background-task marker is awaiting-background", () => {
+    expect(sessionActivityState(db(), "ses_bg", { now, backgroundTaskActive: true })).toEqual({
       running: true,
       state: "awaiting-background",
     })
   })
 
-  test("a nonexistent run-continuation dir soft-fails to idle", () => {
-    expect(
-      sessionActivityState(db(), "ses_bg", {
-        now,
-        runContinuationDir: path.join(fix.dir, "does-not-exist"),
-      }),
-    ).toEqual({ running: false, state: "idle" })
+  test("a false background-task state soft-fails to idle", () => {
+    expect(sessionActivityState(db(), "ses_bg", { now, backgroundTaskActive: false })).toEqual({
+      running: false,
+      state: "idle",
+    })
   })
 })
