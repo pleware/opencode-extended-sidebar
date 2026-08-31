@@ -1,8 +1,9 @@
 /** @jsxImportSource @opentui/solid */
 /** Perf tab: where a session's wall clock goes, per model and per tool. */
-import { createMemo, createSignal, For, Show, type JSX } from "solid-js"
+import { createMemo, For, Show, type JSX } from "solid-js"
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
-import { ClickText, FoldHeader, kvRead, makeFoldToggle, type ThemeColors } from "../pware.oc.ui/pware.oc.ui.chrome.js"
+import { ClickText, type ThemeColors } from "../pware.oc.ui/pware.oc.ui.chrome.js"
+import { FoldSection, useFold } from "../pware.oc.ui/pware.oc.ui.sections.js"
 import { openPerfLog } from "../pware.oc.ui/pware.oc.ui.menudialogs.js"
 import type { PerfLogKind } from "./pware.oc.perf.reader.js"
 import {
@@ -259,14 +260,11 @@ export type PerfPanelProps = {
 }
 
 export function PerfPanel(props: PerfPanelProps): JSX.Element {
-  const [foldModels, setFoldModels] = createSignal(kvRead(props.api, KV_FOLD_MODELS, false))
-  const [foldTime, setFoldTime] = createSignal(kvRead(props.api, KV_FOLD_TIME, false))
-  const [foldTools, setFoldTools] = createSignal(kvRead(props.api, KV_FOLD_TOOLS, false))
-  const [foldTrend, setFoldTrend] = createSignal(kvRead(props.api, KV_FOLD_TREND, false))
-  const [foldHistory, setFoldHistory] = createSignal(kvRead(props.api, KV_FOLD_HISTORY, false))
-
-  const toggle = (set: (fn: (prev: boolean) => boolean) => void, key: string) =>
-    makeFoldToggle(props.api, key, set)
+  const foldModels = useFold(props.api, KV_FOLD_MODELS)
+  const foldTime = useFold(props.api, KV_FOLD_TIME)
+  const foldTools = useFold(props.api, KV_FOLD_TOOLS)
+  const foldTrend = useFold(props.api, KV_FOLD_TREND)
+  const foldHistory = useFold(props.api, KV_FOLD_HISTORY)
 
   const totals = () => props.perf.totals
   const wall = () => Math.max(1, totals().wallMs)
@@ -323,146 +321,121 @@ export function PerfPanel(props: PerfPanelProps): JSX.Element {
         }
       >
         <box flexDirection="column" gap={1}>
-          <box flexDirection="column" gap={0}>
-            <FoldHeader
-              title="Models"
-              open={!foldModels()}
-              count={props.perf.models.length}
-              suffix={tokenSummary(totals())}
-              colors={props.colors}
-              onToggle={toggle(setFoldModels, KV_FOLD_MODELS)}
-              onDetail={() => openLog("models")}
-            />
-            <Show when={!foldModels()}>
-              <box flexDirection="column" gap={0} paddingLeft={1}>
-                <For each={models()}>
-                  {(m) => (
-                    <ModelRow
-                      model={m}
-                      colors={props.colors}
-                      lineMax={props.lineMax}
-                      frame={props.frame}
-                      live={Boolean(props.livePhase) && m === props.perf.models[0]}
-                    />
-                  )}
-                </For>
-              </box>
-            </Show>
-          </box>
+          <FoldSection
+            title="Models"
+            open={foldModels.open()}
+            count={props.perf.models.length}
+            suffix={tokenSummary(totals())}
+            colors={props.colors}
+            onToggle={foldModels.toggle}
+            onDetail={() => openLog("models")}
+          >
+            <For each={models()}>
+              {(m) => (
+                <ModelRow
+                  model={m}
+                  colors={props.colors}
+                  lineMax={props.lineMax}
+                  frame={props.frame}
+                  live={Boolean(props.livePhase) && m === props.perf.models[0]}
+                />
+              )}
+            </For>
+          </FoldSection>
 
-          <box flexDirection="column" gap={0}>
-            <FoldHeader
-              title="Time"
-              open={!foldTime()}
-              suffix={timeSummary(totals())}
-              colors={props.colors}
-              onToggle={toggle(setFoldTime, KV_FOLD_TIME)}
-              onDetail={() => openLog("time")}
-            />
-            <Show when={!foldTime()}>
-              <box flexDirection="column" gap={0} paddingLeft={1}>
-                <For each={phases()}>
-                  {(p) => (
-                    <PhaseRow
-                      phase={p.key}
-                      glyph={p.glyph}
-                      label={p.label}
-                      ms={p.ms}
-                      share={p.ms / wall()}
-                      colors={props.colors}
-                      lineMax={props.lineMax}
-                      onSelect={() => openLog(p.key)}
-                    />
-                  )}
-                </For>
-              </box>
-            </Show>
-          </box>
+          <FoldSection
+            title="Time"
+            open={foldTime.open()}
+            suffix={timeSummary(totals())}
+            colors={props.colors}
+            onToggle={foldTime.toggle}
+            onDetail={() => openLog("time")}
+          >
+            <For each={phases()}>
+              {(p) => (
+                <PhaseRow
+                  phase={p.key}
+                  glyph={p.glyph}
+                  label={p.label}
+                  ms={p.ms}
+                  share={p.ms / wall()}
+                  colors={props.colors}
+                  lineMax={props.lineMax}
+                  onSelect={() => openLog(p.key)}
+                />
+              )}
+            </For>
+          </FoldSection>
 
           <Show when={props.perf.tools.length > 0}>
-            <box flexDirection="column" gap={0}>
-              <FoldHeader
+              <FoldSection
                 title="Slow tools"
-                open={!foldTools()}
+                open={foldTools.open()}
                 count={props.perf.tools.length}
                 suffix={formatSpan(toolTotal())}
                 colors={props.colors}
-                onToggle={toggle(setFoldTools, KV_FOLD_TOOLS)}
+                onToggle={foldTools.toggle}
                 onDetail={() => openLog("tool")}
-              />
-              <Show when={!foldTools()}>
-                <box flexDirection="column" gap={0} paddingLeft={1}>
-                  <For each={tools()}>
-                    {(t) => (
-                      <ToolRow
-                        tool={t}
-                        share={toolTotal() > 0 ? t.totalMs / toolTotal() : null}
-                        colors={props.colors}
-                        lineMax={props.lineMax}
-                        onSelect={() => openLog("tool", t.name)}
-                      />
-                    )}
-                  </For>
-                </box>
-              </Show>
-            </box>
+              >
+                <For each={tools()}>
+                  {(t) => (
+                    <ToolRow
+                      tool={t}
+                      share={toolTotal() > 0 ? t.totalMs / toolTotal() : null}
+                      colors={props.colors}
+                      lineMax={props.lineMax}
+                      onSelect={() => openLog("tool", t.name)}
+                    />
+                  )}
+                </For>
+              </FoldSection>
           </Show>
 
           <Show when={hasTrend()}>
-            <box flexDirection="column" gap={0}>
-              <FoldHeader
+              <FoldSection
                 title="Trend"
-                open={!foldTrend()}
+                open={foldTrend.open()}
                 count={props.perf.trend.length}
                 colors={props.colors}
-                onToggle={toggle(setFoldTrend, KV_FOLD_TREND)}
-              />
-              <Show when={!foldTrend()}>
-                <box flexDirection="column" gap={0} paddingLeft={1}>
-                  <SparkRow
-                    label="wait"
-                    values={trendWait()}
-                    fg={props.colors.warning || props.colors.text}
-                    colors={props.colors}
-                    lineMax={props.lineMax}
-                  />
-                  <SparkRow
-                    label="tok/s"
-                    values={trendRate()}
-                    fg={props.colors.success}
-                    colors={props.colors}
-                    lineMax={props.lineMax}
-                  />
-                </box>
-              </Show>
-            </box>
+                onToggle={foldTrend.toggle}
+              >
+                <SparkRow
+                  label="wait"
+                  values={trendWait()}
+                  fg={props.colors.warning || props.colors.text}
+                  colors={props.colors}
+                  lineMax={props.lineMax}
+                />
+                <SparkRow
+                  label="tok/s"
+                  values={trendRate()}
+                  fg={props.colors.success}
+                  colors={props.colors}
+                  lineMax={props.lineMax}
+                />
+              </FoldSection>
           </Show>
 
           <Show when={history().length > 0}>
-            <box flexDirection="column" gap={0}>
-              <FoldHeader
+              <FoldSection
                 title="History"
-                open={!foldHistory()}
+                open={foldHistory.open()}
                 count={history().length}
                 colors={props.colors}
-                onToggle={toggle(setFoldHistory, KV_FOLD_HISTORY)}
-              />
-              <Show when={!foldHistory()}>
-                <box flexDirection="column" gap={0} paddingLeft={1}>
-                  <For each={history()}>
-                    {(row) => (
-                      <HistoryRow
-                        row={row}
-                        colors={props.colors}
-                        lineMax={props.lineMax}
-                        current={row.id === props.currentSessionId}
-                        onSelect={() => props.onSelect(row.id)}
-                      />
-                    )}
-                  </For>
-                </box>
-              </Show>
-            </box>
+                onToggle={foldHistory.toggle}
+              >
+                <For each={history()}>
+                  {(row) => (
+                    <HistoryRow
+                      row={row}
+                      colors={props.colors}
+                      lineMax={props.lineMax}
+                      current={row.id === props.currentSessionId}
+                      onSelect={() => props.onSelect(row.id)}
+                    />
+                  )}
+                </For>
+              </FoldSection>
           </Show>
         </box>
       </Show>

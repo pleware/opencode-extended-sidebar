@@ -71,13 +71,15 @@ src/
 │   └── resolver/
 │       ├── index.ts
 │       └── pware.oc.runtime.resolver.delegate.ts
-├── pware.oc.perf/                         # turn-timing analysis
+├── pware.oc.perf/                         # turn-timing analysis + plugin self-cost
 │   ├── index.ts
 │   ├── pware.oc.perf.reader.ts
+│   ├── pware.oc.perf.self.ts
 │   └── pware.oc.perf.view.tsx
 └── pware.oc.ui/                           # TUI layer
     ├── index.ts
     ├── pware.oc.ui.chrome.tsx
+    ├── pware.oc.ui.sections.tsx
     ├── pware.oc.ui.sidebar.tsx
     ├── pware.oc.ui.menudialogs.tsx
     └── pware.oc.ui.glyphs.tsx
@@ -165,8 +167,8 @@ Plugin registration: `id = "opencode-extended-sidebar"`, load toast,
 | Module | Responsibility | Key exports |
 |---|---|---|
 | `resolver/boulder.ts` | `boulder.json` → works/tasks/delegates/plan | `readOmo()`, `emptyOmo()`, `findBoulder()`, `findOmoWatchDirs()`, `isOmoPresent()`, `omoStamp()`, `currentTask()`, `workRowView()`, `workStatusLabel` |
-| `resolver/plan.ts` | plan markdown frontmatter parsing | `parsePlanStatus()`, `parsePlanPendingAction()`, `approvalName()` |
-| `resolver/approval.ts` | pending-approval scan (TTL, lazy) | `listPendingApprovals()`, `resetApprovalsCache()` |
+| `resolver/plan.ts` | plan markdown frontmatter parsing | `parsePlanStatus()`, `parsePlanPendingAction()`, `parseReviewBlock()`, `approvalName()` |
+| `resolver/approval.ts` | approval + drafting scan (TTL, lazy) | `listPendingApprovals()`, `listDraftingApprovals()`, `resetApprovalsCache()` |
 | `resolver/approvalState.ts` | planner session state for approval rows | `planSessionStateLabel()`, `enrichApprovalSessionStates()`, `readRunContinuationState()`, `firstRunContinuationDir()` |
 | `resolver/doc.ts` | docs index: plan/drafts/notepads/proof | `readOmoDocs()`, `groupDocs()`, `resetDocsCache()`, `DOC_KIND_LABEL` |
 | `resolver/config.ts` | `oh-my-openagent.json` team mode | `readOmoConfig()` |
@@ -191,21 +193,23 @@ Plugin registration: `id = "opencode-extended-sidebar"`, load toast,
 | `resolver/index.ts` | unified runtime snapshot | `RuntimeSnapshot`, `readRuntimeSnapshot()`, `computeFingerprint()`, `resetRuntimeCache()` |
 | `resolver/delegate.ts` | delegate enrichment + grouping | `enrichDelegates()`, `reconcileDelegateStatus()`, `groupDelegates()`, `delegatesForSession()` |
 
-### `pware.oc.perf` — timing analysis
+### `pware.oc.perf` — timing analysis + plugin self-cost
 
 | Module | Responsibility | Key exports |
 |---|---|---|
 | `reader.ts` | wall-clock split per model/tool, dated logs | `readPerfSnapshot()`, `emptyPerf()`, `aggregate()`, `readPerfLog()`, `formatPerfLog()`, `collectPerfLogRows()`, `formatColumns()`, `toolLogCall()` |
+| `self.ts` | plugin self-cost: event/scan/tick latency + renderer FPS | `selfTime()`, `readSelfStats()`, `resetSelfStats()`, `setSelfFps()`, `readRendererFps()`, `formatSelfLine()`, `SelfStats` |
 | `view.tsx` | Perf tab | `PerfPanel` |
 
 ### `pware.oc.ui` — TUI layer
 
 | Module | Responsibility | Key exports |
 |---|---|---|
-| `chrome.tsx` | shared chrome, theme colours, kv persistence | `BrandTabs`, `ClickText`, `FoldHeader`, `DiffStat`, `textAttrs()`, `kvRead()`, `kvWrite()`, `kvReadOne()`, `kvWriteOne()`, `makeFoldToggle()`, `ThemeColors` |
+| `chrome.tsx` | shared chrome, theme colours, kv persistence | `BrandTabs`, `ClickText`, `FoldHeader`, `DiffStat`, `textAttrs()`, `kvRead()`, `kvWrite()`, `kvReadOne()`, `kvWriteOne()`, `ThemeColors` |
+| `sections.tsx` | shared sidebar primitives: kv-persisted fold state, foldable sections, budget-sliced data groups, brand+tabs+panel columns | `useFold()`, `FoldSection`, `GroupSection`, `TabColumn` |
 | `sidebar.tsx` | the panel: groups, tabs, live rows | `SidebarPanel` |
 | `menudialogs.tsx` | every popup via one `openDialog()` choke-point | `openFileDetail()`, `openToolDetail()`, `openWorkDetail()`, `openApprovalDialog()`, `openDocDetail()`, `openTextPreview()`, `openPerfLog()` |
-| `glyphs.tsx` | status → character mappings | `workStatusGlyph()`, `markGlyph()`, `flowGlyph()`, `spinnerFrame()`, `flowBlinkOn()`, `myWorkGlyph()`, `fileLetterMark()`, `SPINNER_FRAMES`, `GROUP_GLYPH`, `THINK_GLYPH` |
+| `glyphs.tsx` | status → character mappings | `workStatusGlyph()`, `markGlyph()`, `flowGlyph()`, `spinnerFrame()`, `flowBlinkOn()`, `myWorkGlyph()`, `reviewLaneGlyph()`, `reviewStateSuffix()`, `fileLetterMark()`, `SPINNER_FRAMES`, `GROUP_GLYPH`, `THINK_GLYPH` |
 
 ## Tests
 
@@ -274,6 +278,7 @@ full-consistency rename of the runtime symbols to `RuntimeSnapshot`,
 | `sidebar.tsx` | `pware.oc.ui/pware.oc.ui.sidebar.tsx` |
 | `pware.oc.ui.menudialogs.tsx` | `pware.oc.ui/pware.oc.ui.menudialogs.tsx` |
 | `pware.oc.ui.glyphs.tsx` | `pware.oc.ui/pware.oc.ui.glyphs.tsx` |
+| — (new module) | `pware.oc.ui/pware.oc.ui.sections.tsx` — shared primitives (`useFold`, `FoldSection`, `GroupSection`, `TabColumn`) extracted from `sidebar.tsx` + `perfview.tsx`; no flat-tree counterpart |
 
 All relative imports in `src/` and `test/` are updated in the same move
 (`tests-sync`), and `package.json` `exports` repoints at the new entry.

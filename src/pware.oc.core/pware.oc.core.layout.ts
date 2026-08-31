@@ -22,7 +22,6 @@ export const SESSION_MORE_STEP = 4
 export const ROW_MIN = {
   delegates: 2,
   files: 3,
-  mywork: 2,
   omo: 3,
   sessions: 2,
   tools: 3,

@@ -48,7 +48,7 @@ OpenCode gives you one conversation at a time. Real work looks different: an orc
 
 ## ? My work — what is waiting on you
 
-> One queue of things that need **your** action, shown first in the core group. Open `question` tools anywhere in the project appear as `?` rows — click to jump to the session and answer. OMO plans and drafts with `status: awaiting-approval` appear as `!` rows (plan name only, no extension), split into three groups by the planner session state — `Working` (the session is streaming or awaiting a background task), `Idle` (session idle or archived) and `Pending approval` (no live writer session — genuinely waiting for your sign-off). Click a row for a native, searchable picker: **Navigate to session** jumps to the session that wrote the plan (a muted reason is shown when no session is found), **Docs** opens the draft as a preview, and the **Plan options** group holds **Approve** — sending `ok` to that same session — plus **start work** rows (`start work`, `start work --make-pr`, `start work --ship`) that launch the OMO plan in the current session. Rows inside a group keep the fine-grained state suffix — `working` (streaming), `waiting` (awaiting a background task), `idle`, `archived` or `unknown`. When `.omo/` is absent the approval section is simply gone; the question queue works on OpenCode alone.
+> One queue of things that need **your** action, shown first in the core group. Open `question` tools anywhere in the project appear as `?` rows — click to jump to the session and answer. OMO plans and drafts appear in four foldable groups by state — click a group header to fold it to its count line: `Pending approval` (plans genuinely waiting for your sign-off), `Drafting` (`…` rows — drafts still being written, click to preview), `Working` (the planner session is streaming or awaiting a background task) and `Idle` (session idle or archived). Click a pending row for a native, searchable picker: **Navigate to session** jumps to the session that wrote the plan (a muted reason is shown when no session is found), **Docs** opens the draft as a preview, and the **Plan options** group holds **Approve** — sending `ok` to that same session — plus **start work** rows (`start work`, `start work --make-pr`, `start work --ship`) that launch the OMO plan in the current session. Rows keep a fine-grained state suffix — `working` (streaming), `waiting` (awaiting a background task), `idle`, `archived` or `unknown` — and, for review-required plans, the ulw-plan review state: `R<round> <momus><independent>` with per-lane glyphs `✓` approved, `!` changes requested, `?` inconclusive, `…` review live, `·` waiting. When `.omo/` is absent the approval section is simply gone; the question queue works on OpenCode alone.
 
 ## ▤ OMO works, boulder and docs
 
@@ -58,11 +58,13 @@ OpenCode gives you one conversation at a time. Real work looks different: an orc
 > OMO | Works | Boulder | Docs
 > ```
 >
-> Without the marker the group is gone — no warning, no empty chrome. An installed omo with no active run still shows the group with empty **Works** and **Boulder** (`• none`, `• no active work`); the moment `boulder.json` appears the rows fill in. **Works** lists boulder runs. **Boulder** is the active run: plan, elapsed time, current task, bound sessions. **Docs** indexes the plan, drafts, notepads and evidence; click a text file to preview it. Click **OMO** to fold the group to one summary line.
+> Without the marker the group is gone — no warning, no empty chrome. An installed omo with no active run still shows the group with empty **Works** and **Boulder** (`• none`, `• no active work`); the moment `boulder.json` appears the rows fill in. **Works** lists boulder runs. **Boulder** is the active run: plan, elapsed time, current task, bound sessions. **Docs** indexes the plan, drafts, notepads and evidence in foldable kind groups; click a text file to preview it. Click **OMO** to fold the group to one summary line.
 
 ## ◴ Where the time actually goes
 
 > **Perf** splits the wall clock into wait, think, stream and tools, then ranks models and slow calls. Click a phase, a section title, or a tool row for a dated column log. The scan runs only while this tab is open.
+>
+> A muted **self** line above the OES brand — `self 0.4ms/ev · 1.2ms/sc · 59fps` — shows what the plugin itself costs: average event-handler ms, average scan (fingerprint + snapshot) ms, and the TUI renderer's FPS. It measures the plugin's own runtime, not the model's. `OES_DEBUG_OPENCODE=1` additionally writes `self`-tagged JSON lines to the debug log.
 
 ## ▣ Two groups, seven views
 
@@ -102,7 +104,8 @@ The glyph says *what* is happening; the colour says *how fresh* it is. Both come
 | `▾`                             | group header (`▼` is the section fold)                       |
 | `×`                             | failed                                                        |
 | `✓` `◷` `║` `⊘` `○`             | Works: done / waiting / paused / abandoned / unknown        |
-| `?` `!`                         | My work: awaiting an answer / pending approval               |
+| `?` `!` `…`                     | My work: awaiting an answer / pending approval / drafting     |
+| `✓` `!` `?` `·`                 | Review lanes: approved / changes requested / inconclusive / waiting |
 | `M` `A` `D` `R` `C` `U` `T` `?` | Files: git status — same letters as `git status --short`      |
 | `V`                             | Files: viewed (session read only)                             |
 | `∴`                             | Perf: thinking                                                 |
@@ -200,7 +203,7 @@ $env:OES_DEBUG_OPENCODE = "1"
 opencode
 ```
 
-`1`, `true`, `yes`, or `on` use the plugin's `logs/` directory. Any other non-empty value is treated as a directory path. `0`, `false`, `no`, or `off` turns it off. Lines are JSON (`ts`, `tag`, `msg`, optional `data`) — path resolution, monitor emits, Perf reads. Logging never crashes the panel.
+`1`, `true`, `yes`, or `on` use the plugin's `logs/` directory. Any other non-empty value is treated as a directory path. `0`, `false`, `no`, or `off` turns it off. Lines are JSON (`ts`, `tag`, `msg`, optional `data`) — path resolution, monitor emits, Perf reads, and the `self` tag logs the plugin's own measured latencies. Logging never crashes the panel.
 
 ## How it works
 
@@ -213,7 +216,7 @@ The panel is a read-only view of data OpenCode already stores.
 | `oes.json`      | plugin / user config / project                                 | display limits                    |
 | ignore files    | `<project>/.oesignore` (always) · `.gitignore` (with `skipGitignore`) | files hidden from the panel     |
 
-It refreshes from database stamps, file watches, and OpenCode events. Cost is shown only when the provider reports it.
+It refreshes from database stamps, file watches, and OpenCode events. Cost is shown only when the provider reports it. The `self` line measures the plugin's own runtime with `performance.now()` and the TUI renderer's native frame stats — no extra data source.
 
 ## Contributing
 

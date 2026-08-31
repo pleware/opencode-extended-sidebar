@@ -94,23 +94,6 @@ export function kvWriteOne(api: TuiPluginApi, key: string, value: string): void 
   }
 }
 
-/** Persist a fold flag and optionally re-render. Shared by sidebar and Perf. */
-export function makeFoldToggle(
-  api: TuiPluginApi,
-  key: string,
-  set: (fn: (prev: boolean) => boolean) => void,
-  onAfter?: () => void,
-): () => void {
-  return () => {
-    set((prev) => {
-      const next = !prev
-      kvWrite(api, key, next)
-      return next
-    })
-    onAfter?.()
-  }
-}
-
 export function diffAddFg(colors: ThemeColors): string {
   return colors.diffAdded || colors.success
 }

@@ -6,6 +6,7 @@ import {
   currentTask,
   emptyOmo,
   groupDocs,
+  listDraftingApprovals,
   listPendingApprovals,
   readOmoDocs,
   workRowView,
@@ -17,6 +18,7 @@ import {
   type RuntimeSnapshot,
 } from "../pware.oc.runtime/resolver/index.js"
 import {
+  MY_WORK_ORDER,
   approvalContinueHint,
   groupMyWork,
   myWorkLabel,
@@ -24,6 +26,7 @@ import {
   toApprovalItems,
   toQuestionItems,
   type MyWorkItem,
+  type MyWorkKind,
   type StartWorkMode,
 } from "../pware.oc.runtime/pware.oc.runtime.mywork.js"
 import {
@@ -35,7 +38,11 @@ import {
   sessionForPlanFile,
   type ProjectFeed,
 } from "../pware.oc.opencode/resolver/index.js"
-import { DOC_KIND_LABEL, type DocView } from "../pware.oc.omo/resolver/pware.oc.omo.resolver.doc.js"
+import {
+  DOC_KIND_LABEL,
+  type DocKind,
+  type DocView,
+} from "../pware.oc.omo/resolver/pware.oc.omo.resolver.doc.js"
 import type { DelegateView } from "../pware.oc.runtime/resolver/pware.oc.runtime.resolver.delegate.js"
 import { enrichApprovalSessionStates, planSessionStateLabel } from "../pware.oc.omo/resolver/pware.oc.omo.resolver.approvalState.js"
 import {
@@ -54,21 +61,19 @@ import {
   flowBlinkOn,
   markGlyph,
   myWorkGlyph,
+  reviewStateSuffix,
   workStatusGlyph,
 } from "./pware.oc.ui.glyphs.js"
+import { ClickText, DiffStat, kvReadOne, kvWriteOne, type ThemeColors } from "./pware.oc.ui.chrome.js"
 import {
-  BrandTabs,
-  ClickText,
-  DiffStat,
-  FoldHeader,
-  kvRead,
-  kvReadOne,
-  kvWriteOne,
-  makeFoldToggle,
-  type ThemeColors,
-} from "./pware.oc.ui.chrome.js"
+  FoldSection,
+  GroupSection,
+  TabColumn,
+  useFold,
+} from "./pware.oc.ui.sections.js"
 import { emptyPerf, readPerfSnapshot } from "../pware.oc.perf/pware.oc.perf.reader.js"
 import { PerfPanel } from "../pware.oc.perf/pware.oc.perf.view.js"
+import { formatSelfLine, readRendererFps, readSelfStats, resetSelfStats, selfTime, setSelfFps } from "../pware.oc.perf/pware.oc.perf.self.js"
 import {
   decorateFiles,
   fileFilter,
@@ -85,6 +90,7 @@ import { isPendingWork } from "../pware.oc.core/pware.oc.core.status.js"
 import { startMonitor } from "../pware.oc.runtime/pware.oc.runtime.monitor.js"
 import { openApprovalDialog, openDocDetail, openFileDetail, openToolDetail, openWorkDetail } from "./pware.oc.ui.menudialogs.js"
 import { eventType, shouldRefreshDb } from "../pware.oc.core/pware.oc.core.events.js"
+import { dbg } from "../pware.oc.core/pware.oc.core.debug.js"
 import { getOpenCodeDbPath } from "../pware.oc.core/pware.oc.core.paths.js"
 import {
   TICK_MS,
@@ -301,6 +307,9 @@ const KV_FOLD_OMO = "oes.fold.omo"
 const KV_TAB = "oes.tab"
 const KV_OMO_TAB = "oes.omoTab"
 
+/** Docs groups are a fixed enum — the fold keys are stable. */
+const DOC_KIND_ORDER: readonly DocKind[] = ["plan", "draft", "notepad", "proof"]
+
 /** Two independent groups: OES is the core, OMO is an optional add-on below it. */
 const OES_TABS = ["mywork", "sessions", "current", "perf"] as const
 const OMO_TABS = ["works", "boulder", "docs"] as const
@@ -337,16 +346,6 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   const [seen, setSeen] = createSignal<Record<string, number>>({})
   const [busy, setBusy] = createSignal<Record<string, boolean>>({})
   const [flow, setFlow] = createSignal<Record<string, FlowEntry>>({})
-  const [foldAgents, setFoldAgents] = createSignal(kvRead(props.api, KV_FOLD_AGENTS, false))
-  const [foldDelegates, setFoldDelegates] = createSignal(
-    kvRead(props.api, KV_FOLD_DELEGATES, false),
-  )
-  const [foldSessions, setFoldSessions] = createSignal(
-    kvRead(props.api, KV_FOLD_SESSIONS, false),
-  )
-  const [foldTools, setFoldTools] = createSignal(kvRead(props.api, KV_FOLD_TOOLS, false))
-  const [foldFiles, setFoldFiles] = createSignal(kvRead(props.api, KV_FOLD_FILES, false))
-  const [foldOmo, setFoldOmo] = createSignal(kvRead(props.api, KV_FOLD_OMO, false))
   const [tab, setTab] = createSignal<OesTab>(kvReadOne(props.api, KV_TAB, "sessions", OES_TABS))
   const [omoTab, setOmoTab] = createSignal<OmoTab>(
     kvReadOne(props.api, KV_OMO_TAB, "works", OMO_TABS),
@@ -390,6 +389,8 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     onChange: apply,
   })
 
+  const refresh = () => selfTime("scan", () => monitor.refresh())
+
   const ingestFiles = (hits: FileView[]) => {
     if (!hits.length) return
     setLiveFiles((prev) => {
@@ -429,9 +430,10 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   const remount = () => {
     const id = props.sessionId
     if (id === watchedId) {
-      monitor.refresh()
+      refresh()
       return
     }
+    resetSelfStats()
     watchedId = id
     setLiveTools({})
     setLiveFiles({})
@@ -449,7 +451,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   queueMicrotask(hydrateDiff)
 
   let debounce: ReturnType<typeof setTimeout> | null = null
-  const onEvent = (...args: unknown[]) => {
+  const onEvent = (...args: unknown[]) => selfTime("event", () => {
     const evt = args[0]
     const id = sessionIdFromEvent(evt) ?? props.sessionId
     const flag = sessionBusyFromEvent(evt)
@@ -475,9 +477,9 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     if (debounce) clearTimeout(debounce)
     debounce = setTimeout(() => {
       debounce = null
-      monitor.refresh()
+      refresh()
     }, 100)
-  }
+  })
 
   const listen = (type: string, fn: (...args: unknown[]) => void): (() => void) => {
     try {
@@ -525,9 +527,17 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     listen("tui.session.select", () => remount()),
   ]
 
+  let tickCount = 0
   const tick = setInterval(() => {
-    setNow(Date.now())
-    setFrame((n) => n + 1)
+    selfTime("tick", () => {
+      setNow(Date.now())
+      setFrame((n) => n + 1)
+    })
+    tickCount += 1
+    if (tickCount % 6 === 0) {
+      const r = readRendererFps(props.api.renderer)
+      setSelfFps(r.fps, r.frameMs)
+    }
   }, TICK_MS)
 
   const offGit = onGitMarksChange(() => {
@@ -630,14 +640,22 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     return n
   })
 
-  const toggleAgents = makeFoldToggle(props.api, KV_FOLD_AGENTS, setFoldAgents, requestRender)
-  const toggleDelegates = makeFoldToggle(
-    props.api,
-    KV_FOLD_DELEGATES,
-    setFoldDelegates,
-    requestRender,
-  )
-  const toggleTools = makeFoldToggle(props.api, KV_FOLD_TOOLS, setFoldTools, requestRender)
+  const foldAgents = useFold(props.api, KV_FOLD_AGENTS, { after: requestRender })
+  const foldDelegates = useFold(props.api, KV_FOLD_DELEGATES, { after: requestRender })
+  const foldSessions = useFold(props.api, KV_FOLD_SESSIONS, { after: requestRender })
+  const foldTools = useFold(props.api, KV_FOLD_TOOLS, { after: requestRender })
+  const foldFiles = useFold(props.api, KV_FOLD_FILES, { after: requestRender })
+  const foldOmo = useFold(props.api, KV_FOLD_OMO, { after: requestRender })
+
+  const myWorkFold = {} as Record<MyWorkKind, ReturnType<typeof useFold>>
+  for (const kind of MY_WORK_ORDER) {
+    myWorkFold[kind] = useFold(props.api, `oes.fold.mywork.${kind}`, { after: requestRender })
+  }
+
+  const docFold = {} as Record<DocKind, ReturnType<typeof useFold>>
+  for (const kind of DOC_KIND_ORDER) {
+    docFold[kind] = useFold(props.api, `oes.fold.docs.${kind}`, { after: requestRender })
+  }
 
   const oes = () => getOes(projectDir())
   const tools = createMemo(() => mergeTools(snap().db.tools, liveTools(), now(), oes().toolFetch))
@@ -658,14 +676,12 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   })
   const projectFilesStat = createMemo(() => sumDiff(projectFeed().files))
 
-  const toggleSessions = makeFoldToggle(props.api, KV_FOLD_SESSIONS, setFoldSessions, requestRender)
-  const toggleFiles = makeFoldToggle(props.api, KV_FOLD_FILES, setFoldFiles, requestRender)
   const [filesExpanded, setFilesExpanded] = createSignal(false)
 
   const filesAll = createMemo(() => {
     gitTick()
     return decorateFiles(mergeFiles(snap().db.files ?? [], liveFiles()), projectDir(), {
-      git: tab() === "current" && !foldFiles(),
+      git: tab() === "current" && foldFiles.open(),
     })
   })
   const filesStat = createMemo(() => sumDiff(filesAll()))
@@ -675,7 +691,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     const picked = next as OesTab
     setTab(picked)
     kvWriteOne(props.api, KV_TAB, picked)
-    if (picked === "current" || picked === "perf") monitor.refresh()
+    if (picked === "current" || picked === "perf") refresh()
     requestRender()
   }
 
@@ -684,11 +700,9 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     const picked = next as OmoTab
     setOmoTab(picked)
     kvWriteOne(props.api, KV_OMO_TAB, picked)
-    monitor.refresh()
+    refresh()
     requestRender()
   }
-
-  const toggleOmo = makeFoldToggle(props.api, KV_FOLD_OMO, setFoldOmo, requestRender)
 
   const omoPresent = createMemo(() => snap().omo.present)
 
@@ -696,25 +710,41 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   const myWorkQuestions = createMemo<MyWorkItem[]>(() => {
     if (tab() !== "mywork") return []
     const db = snap().db
-    return toQuestionItems(listOpenQuestions({ dbPath: db.dbPath, projectId: db.projectId }))
+    try {
+      return toQuestionItems(listOpenQuestions({ dbPath: db.dbPath, projectId: db.projectId }))
+    } catch (e) {
+      dbg("mywork.questions", "error", String(e))
+      return []
+    }
   })
 
-  /** OMO drafts/plans awaiting approval — only when omo is present. */
+  /** OMO drafts/plans awaiting approval, plus drafts still being written. */
   const myWorkApprovals = createMemo<MyWorkItem[]>(() => {
     if (tab() !== "mywork" || !omoPresent()) return []
     now() // re-scan while open; the plans cache TTL gates the filesystem read
-    return toApprovalItems(
-      enrichApprovalSessionStates(listPendingApprovals(projectDir()), {
-        dbPath: snap().db.dbPath,
-        projectRoot: projectDir(),
-      }),
-    )
+    const dir = projectDir()
+    try {
+      return toApprovalItems(
+        enrichApprovalSessionStates(
+          [...listPendingApprovals(dir), ...listDraftingApprovals(dir)],
+          {
+            dbPath: snap().db.dbPath,
+            projectRoot: dir,
+          },
+        ),
+      )
+    } catch (e) {
+      dbg("mywork.approvals", "error", String(e))
+      return []
+    }
   })
 
   const myWorkItems = createMemo<MyWorkItem[]>(() => [
     ...myWorkQuestions(),
     ...myWorkApprovals(),
   ])
+
+  const myWorkGroups = createMemo(() => groupMyWork(myWorkItems()))
 
   /** OMO `start work` — the command endpoint first, a plain chat message as fallback. */
   const runStartWork = (mode: StartWorkMode, planName: string): void => {
@@ -772,7 +802,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     const t = tab()
     const omo = omoPresent()
     const sections: { key: string; want: number; min: number; rank: number }[] = []
-    let fixed = 2 // OES brand line + panel top padding
+    let fixed = 3 // self status line + OES brand line + panel top padding
     let blocks = 0
 
     const header = () => {
@@ -786,22 +816,33 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
 
     if (t === "sessions") {
       header()
-      fixed += foldAgents() ? 0 : 1
-      section(foldSessions(), "sessions", o.sessionRows, ROW_MIN.sessions, ROW_RANK.sessions)
+      fixed += foldAgents.open() ? 1 : 0
+      section(!foldSessions.open(), "sessions", o.sessionRows, ROW_MIN.sessions, ROW_RANK.sessions)
       const feed = projectFeed()
-      if (feed.tools.length > 0) section(foldTools(), "tools", o.toolRows, ROW_MIN.tools, ROW_RANK.tools)
-      if (feed.files.length > 0) section(foldFiles(), "files", o.fileRows, ROW_MIN.files, ROW_RANK.files)
-      if (omo) section(foldDelegates(), "delegates", 6, ROW_MIN.delegates, ROW_RANK.delegates)
+      if (feed.tools.length > 0) section(!foldTools.open(), "tools", o.toolRows, ROW_MIN.tools, ROW_RANK.tools)
+      if (feed.files.length > 0) section(!foldFiles.open(), "files", o.fileRows, ROW_MIN.files, ROW_RANK.files)
+      if (omo) section(!foldDelegates.open(), "delegates", 6, ROW_MIN.delegates, ROW_RANK.delegates)
     } else if (t === "current") {
       header()
-      fixed += foldAgents() ? 0 : 1
-      section(foldDelegates(), "delegates", 6, ROW_MIN.delegates, ROW_RANK.delegates)
-      section(foldTools(), "tools", o.toolRows, ROW_MIN.tools, ROW_RANK.tools)
-      section(foldFiles(), "files", o.fileRows, ROW_MIN.files, ROW_RANK.files)
+      fixed += foldAgents.open() ? 1 : 0
+      section(!foldDelegates.open(), "delegates", 6, ROW_MIN.delegates, ROW_RANK.delegates)
+      section(!foldTools.open(), "tools", o.toolRows, ROW_MIN.tools, ROW_RANK.tools)
+      section(!foldFiles.open(), "files", o.fileRows, ROW_MIN.files, ROW_RANK.files)
     } else if (t === "mywork") {
       header()
-      const rows = groupMyWork(myWorkItems()).reduce((n, g) => n + 1 + g.items.length, 0)
-      if (rows > 0) section(false, "mywork", rows, ROW_MIN.mywork, ROW_RANK.mywork)
+      try {
+        for (const g of myWorkGroups()) {
+          section(
+            myWorkFold[g.kind].open(),
+            `mywork.${g.kind}`,
+            g.items.length + 1,
+            1,
+            ROW_RANK.mywork,
+          )
+        }
+      } catch (e) {
+        dbg("rowplan.mywork", "error", String(e))
+      }
     } else {
       // Perf lays out its own sections and already caps itself with perfRows.
       fixed += 18
@@ -810,7 +851,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
 
     if (omo) {
       fixed += 2 // blank row above the group + its brand line
-      if (!foldOmo() && o.omoRows > 0) {
+      if (foldOmo.open() && o.omoRows > 0) {
         sections.push({ key: "omo", want: o.omoRows, min: ROW_MIN.omo, rank: ROW_RANK.omo })
       }
     }
@@ -845,7 +886,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   )
 
   const omoRows = createMemo(() => (omoPresent() ? rowsFor("omo", 0) : 0))
-  const omoOpen = createMemo(() => !foldOmo() && omoRows() > 0)
+  const omoOpen = createMemo(() => foldOmo.open() && omoRows() > 0)
   const works = createMemo(() => snap().omo.works)
 
   const workLines = createMemo((): RowData[] =>
@@ -888,88 +929,80 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     return readOmoDocs(projectDir(), planPaths())
   })
 
-  const docLines = createMemo((): RowData[] => {
-    const out: RowData[] = []
-    for (const group of groupDocs(docs())) {
-      out.push({
-        kind: "group",
-        mark: "ready",
-        glyph: GROUP_GLYPH,
-        name: `${DOC_KIND_LABEL[group.kind]} (${group.items.length})`,
-      })
-      for (const d of group.items) {
-        const age = pulseAgeMs(now(), d.updatedAt)
-        out.push({
-          kind: "file",
-          mark: composeMark({ ageMs: age }),
-          glyph: "•",
-          name: d.name,
-          suffix: formatAge(age),
-          onSelect: () => openDocDetail(props.api, d, projectRoots(), colors()),
-        })
-      }
-    }
-    return out
+  const docGroups = createMemo(() => groupDocs(docs()))
+
+  const docBudgets = createMemo(() => {
+    const open = docGroups().filter((g) => docFold[g.kind].open())
+    if (open.length === 0) return {} as Record<DocKind, number>
+    return packSections(
+      omoRows(),
+      0,
+      open.map((g) => ({ key: g.kind, want: g.items.length + 1, min: 1, rank: ROW_RANK.omo })),
+    )
   })
 
-  const myWorkLines = createMemo((): RowData[] => {
-    const out: RowData[] = []
-    for (const group of groupMyWork(myWorkItems())) {
-      out.push({
-        kind: "group",
+  const docRow = (d: DocView): RowData => {
+    const age = pulseAgeMs(now(), d.updatedAt)
+    return {
+      kind: "file",
+      mark: composeMark({ ageMs: age }),
+      glyph: "•",
+      name: d.name,
+      suffix: formatAge(age),
+      onSelect: () => openDocDetail(props.api, d, projectRoots(), colors()),
+    }
+  }
+
+  const myWorkRow = (item: MyWorkItem): RowData => {
+    if (item.kind === "question") {
+      const age = pulseAgeMs(now(), item.startedAt)
+      return {
+        kind: "agent",
         mark: "ready",
-        glyph: GROUP_GLYPH,
-        name: `${myWorkLabel(group.kind)} (${group.items.length})`,
-      })
-      for (const item of group.items) {
-        if (item.kind === "question") {
-          const age = pulseAgeMs(now(), item.startedAt)
-          out.push({
-            kind: "agent",
-            mark: "ready",
-            glyph: myWorkGlyph("question"),
-            name: item.title,
-            suffix: formatAge(age),
-            waiting: true,
-            onSelect: () => selectSession(props.api, item.sessionId),
-          })
-        } else {
-          out.push({
-            kind: "file",
-            mark: "ready",
-            glyph: myWorkGlyph(item.kind),
-            name: item.name,
-            suffix: planSessionStateLabel(item.sessionState) ?? undefined,
-            waiting: true,
-            onSelect: () => {
-              const db = openReadonlyDb(snap().db.dbPath)
-              const sessionId = db ? sessionForPlanFile(db, item.rel) : null
-              openApprovalDialog(props.api, {
-                title: item.name,
-                sessionId,
-                continueHint: approvalContinueHint(sessionId, Boolean(db)),
-                onContinue: (sid) => selectSession(props.api, sid),
-                onApprove: approvePlan,
-                onStartWork: (mode) => runStartWork(mode, item.name),
-                onDocs: () => {
-                  const doc: DocView = {
-                    kind: "draft",
-                    name: item.name,
-                    rel: item.rel,
-                    updatedAt: item.updatedAt,
-                    sizeBytes: 0,
-                    previewable: true,
-                  }
-                  openDocDetail(props.api, doc, projectRoots(), colors())
-                },
-              })
-            },
-          })
-        }
+        glyph: myWorkGlyph("question"),
+        name: item.title,
+        suffix: formatAge(age),
+        waiting: true,
+        onSelect: () => selectSession(props.api, item.sessionId),
       }
     }
-    return out
-  })
+    const sessionLabel = planSessionStateLabel(item.sessionState)
+    const reviewLabel = reviewStateSuffix(item.review)
+    const drafting = item.kind === "drafting"
+    const doc: DocView = {
+      kind: "draft",
+      name: item.name,
+      rel: item.rel,
+      updatedAt: item.updatedAt,
+      sizeBytes: 0,
+      previewable: true,
+    }
+    return {
+      kind: "file",
+      mark: "ready",
+      glyph: myWorkGlyph(item.kind),
+      name: item.name,
+      suffix: [sessionLabel, reviewLabel].filter(Boolean).join(" ") || undefined,
+      waiting: !drafting,
+      onSelect: () => {
+        if (drafting) {
+          openDocDetail(props.api, doc, projectRoots(), colors())
+          return
+        }
+        const db = openReadonlyDb(snap().db.dbPath)
+        const sessionId = db ? sessionForPlanFile(db, item.rel) : null
+        openApprovalDialog(props.api, {
+          title: item.name,
+          sessionId,
+          continueHint: approvalContinueHint(sessionId, Boolean(db)),
+          onContinue: (sid) => selectSession(props.api, sid),
+          onApprove: approvePlan,
+          onStartWork: (mode) => runStartWork(mode, item.name),
+          onDocs: () => openDocDetail(props.api, doc, projectRoots(), colors()),
+        })
+      },
+    }
+  }
 
   /** The cockpit is a flat row list, so the row budget can just slice it. */
   const boulderLines = createMemo((): RowData[] => {
@@ -1123,403 +1156,359 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
 
   return (
     <box flexDirection="column" gap={1} paddingTop={1}>
-      <BrandTabs
+      <text fg={colors().textMuted}>{formatSelfLine(readSelfStats())}</text>
+      <TabColumn
         brand="OES"
         tabs={OES_TABS}
         labels={TAB_LABELS}
         active={tab()}
         colors={colors()}
         onPick={pickTab}
-      />
-      <box flexDirection="column" gap={1}>
-        <Show when={tab() === "mywork"}>
-          {myWorkLines().length === 0 ? (
-            <text fg={colors().textMuted}>• nothing</text>
-          ) : (
-            BoundedRows(myWorkLines(), rowsFor("mywork", 8))
-          )}
-        </Show>
-        <Show when={tab() === "sessions"}>
-        <box flexDirection="column" gap={1}>
-        <box flexDirection="column" gap={0}>
-          <FoldHeader
-            title="Agents"
-            open={!foldAgents()}
-            colors={colors()}
-            onToggle={toggleAgents}
-          />
-          <Show when={!foldAgents()}>
-            <box flexDirection="column" gap={0} paddingLeft={1}>
-              {snap().db.main ? (
-                <Row
-                  kind="agent"
-                  mark={mainMark()}
-                  name={snap().db.main!.agent}
-                  tokens={snap().db.main!.tokensTotal}
-                  cost={snap().db.main!.cost}
-                  current={snap().db.main!.id === props.sessionId}
-                  flow={mainFlow()}
-                  onSelect={() => selectSession(props.api, snap().db.main?.id)}
-                />
-              ) : (
-                <text fg={colors().textMuted}>
-                  {`• session · ${props.sessionId.slice(0, 14)}`}
-                  {err() ? ` · ${err()}` : ""}
-                </text>
-              )}
-            </box>
-          </Show>
-        </box>
+        panels={{
+          mywork: () => {
+            try {
+              const groups = myWorkGroups()
+              dbg("mywork.panel", "render", { groups: groups.map((g) => `${g.kind}:${g.items.length}`) })
+              if (groups.length === 0) return <text fg={colors().textMuted}>• nothing</text>
+              return (
+                <box flexDirection="column" gap={1}>
+                  <For each={groups}>
+                    {(g) => (
+                      <GroupSection
+                        title={myWorkLabel(g.kind)}
+                        open={myWorkFold[g.kind].open()}
+                        onToggle={myWorkFold[g.kind].toggle}
+                        colors={colors()}
+                        items={g.items}
+                        budget={rowsFor(`mywork.${g.kind}`, 2)}
+                        renderItem={(item) => <Row {...myWorkRow(item)} />}
+                      />
+                    )}
+                  </For>
+                </box>
+              )
+            } catch (e) {
+              dbg("mywork.panel", "error", String(e))
+              return <text fg={colors().error || colors().text}>• my work error</text>
+            }
+          },
+          sessions: () => (
+            <box flexDirection="column" gap={1}>
+              <FoldSection title="Agents" open={foldAgents.open()} colors={colors()} onToggle={foldAgents.toggle}>
+                {snap().db.main ? (
+                  <Row
+                    kind="agent"
+                    mark={mainMark()}
+                    name={snap().db.main!.agent}
+                    tokens={snap().db.main!.tokensTotal}
+                    cost={snap().db.main!.cost}
+                    current={snap().db.main!.id === props.sessionId}
+                    flow={mainFlow()}
+                    onSelect={() => selectSession(props.api, snap().db.main?.id)}
+                  />
+                ) : (
+                  <text fg={colors().textMuted}>
+                    {`• session · ${props.sessionId.slice(0, 14)}`}
+                    {err() ? ` · ${err()}` : ""}
+                  </text>
+                )}
+              </FoldSection>
 
         <Show when={snap().db.recent.length > 0}>
-          <box flexDirection="column" gap={0}>
-            <FoldHeader
-              title="Sessions"
-              open={!foldSessions()}
-              count={snap().db.recent.length}
-              countLabel={`last ${snap().db.recent.length}`}
-              action={{ label: "switch", onPick: () => openSessionSwitcher(props.api) }}
-              colors={colors()}
-              onToggle={toggleSessions}
-            />
-            <Show when={!foldSessions()}>
-              <box flexDirection="column" gap={0} paddingLeft={1}>
-                <For each={sessionsSlice().rows}>
-                  {(s) => {
-                    const isBusy = Boolean(busy()[s.id])
-                    const mark = rowMark(
-                      s.status === "archived" ? "archived" : null,
-                      s.status === "archived",
-                      isBusy,
-                      s.timeUpdated,
-                      seen()[s.id],
-                    )
-                    const dir = rowFlow(s.id, isBusy)
-                    return (
-                      <Row
-                        kind="agent"
-                        mark={mark}
-                        name={s.title}
-                        suffix={formatAge(pulseAgeMs(now(), s.timeUpdated, seen()[s.id]))}
-                        current={s.id === props.sessionId}
-                        flow={dir}
-                        onSelect={() => selectSession(props.api, s.id)}
-                      />
-                    )
-                  }}
-                </For>
-                <Show when={sessionsSlice().hidden > 0}>
-                  <box onMouseUp={() => setSessionsMore(sessionsMore() + SESSION_MORE_STEP)}>
-                    <ClickText fg={colors().textMuted} underline>
-                      {`… +${sessionsSlice().hidden} more`}
-                    </ClickText>
-                  </box>
-                </Show>
+          <FoldSection
+            title="Sessions"
+            open={foldSessions.open()}
+            count={snap().db.recent.length}
+            countLabel={`last ${snap().db.recent.length}`}
+            action={{ label: "switch", onPick: () => openSessionSwitcher(props.api) }}
+            colors={colors()}
+            onToggle={foldSessions.toggle}
+          >
+            <For each={sessionsSlice().rows}>
+              {(s) => {
+                const isBusy = Boolean(busy()[s.id])
+                const mark = rowMark(
+                  s.status === "archived" ? "archived" : null,
+                  s.status === "archived",
+                  isBusy,
+                  s.timeUpdated,
+                  seen()[s.id],
+                )
+                const dir = rowFlow(s.id, isBusy)
+                return (
+                  <Row
+                    kind="agent"
+                    mark={mark}
+                    name={s.title}
+                    suffix={formatAge(pulseAgeMs(now(), s.timeUpdated, seen()[s.id]))}
+                    current={s.id === props.sessionId}
+                    flow={dir}
+                    onSelect={() => selectSession(props.api, s.id)}
+                  />
+                )
+              }}
+            </For>
+            <Show when={sessionsSlice().hidden > 0}>
+              <box onMouseUp={() => setSessionsMore(sessionsMore() + SESSION_MORE_STEP)}>
+                <ClickText fg={colors().textMuted} underline>
+                  {`… +${sessionsSlice().hidden} more`}
+                </ClickText>
               </box>
             </Show>
-          </box>
+          </FoldSection>
         </Show>
 
         <Show when={projectFeed().tools.length > 0}>
-          <box flexDirection="column" gap={0}>
-            <FoldHeader
-              title="Tool Calls"
-              open={!foldTools()}
-              colors={colors()}
-              onToggle={toggleTools}
-            />
-            <Show when={!foldTools()}>
-              <box flexDirection="column" gap={0} paddingLeft={1}>
-                <For each={projectToolsSlice().rows}>
-                  {(t) => {
-                    const mark = toolMark(t.status)
-                    const dir = toolFlow(t.status)
-                    const dur =
-                      t.status === "running" && t.startedAt != null
-                        ? formatDuration(Math.max(0, now() - t.startedAt))
-                        : formatDuration(t.durationMs)
-                    return (
-                      <Row
-                        kind="tool"
-                        mark={mark}
-                        name={t.name}
-                        suffix={dur}
-                        flow={dir}
-                        onSelect={() => openToolDetail(props.api, t, colors())}
-                      />
-                    )
-                  }}
-                </For>
-                <Show when={projectToolsSlice().hidden > 0}>
-                  <box onMouseUp={() => setProjectToolsMore(projectToolsMore() + oes().toolRows)}>
-                    <ClickText fg={colors().textMuted} underline>
-                      {`… +${projectToolsSlice().hidden} more`}
-                    </ClickText>
-                  </box>
-                </Show>
+          <FoldSection title="Tool Calls" open={foldTools.open()} colors={colors()} onToggle={foldTools.toggle}>
+            <For each={projectToolsSlice().rows}>
+              {(t) => {
+                const mark = toolMark(t.status)
+                const dir = toolFlow(t.status)
+                const dur =
+                  t.status === "running" && t.startedAt != null
+                    ? formatDuration(Math.max(0, now() - t.startedAt))
+                    : formatDuration(t.durationMs)
+                return (
+                  <Row
+                    kind="tool"
+                    mark={mark}
+                    name={t.name}
+                    suffix={dur}
+                    flow={dir}
+                    onSelect={() => openToolDetail(props.api, t, colors())}
+                  />
+                )
+              }}
+            </For>
+            <Show when={projectToolsSlice().hidden > 0}>
+              <box onMouseUp={() => setProjectToolsMore(projectToolsMore() + oes().toolRows)}>
+                <ClickText fg={colors().textMuted} underline>
+                  {`… +${projectToolsSlice().hidden} more`}
+                </ClickText>
               </box>
             </Show>
-          </box>
+          </FoldSection>
         </Show>
 
         <Show when={projectFeed().files.length > 0}>
-          <box flexDirection="column" gap={0}>
-            <FoldHeader
-              title="Files"
-              open={!foldFiles()}
-              count={projectFeed().files.length}
-              diff={projectFilesStat()}
-              colors={colors()}
-              onToggle={toggleFiles}
-            />
-            <Show when={!foldFiles()}>
-              <box flexDirection="column" gap={0} paddingLeft={1}>
-                <For each={projectFeed().files.slice(0, rowsFor("files", oes().fileRows))}>
-                  {(f) => (
-                    <Row
-                      kind="file"
-                      mark={fileLetterMark(f.letter)}
-                      glyph={f.letter ?? "•"}
-                      name={f.name}
-                      diff={{ additions: f.additions, deletions: f.deletions }}
-                      onSelect={() => openFileDetail(props.api, f, projectRoots(), colors())}
-                    />
-                  )}
-                </For>
-              </box>
-            </Show>
-          </box>
+          <FoldSection
+            title="Files"
+            open={foldFiles.open()}
+            count={projectFeed().files.length}
+            diff={projectFilesStat()}
+            colors={colors()}
+            onToggle={foldFiles.toggle}
+          >
+            <For each={projectFeed().files.slice(0, rowsFor("files", oes().fileRows))}>
+              {(f) => (
+                <Row
+                  kind="file"
+                  mark={fileLetterMark(f.letter)}
+                  glyph={f.letter ?? "•"}
+                  name={f.name}
+                  diff={{ additions: f.additions, deletions: f.deletions }}
+                  onSelect={() => openFileDetail(props.api, f, projectRoots(), colors())}
+                />
+              )}
+            </For>
+          </FoldSection>
         </Show>
 
         <Show when={snap().omo.present}>
-          <box flexDirection="column" gap={0}>
-            <FoldHeader
-              title="Delegates"
-              open={!foldDelegates()}
-              count={snap().delegates.length}
-              live={delegatesLive()}
-              colors={colors()}
-              onToggle={toggleDelegates}
-            />
-            <Show when={!foldDelegates()}>
-              <box flexDirection="column" gap={0} paddingLeft={1}>
-                {snap().delegates.length === 0 ? (
-                  <text fg={colors().textMuted}>• none</text>
-                ) : (
-                  DelegateRows(snap().delegates, rowsFor("delegates", 6))
-                )}
-              </box>
-            </Show>
-          </box>
-        </Show>
-        </box>
-        </Show>
-
-        <Show when={tab() === "current"}>
-        <box flexDirection="column" gap={1}>
-        <box flexDirection="column" gap={0}>
-          <FoldHeader
-            title="Agents"
-            open={!foldAgents()}
+          <FoldSection
+            title="Delegates"
+            open={foldDelegates.open()}
+            count={snap().delegates.length}
+            live={delegatesLive()}
             colors={colors()}
-            onToggle={toggleAgents}
-          />
-          <Show when={!foldAgents()}>
-            <box flexDirection="column" gap={0} paddingLeft={1}>
-              {currentRow() ? (
-                <Row
-                  kind="agent"
-                  mark={currentMark()}
-                  name={currentRow()!.agent}
-                  tokens={currentRow()!.tokensTotal}
-                  cost={currentRow()!.cost}
-                  current
-                  flow={currentFlow()}
-                  onSelect={() => selectSession(props.api, currentRow()?.id)}
-                />
-              ) : (
-                <text fg={colors().textMuted}>
-                  {`• session · ${props.sessionId.slice(0, 14)}`}
-                </text>
-              )}
+            onToggle={foldDelegates.toggle}
+          >
+            {snap().delegates.length === 0 ? (
+              <text fg={colors().textMuted}>• none</text>
+            ) : (
+              DelegateRows(snap().delegates, rowsFor("delegates", 6))
+            )}
+          </FoldSection>
+        </Show>
             </box>
-          </Show>
-        </box>
+          ),
+          current: () => (
+            <box flexDirection="column" gap={1}>
+              <FoldSection title="Agents" open={foldAgents.open()} colors={colors()} onToggle={foldAgents.toggle}>
+                {currentRow() ? (
+                  <Row
+                    kind="agent"
+                    mark={currentMark()}
+                    name={currentRow()!.agent}
+                    tokens={currentRow()!.tokensTotal}
+                    cost={currentRow()!.cost}
+                    current
+                    flow={currentFlow()}
+                    onSelect={() => selectSession(props.api, currentRow()?.id)}
+                  />
+                ) : (
+                  <text fg={colors().textMuted}>
+                    {`• session · ${props.sessionId.slice(0, 14)}`}
+                  </text>
+                )}
+              </FoldSection>
 
         <Show when={snap().omo.present || sessionDelegates().length > 0}>
-          <box flexDirection="column" gap={0}>
-            <FoldHeader
-              title="Delegates"
-              open={!foldDelegates()}
-              count={sessionDelegates().length}
-              live={sessionDelegates().filter((d) => {
-                const m = delegateMark(d)
-                return m === "live" || m === "stale"
-              }).length}
-              colors={colors()}
-              onToggle={toggleDelegates}
-            />
-            <Show when={!foldDelegates()}>
-              <box flexDirection="column" gap={0} paddingLeft={1}>
-                {sessionDelegates().length === 0 ? (
-                  <text fg={colors().textMuted}>• none</text>
-                ) : (
-                  DelegateRows(sessionDelegates(), rowsFor("delegates", 6))
-                )}
-              </box>
-            </Show>
-          </box>
+          <FoldSection
+            title="Delegates"
+            open={foldDelegates.open()}
+            count={sessionDelegates().length}
+            live={sessionDelegates().filter((d) => {
+              const m = delegateMark(d)
+              return m === "live" || m === "stale"
+            }).length}
+            colors={colors()}
+            onToggle={foldDelegates.toggle}
+          >
+            {sessionDelegates().length === 0 ? (
+              <text fg={colors().textMuted}>• none</text>
+            ) : (
+              DelegateRows(sessionDelegates(), rowsFor("delegates", 6))
+            )}
+          </FoldSection>
         </Show>
 
-        <box flexDirection="column" gap={0}>
-          <FoldHeader
-            title="Tool Calls"
-            open={!foldTools()}
-            colors={colors()}
-            onToggle={toggleTools}
-          />
-          <Show when={!foldTools()}>
-            <box flexDirection="column" gap={0} paddingLeft={1}>
-              {tools().length === 0 ? (
-                <text fg={colors().textMuted}>• none</text>
-              ) : (
-                <For each={toolsSlice().rows}>
-                  {(t) => {
-                    const mark = toolMark(t.status)
-                    const dir = toolFlow(t.status)
-                    const dur =
-                      t.status === "running" && t.startedAt != null
-                        ? formatDuration(Math.max(0, now() - t.startedAt))
-                        : formatDuration(t.durationMs)
-                    return (
-                      <Row
-                        kind="tool"
-                        mark={mark}
-                        name={t.name}
-                        suffix={dur}
-                        flow={dir}
-                        onSelect={() => openToolDetail(props.api, t, colors())}
-                      />
-                    )
-                  }}
-                </For>
-              )}
-              <Show when={toolsSlice().hidden > 0}>
-                <box onMouseUp={() => setToolsMore(toolsMore() + oes().toolRows)}>
-                  <ClickText fg={colors().textMuted} underline>
-                    {`… +${toolsSlice().hidden} more`}
-                  </ClickText>
-                </box>
-              </Show>
-            </box>
-          </Show>
-        </box>
+          <FoldSection title="Tool Calls" open={foldTools.open()} colors={colors()} onToggle={foldTools.toggle}>
+            {tools().length === 0 ? (
+              <text fg={colors().textMuted}>• none</text>
+            ) : (
+              <For each={toolsSlice().rows}>
+                {(t) => {
+                  const mark = toolMark(t.status)
+                  const dir = toolFlow(t.status)
+                  const dur =
+                    t.status === "running" && t.startedAt != null
+                      ? formatDuration(Math.max(0, now() - t.startedAt))
+                      : formatDuration(t.durationMs)
+                  return (
+                    <Row
+                      kind="tool"
+                      mark={mark}
+                      name={t.name}
+                      suffix={dur}
+                      flow={dir}
+                      onSelect={() => openToolDetail(props.api, t, colors())}
+                    />
+                  )
+                }}
+              </For>
+            )}
+            <Show when={toolsSlice().hidden > 0}>
+              <box onMouseUp={() => setToolsMore(toolsMore() + oes().toolRows)}>
+                <ClickText fg={colors().textMuted} underline>
+                  {`… +${toolsSlice().hidden} more`}
+                </ClickText>
+              </box>
+            </Show>
+          </FoldSection>
 
-        <box flexDirection="column" gap={0}>
-          <FoldHeader
+          <FoldSection
             title="Files"
-            open={!foldFiles()}
+            open={foldFiles.open()}
             count={filesAll().length > 0 ? filesAll().length : undefined}
             diff={filesStat()}
             colors={colors()}
-            onToggle={toggleFiles}
-          />
-          <Show when={!foldFiles()}>
-            <box flexDirection="column" gap={0} paddingLeft={1}>
-              {files().length === 0 ? (
-                <text fg={colors().textMuted}>• none</text>
-              ) : (
-                <For each={files()}>
-                  {(f) => (
-                    <Row
-                      kind="file"
-                      mark={fileLetterMark(f.letter)}
-                      glyph={f.letter ?? "•"}
-                      name={f.name}
-                      diff={{ additions: f.additions, deletions: f.deletions }}
-                      onSelect={() => openFileDetail(props.api, f, projectRoots(), colors())}
-                    />
-                  )}
-                </For>
-              )}
-              <Show when={filesHidden() > 0 || filesExpanded()}>
-                <box onMouseUp={() => setFilesExpanded(!filesExpanded())}>
-                  <ClickText fg={colors().textMuted} underline>
-                    {filesExpanded() ? "… less" : `… ${filesHidden()} more`}
-                  </ClickText>
-                </box>
-              </Show>
+            onToggle={foldFiles.toggle}
+          >
+            {files().length === 0 ? (
+              <text fg={colors().textMuted}>• none</text>
+            ) : (
+              <For each={files()}>
+                {(f) => (
+                  <Row
+                    kind="file"
+                    mark={fileLetterMark(f.letter)}
+                    glyph={f.letter ?? "•"}
+                    name={f.name}
+                    diff={{ additions: f.additions, deletions: f.deletions }}
+                    onSelect={() => openFileDetail(props.api, f, projectRoots(), colors())}
+                  />
+                )}
+              </For>
+            )}
+            <Show when={filesHidden() > 0 || filesExpanded()}>
+              <box onMouseUp={() => setFilesExpanded(!filesExpanded())}>
+                <ClickText fg={colors().textMuted} underline>
+                  {filesExpanded() ? "… less" : `… ${filesHidden()} more`}
+                </ClickText>
+              </box>
+            </Show>
+          </FoldSection>
             </box>
-          </Show>
-        </box>
-        </box>
-        </Show>
-
-        <Show when={tab() === "perf"}>
-          <PerfPanel
-            api={props.api}
-            perf={perf()}
-            colors={colors()}
-            lineMax={oes().lineMax}
-            rows={oes().perfRows}
-            frame={frame()}
-            livePhase={selfFlow()}
-            livePhaseMs={selfPhaseMs()}
-            currentSessionId={props.sessionId}
-            dbPath={snap().db.dbPath}
-            turns={oes().perfTurns}
-            onSelect={(id) => selectSession(props.api, id)}
-          />
-        </Show>
-      </box>
+          ),
+          perf: () => (
+            <PerfPanel
+              api={props.api}
+              perf={perf()}
+              colors={colors()}
+              lineMax={oes().lineMax}
+              rows={oes().perfRows}
+              frame={frame()}
+              livePhase={selfFlow()}
+              livePhaseMs={selfPhaseMs()}
+              currentSessionId={props.sessionId}
+              dbPath={snap().db.dbPath}
+              turns={oes().perfTurns}
+              onSelect={(id) => selectSession(props.api, id)}
+            />
+          ),
+        }}
+      />
 
       <Show when={omoPresent()}>
-        <Show
-          when={omoOpen()}
-          fallback={
-            <box flexDirection="row" onMouseUp={toggleOmo}>
-              <ClickText fg={colors().primary || colors().text} bold underline>
-                ▶ OMO
-              </ClickText>
-              <text fg={colors().textMuted}>{`  ${omoSummary()}`}</text>
-            </box>
-          }
-        >
-          <box flexDirection="column" gap={0}>
-            <BrandTabs
-              brand="▼ OMO"
-              tabs={OMO_TABS}
-              labels={TAB_LABELS}
-              active={omoTab()}
-              colors={colors()}
-              onPick={pickOmoTab}
-              onBrand={toggleOmo}
-            />
-            <box flexDirection="column" gap={0} paddingLeft={1}>
-              <Show when={omoTab() === "works"}>
-                {workLines().length === 0 ? (
-                  <text fg={colors().textMuted}>• none</text>
-                ) : (
-                  OmoRows(workLines())
-                )}
-              </Show>
-              <Show when={omoTab() === "boulder"}>
-                {boulderLines().length === 0 ? (
-                  <text fg={colors().textMuted}>• no active work</text>
-                ) : (
-                  OmoRows(boulderLines())
-                )}
-              </Show>
-              <Show when={omoTab() === "docs"}>
-                {docLines().length === 0 ? (
-                  <text fg={colors().textMuted}>• none</text>
-                ) : (
-                  OmoRows(docLines())
-                )}
-              </Show>
-            </box>
-          </box>
-        </Show>
+        <TabColumn
+          brand="OMO"
+          tabs={OMO_TABS}
+          labels={TAB_LABELS}
+          active={omoTab()}
+          colors={colors()}
+          onPick={pickOmoTab}
+          onBrand={foldOmo.toggle}
+          indentContent
+          gap={0}
+          collapsed={!omoOpen()}
+          summary={omoSummary()}
+          panels={{
+            works: () =>
+              workLines().length === 0 ? (
+                <text fg={colors().textMuted}>• none</text>
+              ) : (
+                OmoRows(workLines())
+              ),
+            boulder: () =>
+              boulderLines().length === 0 ? (
+                <text fg={colors().textMuted}>• no active work</text>
+              ) : (
+                OmoRows(boulderLines())
+              ),
+            docs: () => {
+              const groups = docGroups()
+              if (groups.length === 0) return <text fg={colors().textMuted}>• none</text>
+              return (
+                <box flexDirection="column" gap={1}>
+                  <For each={groups}>
+                    {(g) => (
+                      <GroupSection
+                        title={DOC_KIND_LABEL[g.kind]}
+                        open={docFold[g.kind].open()}
+                        onToggle={docFold[g.kind].toggle}
+                        colors={colors()}
+                        items={g.items}
+                        budget={docBudgets()[g.kind] ?? 0}
+                        renderItem={(d) => <Row {...docRow(d)} />}
+                      />
+                    )}
+                  </For>
+                </box>
+              )
+            },
+          }}
+        />
       </Show>
 
       {err() && snap().db.main ? (
