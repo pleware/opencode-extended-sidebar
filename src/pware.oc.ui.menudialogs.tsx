@@ -416,31 +416,33 @@ export function openWorkDetail(
 }
 
 /**
- * Pending-approval menu as a native host DialogSelect: Continue jumps to the
- * session that wrote the plan (muted hint in the row when no session is
- * found), Docs opens the draft as a preview, and the three start-work rows
- * launch the OMO plan in the current session (plain / --make-pr / --ship).
- * Searchable + keyboard-navigable — the same picker the host uses.
+ * Pending-approval menu as a native host DialogSelect: Navigate to session
+ * jumps to the session that wrote the plan, Approve sends an `ok` reply to
+ * that same session (muted hint in the rows when no session is found), Docs
+ * opens the draft as a preview, and the three start-work rows launch the OMO
+ * plan in the current session (plain / --make-pr / --ship). Searchable +
+ * keyboard-navigable — the same picker the host uses.
  */
-type ApprovalAction = "continue" | "docs" | StartWorkMode
+type ApprovalAction = "continue" | "approve" | "docs" | StartWorkMode
 
 export function openApprovalDialog(
   api: TuiPluginApi,
   opts: {
     title: string
     sessionId: string | null
-    /** Muted reason shown under Continue when it is disabled. */
+    /** Muted reason shown under the session-bound rows when it is disabled. */
     continueHint?: string | null
     onContinue: (sessionId: string) => void
+    onApprove: (sessionId: string) => void
     onStartWork: (mode: StartWorkMode) => void
     onDocs: () => void
   },
 ): void {
   const options: TuiDialogSelectOption<ApprovalAction>[] = [
     {
-      title: "Continue",
+      title: "Navigate to session",
       value: "continue",
-      description: opts.sessionId ? undefined : (opts.continueHint ?? "Continue unavailable"),
+      description: opts.sessionId ? undefined : (opts.continueHint ?? "Navigate to session unavailable"),
       onSelect: () => {
         if (opts.sessionId) {
           closeDialog(api)
@@ -451,6 +453,21 @@ export function openApprovalDialog(
       },
     },
     { title: "Docs", value: "docs", onSelect: opts.onDocs },
+    {
+      title: "Approve",
+      value: "approve",
+      category: "Approve",
+      description: opts.sessionId ? undefined : (opts.continueHint ?? "Approve unavailable"),
+      onSelect: () => {
+        if (opts.sessionId) {
+          closeDialog(api)
+          opts.onApprove(opts.sessionId)
+          toast(api, "Approved — ok sent", "success")
+          return
+        }
+        toast(api, opts.continueHint ?? "No session wrote this plan", "warning")
+      },
+    },
     {
       title: startWorkCommand("plain", opts.title),
       value: "plain",

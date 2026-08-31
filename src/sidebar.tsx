@@ -738,6 +738,21 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     void go()
   }
 
+  /** OMO plan approve — answer the writer session with the `ok` the planner waits for. */
+  const approvePlan = (sessionId: string): void => {
+    const chat = (props.api as TuiPluginApi & {
+      client?: {
+        chat?: { promptAsync?: (arg: unknown) => Promise<unknown> | unknown }
+      }
+    }).client?.chat
+    if (!chat?.promptAsync) return
+    try {
+      void chat.promptAsync({ sessionID: sessionId, parts: [{ type: "text", text: "ok" }] })
+    } catch {
+      // host without message send
+    }
+  }
+
   /**
    * Rows are handed out on every render: chrome that always costs a line is
    * counted first, then `packSections` splits what is left. OMO shares the
@@ -921,6 +936,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
                 sessionId,
                 continueHint: approvalContinueHint(sessionId, Boolean(db)),
                 onContinue: (sid) => selectSession(props.api, sid),
+                onApprove: approvePlan,
                 onStartWork: (mode) => runStartWork(mode, item.name),
                 onDocs: () => {
                   const doc: DocView = {

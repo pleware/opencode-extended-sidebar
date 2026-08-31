@@ -21,9 +21,9 @@ export function myWorkLabel(kind: MyWorkKind): string {
 }
 
 /**
- * Why "Continue" is unavailable for an approval: no writer session was found in
- * the database, or the database itself could not be opened. Null when Continue
- * is actionable.
+ * Why "Navigate to session" is unavailable for an approval: no writer session
+ * was found in the database, or the database itself could not be opened. Null
+ * when navigation is actionable.
  */
 export function approvalContinueHint(
   sessionId: string | null | undefined,
