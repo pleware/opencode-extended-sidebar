@@ -1,39 +1,30 @@
 import { describe, expect, test } from "bun:test"
-import fs from "node:fs"
-import os from "node:os"
 import path from "node:path"
 import { canPreviewPath, isMarkdownPath, previewViewportRows, readTextPreview } from "../../src/preview.js"
 import { normalizeIncomingPath, relativeProjectPath, resolveProjectFile } from "../../src/paths.js"
+import { createFixtureProject } from "../helpers/project.js"
 
 describe("relativeProjectPath", () => {
   test("returns project-relative posix path", () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), "oes-rel-root-"))
-    fs.mkdirSync(path.join(root, "src"), { recursive: true })
-    const file = path.join(root, "src", "app.ts")
-    fs.writeFileSync(file, "")
-    const rel = relativeProjectPath(root, file)
-    expect(rel).toBe("src/app.ts")
-    fs.rmSync(root, { recursive: true, force: true })
+    const proj = createFixtureProject({ files: { "src/app.ts": "" } })
+    const file = path.join(proj.root, "src", "app.ts")
+    expect(relativeProjectPath(proj.root, file)).toBe("src/app.ts")
+    proj.dispose()
   })
 
   test("rejects paths outside project root", () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), "oes-rel-root-"))
-    const outside = path.join(os.tmpdir(), "elsewhere", "x.ts")
-    expect(relativeProjectPath(root, outside)).toBeNull()
-    fs.rmSync(root, { recursive: true, force: true })
+    const proj = createFixtureProject()
+    expect(relativeProjectPath(proj.root, path.join(path.dirname(proj.root), "elsewhere", "x.ts"))).toBeNull()
+    proj.dispose()
   })
 
   test("resolveProjectFile accepts mixed slashes when the file exists", () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), "oes-slash-"))
-    const nested = path.join(root, "docs")
-    fs.mkdirSync(nested)
-    const file = path.join(nested, "note.md")
-    fs.writeFileSync(file, "# hi\n")
-    const posix = path.relative(root, file).replace(/\\/g, "/")
-    const hit = resolveProjectFile(root, posix)
+    const proj = createFixtureProject({ files: { "docs/note.md": "# hi\n" } })
+    const posix = "docs/note.md"
+    const hit = resolveProjectFile(proj.root, posix)
     expect(hit?.rel).toBe("docs/note.md")
     expect(hit?.abs).toBeTruthy()
-    fs.rmSync(root, { recursive: true, force: true })
+    proj.dispose()
   })
 })
 
@@ -55,13 +46,11 @@ describe("preview helpers", () => {
   })
 
   test("readTextPreview reads text and truncates long files", () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "oes-preview-"))
-    const file = path.join(dir, "note.md")
-    fs.writeFileSync(file, "line1\nline2")
-    const out = readTextPreview(file)
+    const proj = createFixtureProject({ files: { "note.md": "line1\nline2" } })
+    const out = readTextPreview(path.join(proj.root, "note.md"))
     expect(out?.text).toBe("line1\nline2")
     expect(out?.truncated).toBe(false)
-    fs.rmSync(dir, { recursive: true, force: true })
+    proj.dispose()
   })
 })
 

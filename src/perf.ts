@@ -4,7 +4,12 @@
  * message text, reasoning text and tool I/O never enter the process.
  */
 import fs from "node:fs"
-import { openReadonlyDb, resetReadonlyDb, type SqlDb } from "./sqlite.js"
+import os from "node:os"
+import path from "node:path"
+import { createStampCache } from "./cache.js"
+import { finiteNum } from "./paths.js"
+import { formatDuration, formatWhen, shortToolLabel, toEpochMs } from "./pulse.js"
+import { openReadonlyDb, withDbRead, type SqlDb } from "./sqlite.js"
 
 /** Where the session's wall clock goes. `idle` is whatever the phases do not claim. */
 export type PerfPhase = "wait" | "think" | "recv" | "tool" | "idle"
@@ -151,6 +156,32 @@ const PART_SQL = `
   ORDER BY time_created DESC
   LIMIT ?`
 
+/** On-click log only — same hint columns as Current tools, never the blob. */
+const LOG_PART_SQL = `
+  SELECT message_id                                    AS mid,
+         json_extract(data,'$.type')                   AS kind,
+         json_extract(data,'$.time.start')             AS pstart,
+         json_extract(data,'$.time.end')               AS pend,
+         json_extract(data,'$.tool')                   AS tool,
+         json_extract(data,'$.state.status')           AS status,
+         json_extract(data,'$.state.time.start')       AS tstart,
+         json_extract(data,'$.state.time.end')         AS tend,
+         json_extract(data,'$.state.title')            AS title,
+         json_extract(data,'$.state.input.command')    AS command,
+         json_extract(data,'$.input.command')          AS command2,
+         json_extract(data,'$.state.input.filePath')   AS filePath,
+         json_extract(data,'$.input.filePath')         AS filePath2,
+         json_extract(data,'$.state.input.pattern')    AS pattern,
+         json_extract(data,'$.input.pattern')          AS pattern2,
+         json_extract(data,'$.state.input.description') AS description,
+         json_extract(data,'$.input.description')      AS description2,
+         json_extract(data,'$.state.input.subagent_type') AS subagent,
+         json_extract(data,'$.state.input.category')   AS category
+  FROM part
+  WHERE session_id = ?
+  ORDER BY time_created DESC
+  LIMIT ?`
+
 export type MsgRow = {
   id: string
   role: string | null
@@ -176,6 +207,13 @@ export type PartRow = {
   status: string | null
   tstart: number | null
   tend: number | null
+  /** Log-only hints — absent on the live PART_SQL scan. */
+  title?: string | null
+  command?: string | null
+  filePath?: string | null
+  pattern?: string | null
+  description?: string | null
+  subagent?: string | null
 }
 
 /** Per-message timing collected from its parts. */
@@ -190,13 +228,9 @@ type Bucket = {
 }
 
 function num(v: unknown): number {
-  return typeof v === "number" && Number.isFinite(v) && v > 0 ? v : 0
+  return finiteNum(v)
 }
 
-function stamp(v: unknown): number | null {
-  if (typeof v !== "number" || !Number.isFinite(v) || v <= 0) return null
-  return v < 1e11 ? v * 1000 : v
-}
 
 function span(from: number | null, to: number | null): number {
   if (from == null || to == null || to < from) return 0
@@ -226,6 +260,326 @@ function modelLabel(provider: string | null, model: string | null): string {
   return (provider || "model").trim() || "model"
 }
 
+function logDur(ms: number): string {
+  return formatDuration(ms) || "0ms"
+}
+
+function logStatus(err: string | null | undefined): string {
+  const raw = (err || "").trim()
+  if (!raw) return "ok"
+  return raw.toLowerCase().includes("abort") ? "abort" : "error"
+}
+
+/** Aligned columns for a Perf log. Last cell is not padded. */
+export function formatColumns(headers: string[], rows: string[][]): string {
+  if (headers.length === 0) return ""
+  const widths = headers.map((h, i) => {
+    let w = h.length
+    for (const row of rows) {
+      const cell = row[i] ?? ""
+      if (cell.length > w) w = cell.length
+    }
+    return w
+  })
+  const line = (cells: string[]) =>
+    cells.map((c, i) => (i >= widths.length - 1 ? c : (c ?? "").padEnd(widths[i]!))).join("  ")
+  return [line(headers), ...rows.map((r) => line(headers.map((_, i) => r[i] ?? "")))].join("\n")
+}
+
+export type PerfLogKind = PerfPhase | "models" | "time"
+
+export type PerfLogRow = {
+  at: number | null
+  end?: number | null
+  phase: string
+  /** Bare tool id (`bash`, `read`). Empty on wait/think/recv. */
+  tool?: string
+  /** Exact call hint (`db.ts`, `bun test …`) or the model name. */
+  name: string
+  status: string
+  ms: number
+  extra?: string
+}
+
+function hintStr(v: unknown): string | null {
+  return typeof v === "string" && v.trim() ? v.trim() : null
+}
+
+/** Bare tool + the specific call (file / command / pattern). Never I/O. */
+export function toolLogCall(part: PartRow): { tool: string; call: string } {
+  const tool = hintStr(part.tool) || "tool"
+  const label = shortToolLabel({
+    tool,
+    title: part.title,
+    command: part.command,
+    filePath: part.filePath,
+    pattern: part.pattern,
+    description: part.description,
+    subagent: part.subagent,
+    maxHint: 48,
+  })
+  const prefix = `${tool} `
+  const call = label.startsWith(prefix) ? label.slice(prefix.length) : label === tool ? "—" : label
+  return { tool, call }
+}
+
+export function perfLogKindLabel(kind: PerfLogKind): string {
+  return kind === "tool" ? "tools" : kind
+}
+
+export function perfLogFileName(kind: PerfLogKind, generatedAt: number): string {
+  const stamp = formatWhen(generatedAt).replace(/[: ]/g, "-")
+  return `perf-${perfLogKindLabel(kind)}-${stamp}.log`
+}
+
+/** One dated event per turn / tool / idle gap. Exported for tests. */
+export function collectPerfLogRows(
+  kind: PerfLogKind,
+  msgs: MsgRow[],
+  parts: PartRow[],
+): PerfLogRow[] {
+  const { byMsg } = collectParts(parts)
+  const rows: PerfLogRow[] = []
+  const assistant: Array<{
+    start: number | null
+    end: number | null
+    model: string
+    status: string
+    waitMs: number
+    thinkMs: number
+    recvMs: number
+    toolMs: number
+    tin: number
+    tout: number
+  }> = []
+
+  for (const row of msgs) {
+    if ((row.role || "") !== "assistant") continue
+    const start = toEpochMs(row.created)
+    const end = toEpochMs(row.completed)
+    const b = byMsg.get(String(row.id)) ?? newBucket()
+    const model = modelLabel(row.provider, row.model)
+    const status = logStatus(row.err)
+    const waitMs = span(start, b.firstOut)
+    const recvMs = span(b.textStart, b.textEnd)
+    assistant.push({
+      start,
+      end,
+      model,
+      status,
+      waitMs,
+      thinkMs: b.thinkMs,
+      recvMs,
+      toolMs: b.toolMs,
+      tin: num(row.tin),
+      tout: num(row.tout),
+    })
+    if (kind === "wait" || kind === "time") {
+      rows.push({ at: start, end, phase: "wait", name: model, status, ms: waitMs })
+    }
+    if ((kind === "think" || kind === "time") && b.thinkMs > 0) {
+      rows.push({ at: start, end, phase: "think", name: model, status, ms: b.thinkMs })
+    }
+    if (kind === "recv" || kind === "time") {
+      rows.push({ at: start, end, phase: "recv", name: model, status, ms: recvMs })
+    }
+    if (kind === "models") {
+      rows.push({
+        at: start,
+        end,
+        phase: "turn",
+        name: model,
+        status,
+        ms: span(start, end),
+        extra: [logDur(waitMs), logDur(b.thinkMs), logDur(recvMs), logDur(b.toolMs), String(num(row.tin)), String(num(row.tout))].join("\t"),
+      })
+    }
+  }
+
+  if (kind === "tool" || kind === "time") {
+    for (const part of parts) {
+      if ((part.kind || "") !== "tool") continue
+      const start = toEpochMs(part.tstart)
+      const end = toEpochMs(part.tend)
+      const ms = span(start, end)
+      const failed = (part.status || "").toLowerCase() === "error"
+      const { tool, call } = toolLogCall(part)
+      rows.push({
+        at: start,
+        end,
+        phase: "tool",
+        tool,
+        name: call,
+        status: failed ? "error" : hintStr(part.status) || "ok",
+        ms,
+      })
+    }
+  }
+
+  if (kind === "idle" || kind === "time") {
+    const ordered = [...assistant].sort((a, b) => (a.start ?? 0) - (b.start ?? 0))
+    for (let i = 0; i < ordered.length - 1; i += 1) {
+      const cur = ordered[i]
+      const next = ordered[i + 1]
+      if (!cur || !next) continue
+      const from = cur.end ?? cur.start
+      const gap = span(from, next.start)
+      if (gap > 0) {
+        rows.push({ at: from, end: next.start, phase: "idle", name: "gap", status: "ok", ms: gap })
+      }
+    }
+  }
+
+  rows.sort((a, b) => (a.at ?? 0) - (b.at ?? 0) || a.phase.localeCompare(b.phase))
+  return rows
+}
+
+export type PerfLogDoc = {
+  title: string
+  fileName: string
+  text: string
+  written: string | null
+}
+
+function toolSummary(rows: PerfLogRow[]): { headers: string[]; rows: string[][] } {
+  const by = new Map<string, { tool: string; call: string; count: number; errors: number; totalMs: number }>()
+  for (const row of rows) {
+    if (row.phase !== "tool") continue
+    const tool = row.tool || row.name
+    const call = row.tool ? row.name : "—"
+    const key = `${tool}\t${call}`
+    const agg = by.get(key) ?? { tool, call, count: 0, errors: 0, totalMs: 0 }
+    agg.count += 1
+    agg.totalMs += row.ms
+    if (row.status === "error") agg.errors += 1
+    by.set(key, agg)
+  }
+  const list = [...by.values()]
+    .map((a) => ({ ...a, avgMs: a.count > 0 ? Math.round(a.totalMs / a.count) : 0 }))
+    .sort((a, b) => b.totalMs - a.totalMs || b.count - a.count)
+  return {
+    headers: ["tool", "call", "count", "errors", "total", "avg"],
+    rows: list.map((t) => [t.tool, t.call, String(t.count), String(t.errors), logDur(t.totalMs), logDur(t.avgMs)]),
+  }
+}
+
+/** Build the dated column log. `now` is the generation stamp. */
+export function formatPerfLog(
+  kind: PerfLogKind,
+  sessionId: string,
+  now: number,
+  rows: PerfLogRow[],
+): string {
+  const title = perfLogKindLabel(kind)
+  const head = [
+    `# Perf ${title} log`,
+    `# generated ${formatWhen(now)}`,
+    `# session ${sessionId}`,
+    `# rows ${rows.length}`,
+    "",
+  ]
+  const parts = [...head]
+  if (kind === "tool" || kind === "time") {
+    const sum = toolSummary(rows)
+    if (sum.rows.length > 0) {
+      parts.push(formatColumns(sum.headers, sum.rows), "")
+    }
+  }
+  if (rows.length === 0) {
+    parts.push("(no rows)")
+    return `${parts.join("\n")}\n`
+  }
+  if (kind === "models") {
+    const headers = ["when", "model", "wait", "think", "recv", "tools", "in", "out", "status"]
+    const body = rows.map((r) => {
+      const extra = (r.extra ?? "").split("\t")
+      return [
+        formatWhen(r.at),
+        r.name,
+        extra[0] || "—",
+        extra[1] || "—",
+        extra[2] || "—",
+        extra[3] || "—",
+        extra[4] || "0",
+        extra[5] || "0",
+        r.status,
+      ]
+    })
+    parts.push(formatColumns(headers, body))
+  } else if (kind === "tool") {
+    parts.push(
+      formatColumns(
+        ["when", "ended", "tool", "call", "status", "duration"],
+        rows.map((r) => [
+          formatWhen(r.at),
+          formatWhen(r.end),
+          r.tool || r.name,
+          r.tool ? r.name : "—",
+          r.status,
+          logDur(r.ms),
+        ]),
+      ),
+    )
+  } else if (kind === "time") {
+    parts.push(
+      formatColumns(
+        ["when", "ended", "phase", "tool", "call", "status", "duration"],
+        rows.map((r) => [
+          formatWhen(r.at),
+          formatWhen(r.end),
+          r.phase,
+          r.tool || "—",
+          r.name,
+          r.status,
+          logDur(r.ms),
+        ]),
+      ),
+    )
+  } else {
+    parts.push(
+      formatColumns(
+        ["when", "ended", "name", "status", "duration"],
+        rows.map((r) => [formatWhen(r.at), formatWhen(r.end), r.name, r.status, logDur(r.ms)]),
+      ),
+    )
+  }
+  return `${parts.join("\n")}\n`
+}
+
+export function writePerfLog(text: string, fileName: string, dir?: string): string | null {
+  try {
+    const root = dir ?? path.join(os.tmpdir(), "oes-perf")
+    fs.mkdirSync(root, { recursive: true })
+    const abs = path.join(root, fileName)
+    fs.writeFileSync(abs, text, "utf8")
+    return abs
+  } catch {
+    return null
+  }
+}
+
+export function readPerfLog(opts: {
+  dbPath: string
+  sessionId: string
+  turns: number
+  kind: PerfLogKind
+  now: number
+  logDir?: string
+}): PerfLogDoc | null {
+  if (!opts.dbPath || !fs.existsSync(opts.dbPath)) return null
+  const load = (): PerfLogDoc | null => {
+    const db = openReadonlyDb(opts.dbPath)
+    if (!db) return null
+    const { msgs, parts } = readRows(db, opts.sessionId, opts.turns, true)
+    const rows = collectPerfLogRows(opts.kind, msgs, parts)
+    const text = formatPerfLog(opts.kind, opts.sessionId, opts.now, rows)
+    const fileName = perfLogFileName(opts.kind, opts.now)
+    const written = writePerfLog(text, fileName, opts.logDir)
+    return { title: `${perfLogKindLabel(opts.kind)} log`, fileName, text, written }
+  }
+  return withDbRead(load, () => null)
+}
+
 function collectParts(rows: PartRow[]): {
   byMsg: Map<string, Bucket>
   tools: Map<string, ToolPerf>
@@ -240,8 +594,8 @@ function collectParts(rows: PartRow[]): {
     const b = byMsg.get(mid) ?? newBucket()
 
     if (kind === "text" || kind === "reasoning") {
-      const start = stamp(row.pstart)
-      const end = stamp(row.pend)
+      const start = toEpochMs(row.pstart)
+      const end = toEpochMs(row.pend)
       if (start != null && (b.firstOut == null || start < b.firstOut)) b.firstOut = start
       if (kind === "reasoning") {
         b.thinkMs += span(start, end)
@@ -253,8 +607,8 @@ function collectParts(rows: PartRow[]): {
       continue
     }
 
-    const start = stamp(row.tstart)
-    const end = stamp(row.tend)
+    const start = toEpochMs(row.tstart)
+    const end = toEpochMs(row.tend)
     const ms = span(start, end)
     const failed = (row.status || "").toLowerCase() === "error"
     b.tools += 1
@@ -272,14 +626,44 @@ function collectParts(rows: PartRow[]): {
   return { byMsg, tools }
 }
 
+type LogPartSql = PartRow & {
+  command2?: string | null
+  filePath2?: string | null
+  pattern2?: string | null
+  description2?: string | null
+  category?: string | null
+}
+
+function foldLogPart(row: LogPartSql): PartRow {
+  return {
+    mid: row.mid,
+    kind: row.kind,
+    pstart: row.pstart,
+    pend: row.pend,
+    tool: row.tool,
+    status: row.status,
+    tstart: row.tstart,
+    tend: row.tend,
+    title: hintStr(row.title),
+    command: hintStr(row.command) || hintStr(row.command2),
+    filePath: hintStr(row.filePath) || hintStr(row.filePath2),
+    pattern: hintStr(row.pattern) || hintStr(row.pattern2),
+    description: hintStr(row.description) || hintStr(row.description2),
+    subagent: hintStr(row.subagent) || hintStr(row.category),
+  }
+}
+
 function readRows(
   db: SqlDb,
   sessionId: string,
   turns: number,
+  detailed = false,
 ): { msgs: MsgRow[]; parts: PartRow[] } {
   const partLimit = Math.min(6000, Math.max(200, turns * 12))
   const msgs = db.all<MsgRow>(MSG_SQL, sessionId, turns)
-  const parts = db.all<PartRow>(PART_SQL, sessionId, partLimit)
+  const parts = detailed
+    ? db.all<LogPartSql>(LOG_PART_SQL, sessionId, partLimit).map(foldLogPart)
+    : db.all<PartRow>(PART_SQL, sessionId, partLimit)
   return { msgs, parts }
 }
 
@@ -302,8 +686,8 @@ export function aggregate(sessionId: string, msgs: MsgRow[], parts: PartRow[]): 
 
   for (const row of msgs) {
     if ((row.role || "") !== "assistant") continue
-    const start = stamp(row.created)
-    const end = stamp(row.completed)
+    const start = toEpochMs(row.created)
+    const end = toEpochMs(row.completed)
     const b = byMsg.get(String(row.id)) ?? newBucket()
 
     const waitMs = span(start, b.firstOut)
@@ -447,18 +831,23 @@ export type PerfOptions = {
   cacheKey?: string
 }
 
-let cacheKey = ""
-let cached: PerfSnapshot | null = null
+const perfCache = createStampCache<PerfSnapshot>()
 let histKey = ""
 let histAt = 0
 let histCached: SessionPerf[] = []
 const HIST_TTL_MS = 10_000
 
+export function resetPerfCache(): void {
+  perfCache.reset()
+  histKey = ""
+  histAt = 0
+  histCached = []
+}
+
 export function readPerfSnapshot(opts: PerfOptions): PerfSnapshot {
   const key = opts.cacheKey
     ? `${opts.cacheKey}::${opts.turns}::${(opts.history ?? []).map((h) => h.id).join(",")}`
     : ""
-  if (key && key === cacheKey && cached) return cached
 
   const load = (): PerfSnapshot => {
     if (!opts.dbPath || !fs.existsSync(opts.dbPath)) {
@@ -490,21 +879,10 @@ export function readPerfSnapshot(opts: PerfOptions): PerfSnapshot {
     return snap
   }
 
-  let snap: PerfSnapshot
-  try {
-    snap = load()
-  } catch (e) {
-    resetReadonlyDb()
-    try {
-      snap = load()
-    } catch {
-      snap = emptyPerf(opts.sessionId, e instanceof Error ? e.message : "perf read failed")
-    }
-  }
-
-  if (key) {
-    cacheKey = key
-    cached = snap
-  }
-  return snap
+  const run = () =>
+    withDbRead(load, (e) =>
+      emptyPerf(opts.sessionId, e instanceof Error ? e.message : "perf read failed"),
+    )
+  if (!key) return run()
+  return perfCache.get(key, run)
 }

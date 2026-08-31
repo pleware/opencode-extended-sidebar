@@ -1,5 +1,6 @@
 # Changelog
 
+- **0.2.11** (2026-08-31) Open a dated Perf timing log when you click a Time phase, Models header, or slow-tool row.
 - **0.2.10** (2026-08-30) Show a success toast when the sidebar plugin loads.
 - **0.2.9** (2026-08-30) Split OES and OMO into stacked groups with Works, Boulder, and Docs tabs plus height-aware row trimming.
 - **0.2.8** (2026-08-30) Open OMO plan rows as a headed markdown preview and mark plan status with check glyphs.

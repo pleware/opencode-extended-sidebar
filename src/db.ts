@@ -4,8 +4,13 @@
 import fs from "node:fs"
 import { fileHitFromExtracted, filesFromPatchJson, type FileFilter, type FileView } from "./files.js"
 import { getOes } from "./oes.js"
-import { shortToolLabel } from "./pulse.js"
-import { openReadonlyDb, resetReadonlyDb, type SqlDb } from "./sqlite.js"
+import { preferToolLabel, shortToolLabel, toEpochMs, type ToolHit } from "./pulse.js"
+import { openReadonlyDb, withDbRead, type SqlDb } from "./sqlite.js"
+import { toToolStatus, type ToolStatus } from "./status.js"
+
+export type { ToolStatus }
+
+export { toToolStatus as normalizeToolStatus }
 
 export type SessionRow = {
   id: string
@@ -158,8 +163,6 @@ export function emptyDb(dbPath: string, error: string | null = null): DbSnapshot
   }
 }
 
-export type ToolStatus = "running" | "completed" | "error" | "pending"
-
 export type ToolView = {
   id: string
   callId?: string | null
@@ -174,15 +177,6 @@ export type ToolView = {
 
 const TOOL_SCAN = 80
 const TOOL_ROWS = 8
-
-export function normalizeToolStatus(raw: string | null | undefined): ToolStatus {
-  const s = (raw || "").toLowerCase()
-  if (s === "running" || s === "in_progress" || s === "active") return "running"
-  if (s === "completed" || s === "done" || s === "success") return "completed"
-  if (s === "error" || s === "failed") return "error"
-  if (s === "pending" || s === "queued") return "pending"
-  return "pending"
-}
 
 function str(v: unknown): string | null {
   if (typeof v === "string" && v.trim()) return v.trim()
@@ -246,15 +240,15 @@ export function listToolEvents(db: SqlDb, sessionId: string, limit = TOOL_ROWS):
   const out: ToolView[] = []
   for (const row of rows) {
     const tool = str(row.tool) || "tool"
-    const start = stampMaybe(row.tstart)
-    const end = stampMaybe(row.tend)
-    const status = normalizeToolStatus(
+    const start = toEpochMs(row.tstart)
+    const end = toEpochMs(row.tend)
+    const status = toToolStatus(
       str(row.status) || (end != null ? "completed" : start != null ? "running" : null),
     )
-    const startedAt = start ?? stampMaybe(row.time_created)
+    const startedAt = start ?? toEpochMs(row.time_created)
     const endedAt =
       end ??
-      (status === "completed" || status === "error" ? stampMaybe(row.time_updated) : null)
+      (status === "completed" || status === "error" ? toEpochMs(row.time_updated) : null)
     const durationMs =
       startedAt != null && endedAt != null && endedAt >= startedAt ? endedAt - startedAt : null
     out.push({
@@ -280,9 +274,40 @@ export function listToolEvents(db: SqlDb, sessionId: string, limit = TOOL_ROWS):
   return out
 }
 
-function stampMaybe(v: number | null | undefined): number | null {
-  if (typeof v !== "number" || !Number.isFinite(v) || v <= 0) return null
-  return v < 1e11 ? v * 1000 : v
+export function mergeTools(
+  dbTools: ToolView[],
+  live: Record<string, ToolHit>,
+  now: number,
+  limit: number,
+): ToolView[] {
+  const byId = new Map<string, ToolView>()
+  for (const t of dbTools) byId.set(t.id, t)
+  for (const hit of Object.values(live)) {
+    const prev = byId.get(hit.id)
+    if (prev && (prev.status === "completed" || prev.status === "error") && hit.status === "running") {
+      continue
+    }
+    byId.set(hit.id, {
+      id: hit.id,
+      name: preferToolLabel(hit.name, prev?.name),
+      tool: prev?.tool || "tool",
+      status: hit.status,
+      startedAt: prev?.startedAt ?? now,
+      endedAt: hit.status === "running" ? null : now,
+      durationMs:
+        hit.status === "running"
+          ? null
+          : prev?.durationMs ?? (prev?.startedAt != null ? Math.max(0, now - prev.startedAt) : null),
+    })
+  }
+  return [...byId.values()]
+    .sort((a, b) => {
+      const ar = a.status === "running" || a.status === "pending" ? 0 : 1
+      const br = b.status === "running" || b.status === "pending" ? 0 : 1
+      if (ar !== br) return ar - br
+      return (b.startedAt ?? 0) - (a.startedAt ?? 0)
+    })
+    .slice(0, limit)
 }
 
 const FILE_SCAN = 80
@@ -351,7 +376,7 @@ export function listSessionFiles(db: SqlDb, sessionId: string, filter?: FileFilt
     })
   }
   for (const row of rows) {
-    const at = stampMaybe(row.time_updated) ?? stampMaybe(row.time_created) ?? 0
+    const at = toEpochMs(row.time_updated) ?? toEpochMs(row.time_created) ?? 0
     if (str(row.kind) === "patch") {
       for (const f of filesFromPatchJson(row.files, at, filter)) add(f)
       continue
@@ -479,14 +504,7 @@ export function readDbSnapshot(opts: {
     }
   }
 
-  try {
-    return run()
-  } catch (e) {
-    resetReadonlyDb()
-    try {
-      return run()
-    } catch {
-      return emptyDb(opts.dbPath, e instanceof Error ? e.message : "db read failed")
-    }
-  }
+  return withDbRead(run, (e) =>
+    emptyDb(opts.dbPath, e instanceof Error ? e.message : "db read failed"),
+  )
 }

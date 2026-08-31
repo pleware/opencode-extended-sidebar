@@ -8,6 +8,7 @@ import path from "node:path"
 import { findOmoWatchDirs } from "./omo.js"
 import { canonicalizePath } from "./paths.js"
 import { canPreviewPath } from "./preview.js"
+import { createStampCache } from "./cache.js"
 
 export type DocKind = "plan" | "draft" | "notepad" | "proof"
 
@@ -136,11 +137,11 @@ function scan(projectRoot: string, planPaths: readonly string[]): DocView[] {
   return out
 }
 
-let cache: { key: string; at: number; docs: DocView[] } | null = null
+const docsCache = createStampCache<DocView[]>({ ttlMs: TTL_MS })
 
 /** Drop the document cache so the next read hits the filesystem. */
 export function resetDocsCache(): void {
-  cache = null
+  docsCache.reset()
 }
 
 /**
@@ -154,16 +155,13 @@ export function readOmoDocs(
 ): DocView[] {
   if (!projectRoot) return []
   const key = `${projectRoot}::${planPaths.join("|")}`
-  const now = Date.now()
-  if (cache && cache.key === key && now - cache.at < TTL_MS) return cache.docs
-  let docs: DocView[]
-  try {
-    docs = scan(projectRoot, planPaths)
-  } catch {
-    docs = []
-  }
-  cache = { key, at: now, docs }
-  return docs
+  return docsCache.get(key, () => {
+    try {
+      return scan(projectRoot, planPaths)
+    } catch {
+      return []
+    }
+  })
 }
 
 /** Counts per kind, in display order. Empty kinds are dropped. */

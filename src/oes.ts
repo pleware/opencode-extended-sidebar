@@ -6,6 +6,7 @@ import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { fileStamp, getOpenCodeConfigDir } from "./paths.js"
+import { createStampCache } from "./cache.js"
 
 export type OesOptions = {
   fileRows: number
@@ -103,21 +104,17 @@ export function oesStamp(projectRoot?: string | null): string {
   return oesPaths(projectRoot).map(fileStamp).join("|")
 }
 
-let cacheKey = ""
-let cache: OesOptions = OES_DEFAULTS
+const oesCache = createStampCache<OesOptions>()
 
 /** Drop the merged-options cache so the next getOes re-reads files. */
 export function resetOesCache(): void {
-  cacheKey = ""
-  cache = OES_DEFAULTS
+  oesCache.reset()
 }
 
 export function getOes(projectRoot?: string | null): OesOptions {
-  const key = oesStamp(projectRoot)
-  if (key === cacheKey) return cache
-  let next = { ...OES_DEFAULTS }
-  for (const p of oesPaths(projectRoot)) next = pick(readJson(p), next)
-  cacheKey = key
-  cache = next
-  return next
+  return oesCache.get(oesStamp(projectRoot), () => {
+    let next = { ...OES_DEFAULTS }
+    for (const p of oesPaths(projectRoot)) next = pick(readJson(p), next)
+    return next
+  })
 }

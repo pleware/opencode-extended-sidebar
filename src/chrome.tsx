@@ -57,6 +57,23 @@ export function kvWriteOne(api: TuiPluginApi, key: string, value: string): void 
   }
 }
 
+/** Persist a fold flag and optionally re-render. Shared by sidebar and Perf. */
+export function makeFoldToggle(
+  api: TuiPluginApi,
+  key: string,
+  set: (fn: (prev: boolean) => boolean) => void,
+  onAfter?: () => void,
+): () => void {
+  return () => {
+    set((prev) => {
+      const next = !prev
+      kvWrite(api, key, next)
+      return next
+    })
+    onAfter?.()
+  }
+}
+
 export function diffAddFg(colors: ThemeColors): string {
   return colors.diffAdded || colors.success
 }
@@ -92,22 +109,30 @@ export function FoldHeader(props: {
   diff?: { additions: number; deletions: number }
   colors: ThemeColors
   onToggle: () => void
+  /** Title click opens a detail (fold stays on the chevron). */
+  onDetail?: () => void
 }): JSX.Element {
-  const label = () => {
+  const rest = () => {
     const n = props.count
     const stat = props.suffix ? ` ${props.suffix}` : ""
-    if (typeof n !== "number") return `${props.open ? "▼" : "▶"} ${props.title}${stat}`
+    if (typeof n !== "number") return `${props.title}${stat}`
     const live = props.live ?? 0
     const extra = live > 0 ? ` (${live}/${n})` : ` (${n})`
-    return `${props.open ? "▼" : "▶"} ${props.title}${extra}${stat}`
+    return `${props.title}${extra}${stat}`
   }
   const hasDiff = () =>
     Boolean(props.diff && (props.diff.additions > 0 || props.diff.deletions > 0))
+  const chevron = () => (props.open ? "▼" : "▶")
   return (
-    <box flexDirection="row" onMouseUp={props.onToggle}>
-      <text fg={props.colors.text} underline>
-        {label()}
+    <box flexDirection="row" onMouseUp={props.onDetail ? undefined : props.onToggle}>
+      <text fg={props.colors.text} underline={!props.onDetail} onMouseUp={props.onDetail ? props.onToggle : undefined}>
+        {props.onDetail ? `${chevron()} ` : `${chevron()} ${rest()}`}
       </text>
+      <Show when={props.onDetail}>
+        <text fg={props.colors.text} underline onMouseUp={props.onDetail}>
+          {rest()}
+        </text>
+      </Show>
       <Show when={hasDiff()}>
         <text> </text>
         <DiffStat

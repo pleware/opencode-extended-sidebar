@@ -70,7 +70,7 @@ Extended Sidebar puts it back on screen. It reads OpenCode's own SQLite database
 
 > A session that feels slow is rarely slow for the reason you assume. **Perf** splits the wall clock into the four things that can eat it — **↑** waiting for the model to answer, **∴** thinking, **↓** streaming tokens back, **→** tool calls — and draws each as a bar with its share and its total. Whatever the phases do not claim is idle.
 >
-> Every model you used gets a row: turns, average time to first token, average thinking time, average streaming time, and output tokens per second. Mixing a fast model and a slow one in the same session stops being a guess. Under it, tools are ranked by the time they burned, not by how often they ran, so a single 2-minute call outranks fifty instant greps. Two sparklines show whether latency and throughput are drifting over the last turns, and **History** puts the same numbers next to your other recent sessions.
+> Every model you used is two lines: the name on its own, then the timings indented under it — turns, average time to first token, average thinking time, average streaming time, and output tokens per second — so a long model id does not squeeze the numbers. The **Models** header carries the session totals — input, output, and reasoning tokens — so you see the mix before you open a row. Mixing a fast model and a slow one in the same session stops being a guess. **Time** puts the turn count next to the wall clock on the same header, then splits that clock into bars. Click a bar — **tools**, wait, think, recv, idle — and a dialog opens with the dated column log from the database: which tool, the exact call (`read db.ts`, `bun test …`), how long, when it started and ended. The same click writes that log to a file in the background. Under it, tools are ranked by the time they burned, not by how often they ran, so a single 2-minute call outranks fifty instant greps. Two sparklines show whether latency and throughput are drifting over the last turns, and **History** puts the same numbers next to your other recent sessions.
 >
 > While the agent is working, the top line names the phase it is in right now and counts up, so you can watch a stall happen instead of reconstructing it afterwards.
 >
@@ -88,7 +88,7 @@ Extended Sidebar puts it back on screen. It reads OpenCode's own SQLite database
 >   … boulder rows …
 > ```
 >
-> **Sessions** is the project view: where you are, where you have been, who else is running. **Current** is the deep view: this agent, the delegates it spawned (not the project's leftover boulder), its tools, its files. **Perf** is the timing view. The two groups pick their tab independently, and both choices are remembered between restarts, as is every collapsed section. Clickable labels — tabs, the OMO brand, fold headers, session rows — are underlined.
+> **Sessions** is the project view: where you are, where you have been, who else is running. **Current** is the deep view: this agent, the delegates it spawned (not the project's leftover boulder), its tools, its files. **Perf** is the timing view. The two groups pick their tab independently, and both choices are remembered between restarts, as is every collapsed section. Clickable labels — tabs, the OMO brand, fold headers, session rows, Time phases — are underlined. On Perf, the chevron still folds; the underlined title opens the log.
 
 ## ⇕ Rows that fit the window
 
@@ -131,7 +131,6 @@ Every row is one glyph plus one colour: the glyph says *what* is happening, the 
 | `M` `A` `D` `R` `C` `U` `T` `?` | Files: git status — same letters as `git status --short`      |
 | `V`                             | Files: viewed (session read only) — not a git letter          |
 | `∴`                             | Perf: thinking — reasoning time and reasoning tokens          |
-| `⧉`                             | Perf: cache hit rate — cached input vs input actually sent    |
 | `█░`                            | Perf: share of the wall clock, or of total tool time          |
 | `▁▂▃▄▅▆▇█`                      | Perf: sparkline over recent turns — `·` is a turn with no reading |
 
@@ -238,7 +237,7 @@ Tools and files are filtered with `json_extract` on `part.data` — SQLite retur
 
 File letters come from `git status --porcelain -- <paths>` for the files already in the Files list, at the git root found by walking up from the session directory. They keep git's meaning: **R** is rename, **U** is unmerged, **?** is untracked. The spawn is skipped while Files is folded or you are not on the Current tab, and it is debounced so indexer noise on Windows does not walk the whole tree. Git runs **asynchronously** — the panel keeps the last letters (or **V** on a first read) until the process returns, so a 1.5 s `git` cannot stall the TUI. A git letter always wins over a session letter. The only extra is **V** (viewed), which git's short status does not use. No `.git`, no `git` on PATH, or a failed spawn: the sidebar stays up and only **V** is used for read-only touches. The name itself stays the basename — no full paths.
 
-Perf times each assistant turn from its own records: waiting is the gap between the message start and its first `text` or `reasoning` part, thinking is the summed length of the `reasoning` parts, streaming spans the `text` parts, and tool time comes from each tool part's own start and end. Phases are measured against the whole window rather than the summed turn durations, because a tool call can outlive the turn that started it. Every one of those fields is pulled with `json_extract`, so SQLite returns numbers and statuses and nothing else. The scan runs **only while the Perf tab is open**. It is cached against this session's `MAX(time_updated)`, not the whole WAL, so streaming on another tab does not keep re-reading parts. History rows refresh at most every ten seconds.
+Perf times each assistant turn from its own records: waiting is the gap between the message start and its first `text` or `reasoning` part, thinking is the summed length of the `reasoning` parts, streaming spans the `text` parts, and tool time comes from each tool part's own start and end. Phases are measured against the whole window rather than the summed turn durations, because a tool call can outlive the turn that started it. Every one of those fields is pulled with `json_extract`, so SQLite returns numbers and statuses and nothing else. Click a Time phase, the Time / Models / Slow tools title, or a tool row to open that slice as a dated column log — one row per turn or tool call, with UTC start and end. A tools row names the exact call (`read db.ts`, `bash bun test …`, a grep pattern), not just `bash` / `read`. The dialog is the log; a copy is also written under the process temp directory as `perf-<kind>-<stamp>.log`. Prompts, full arguments and outputs stay in SQLite. The call hint is the same metadata Current already shows. The scan runs **only while the Perf tab is open**. It is cached against this session's `MAX(time_updated)`, not the whole WAL, so streaming on another tab does not keep re-reading parts. History rows refresh at most every ten seconds.
 
 Cost is shown only when the provider reports it. Many gateways record `0`, and the sidebar will not invent a price from an online catalogue.
 
@@ -251,7 +250,7 @@ src/
   tui.tsx       # plugin entry (sidebar_content slot)
   sidebar.tsx   # OES + OMO groups, foldable sections, rows
   layout.ts     # terminal-height row budget (pure)
-  detail.tsx    # file / tool / work / document detail dialogs
+  detail.tsx    # file / tool / work / document / perf-log detail dialogs
   preview.ts    # text/markdown preview helpers (no OpenTUI)
   clipboard.ts  # copy-to-clipboard helper (no deps)
   chrome.tsx    # brand tabs, fold headers, diff stats, kv persistence

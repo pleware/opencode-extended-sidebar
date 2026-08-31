@@ -4,6 +4,7 @@
 import fs from "node:fs"
 import path from "node:path"
 import { fileStamp } from "./paths.js"
+import { createStampCache } from "./cache.js"
 
 type Rule = { neg: boolean; dirOnly: boolean; anchored: boolean; re: RegExp }
 
@@ -103,15 +104,10 @@ function hits(rel: string, rule: Rule): boolean {
   return false
 }
 
-let cacheKey = ""
-let cacheRules: Rule[] = []
+const ruleCache = createStampCache<Rule[]>()
 
 function rulesFor(projectRoot: string): Rule[] {
-  const key = `${projectRoot}|${gitignoreStamp(projectRoot)}`
-  if (key === cacheKey) return cacheRules
-  cacheKey = key
-  cacheRules = loadRules(projectRoot)
-  return cacheRules
+  return ruleCache.get(`${projectRoot}|${gitignoreStamp(projectRoot)}`, () => loadRules(projectRoot))
 }
 
 /** True when the path is ignored by the project's root .gitignore. */

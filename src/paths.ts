@@ -55,6 +55,20 @@ export function realpathSafe(p: string): string | null {
   }
 }
 
+/** Last path segment. Never a directory. */
+export function basenameOf(p: string): string {
+  const t = p.replace(/\\/g, "/").replace(/\/+$/, "").trim()
+  if (!t) return "file"
+  const i = t.lastIndexOf("/")
+  const base = i >= 0 ? t.slice(i + 1) : t
+  return base || "file"
+}
+
+/** Positive finite number, else 0. */
+export function finiteNum(v: unknown): number {
+  return typeof v === "number" && Number.isFinite(v) && v > 0 ? v : 0
+}
+
 export function canonicalizePath(p: string): string {
   const resolved = path.resolve(p)
   return path.normalize(realpathSafe(resolved) ?? resolved)

@@ -7,7 +7,9 @@ import { emptyOmo, omoStamp, readOmo, readOmoConfig, type Delegate, type OmoConf
 import { gitignoreStamp } from "./gitignore.js"
 import { oesStamp } from "./oes.js"
 import { dbStamp, getOpenCodeDbPath } from "./paths.js"
-import { openReadonlyDb, resetReadonlyDb } from "./sqlite.js"
+import { createStampCache } from "./cache.js"
+import { openReadonlyDb, withDbRead } from "./sqlite.js"
+import { normalizeStatus } from "./status.js"
 
 export type DelegateView = Delegate & {
   tokensTotal: number | null
@@ -52,8 +54,9 @@ export function reconcileDelegateStatus(
   const omo = (omoStatus || "unknown").toLowerCase()
   if (!sess) return omo
   if (sess.status === "archived") return "completed"
-  const omoError = omo === "error" || omo === "failed"
-  const omoDone = omo === "completed" || omo === "done"
+  const c = normalizeStatus(omoStatus)
+  const omoError = c === "error"
+  const omoDone = c === "completed"
   if (sess.status === "idle") {
     if (omoError) return omo
     if (omoDone) return omo
@@ -167,37 +170,26 @@ export function readLiveSnapshot(opts: {
   })
   const omoKey = omoStamp(opts.projectRoot)
   let scan = "0"
-  const handle = openReadonlyDb(dbPath)
-  if (opts.sessionId && handle) {
-    try {
-      scan = sessionScanStamp(handle, opts.sessionId)
-    } catch {
-      resetReadonlyDb()
-      const again = openReadonlyDb(dbPath)
-      if (again) {
-        try {
-          scan = sessionScanStamp(again, opts.sessionId)
-        } catch {
-          scan = "x"
-        }
-      }
-    }
+  if (opts.sessionId) {
+    scan = withDbRead(() => {
+      const handle = openReadonlyDb(dbPath)
+      if (!handle) return "0"
+      return sessionScanStamp(handle, opts.sessionId)
+    }, () => "x")
   }
 
-  if (
-    !opts.force &&
-    last &&
-    last.sessionId === opts.sessionId &&
-    last.scan === scan &&
-    last.omo === omoKey
-  ) {
-    const now = Date.now()
-    return {
-      ...last.snap,
-      generatedAt: now,
-      fingerprint: `${cheap}::${scan}`,
-      scanStamp: scan,
-      db: withAges(last.snap.db, now),
+  const cacheId = `${opts.sessionId}::${scan}::${omoKey}`
+  if (!opts.force) {
+    const hit = liveCache.peek(cacheId)
+    if (hit) {
+      const now = Date.now()
+      return {
+        ...hit.snap,
+        generatedAt: now,
+        fingerprint: `${cheap}::${scan}`,
+        scanStamp: scan,
+        db: withAges(hit.snap.db, now),
+      }
     }
   }
 
@@ -205,20 +197,18 @@ export function readLiveSnapshot(opts: {
   const extraIds = omo.delegates
     .map((d) => d.sessionId)
     .filter((id): id is string => Boolean(id))
-  let db: DbSnapshot
-  try {
-    db = opts.sessionId
-      ? readDbSnapshot({
-          dbPath,
-          sessionId: opts.sessionId,
-          extraIds,
-          projectRoot: opts.projectRoot,
-        })
-      : emptyDb(dbPath, "no session")
-  } catch {
-    resetReadonlyDb()
-    db = emptyDb(dbPath, "db read failed")
-  }
+  const db = withDbRead(
+    () =>
+      opts.sessionId
+        ? readDbSnapshot({
+            dbPath,
+            sessionId: opts.sessionId,
+            extraIds,
+            projectRoot: opts.projectRoot,
+          })
+        : emptyDb(dbPath, "no session"),
+    () => emptyDb(dbPath, "db read failed"),
+  )
 
   const snap: LiveSnapshot = {
     generatedAt: Date.now(),
@@ -229,20 +219,20 @@ export function readLiveSnapshot(opts: {
     omoConfig: readOmoConfig(),
     delegates: enrichDelegates(omo, db),
   }
-  last = { sessionId: opts.sessionId, scan, omo: omoKey, snap }
+  liveCache.set(cacheId, { sessionId: opts.sessionId, scan, omo: omoKey, snap })
   return snap
 }
 
-let last: {
+const liveCache = createStampCache<{
   sessionId: string
   scan: string
   omo: string
   snap: LiveSnapshot
-} | null = null
+}>()
 
 /** Drop the in-memory live snapshot so the next read is a real load. */
 export function resetLiveCache(): void {
-  last = null
+  liveCache.reset()
 }
 
 function withAges(db: DbSnapshot, now: number): DbSnapshot {

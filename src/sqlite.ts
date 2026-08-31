@@ -112,6 +112,20 @@ export function resetReadonlyDb(): void {
   hold = null
 }
 
+/** Retry a read after dropping a stale handle. */
+export function withDbRead<T>(run: () => T, fallback: (err: unknown) => T): T {
+  try {
+    return run()
+  } catch (e) {
+    resetReadonlyDb()
+    try {
+      return run()
+    } catch {
+      return fallback(e)
+    }
+  }
+}
+
 /** Open opencode.db readonly. Reuses one handle per path. Never throws — returns null on failure. */
 export function openReadonlyDb(dbPath: string): SqlDb | null {
   if (!dbPath) return null

@@ -1,5 +1,18 @@
 import { describe, expect, test } from "bun:test"
-import { aggregate, type MsgRow, type PartRow } from "../../src/perf.js"
+import fs from "node:fs"
+import os from "node:os"
+import path from "node:path"
+import {
+  aggregate,
+  collectPerfLogRows,
+  formatColumns,
+  formatPerfLog,
+  perfLogFileName,
+  toolLogCall,
+  writePerfLog,
+  type MsgRow,
+  type PartRow,
+} from "../../src/perf.js"
 
 function msg(over: Partial<MsgRow> & { id: string }): MsgRow {
   return {
@@ -59,5 +72,88 @@ describe("aggregate", () => {
     const snap = aggregate("ses", msgs, [])
     expect(snap.totals.aborts).toBe(1)
     expect(snap.totals.errors).toBe(1)
+  })
+})
+
+describe("formatColumns", () => {
+  test("pads every column but the last", () => {
+    const out = formatColumns(["tool", "ms"], [["bash", "12"], ["read", "3"]])
+    expect(out.split("\n")[0]).toBe("tool  ms")
+    expect(out.split("\n")[1]).toBe("bash  12")
+  })
+})
+
+describe("perf log", () => {
+  const t0 = 1_700_000_000_000
+  const msgs = [msg({ id: "m1", created: t0, completed: t0 + 5_000, tout: 40 })]
+  const parts: PartRow[] = [
+    { mid: "m1", kind: "reasoning", pstart: t0 + 200, pend: t0 + 800, tool: null, status: null, tstart: null, tend: null },
+    { mid: "m1", kind: "text", pstart: t0 + 800, pend: t0 + 2_000, tool: null, status: null, tstart: null, tend: null },
+    { mid: "m1", kind: "tool", pstart: null, pend: null, tool: "bash", status: "completed", tstart: t0 + 3_000, tend: t0 + 4_000 },
+  ]
+
+  test("tools log has dated rows and a summary table", () => {
+    const rows = collectPerfLogRows("tool", msgs, parts)
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.tool).toBe("bash")
+    expect(rows[0]?.name).toBe("—")
+    expect(rows[0]?.ms).toBe(1_000)
+    const text = formatPerfLog("tool", "ses", t0, rows)
+    expect(text).toContain("# generated 2023-11-14 22:13:20")
+    expect(text).toContain("tool  call  count  errors  total  avg")
+    expect(text).toContain("bash")
+    expect(text).toContain("2023-11-14 22:13:23")
+    expect(text).not.toContain("prompt")
+  })
+
+  test("tools log names the exact call, not just bash/read", () => {
+    const hinted: PartRow[] = [
+      {
+        mid: "m1",
+        kind: "tool",
+        pstart: null,
+        pend: null,
+        tool: "read",
+        status: "completed",
+        tstart: t0 + 3_000,
+        tend: t0 + 4_000,
+        filePath: "src/db.ts",
+      },
+      {
+        mid: "m1",
+        kind: "tool",
+        pstart: null,
+        pend: null,
+        tool: "bash",
+        status: "completed",
+        tstart: t0 + 4_000,
+        tend: t0 + 5_000,
+        command: "bun test test/unit/perf.test.ts",
+      },
+    ]
+    expect(toolLogCall(hinted[0]!).call).toBe("db.ts")
+    expect(toolLogCall(hinted[1]!).call).toContain("bun test")
+    const text = formatPerfLog("tool", "ses", t0, collectPerfLogRows("tool", msgs, hinted))
+    expect(text).toContain("read")
+    expect(text).toContain("db.ts")
+    expect(text).toContain("bun test")
+    expect(text).toContain("ended")
+    expect(text).not.toContain("D:/")
+  })
+
+  test("wait / think / recv rows follow the same spans as aggregate", () => {
+    expect(collectPerfLogRows("wait", msgs, parts)[0]?.ms).toBe(200)
+    expect(collectPerfLogRows("think", msgs, parts)[0]?.ms).toBe(600)
+    expect(collectPerfLogRows("recv", msgs, parts)[0]?.ms).toBe(1_200)
+  })
+
+  test("writes a dated sidecar without throwing", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "oes-perf-"))
+    const name = perfLogFileName("tool", t0)
+    expect(name).toBe("perf-tools-2023-11-14-22-13-20.log")
+    const abs = writePerfLog("hello\n", name, dir)
+    expect(abs).toBe(path.join(dir, name))
+    expect(fs.readFileSync(abs!, "utf8")).toBe("hello\n")
+    fs.rmSync(dir, { recursive: true, force: true })
   })
 })

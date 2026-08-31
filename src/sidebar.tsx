@@ -5,21 +5,20 @@ import type { TuiPluginApi, TuiTheme } from "@opencode-ai/plugin/tui"
 import {
   currentTask,
   emptyOmo,
-  workIsTerminal,
-  workStatusGlyph,
+  workRowView,
   workStatusLabel,
 } from "./omo.js"
 import { ROW_MIN, ROW_RANK, packSections, panelRows, sliceWithOverflow } from "./layout.js"
 import { DOC_KIND_LABEL, groupDocs, readOmoDocs } from "./docs.js"
-import { emptyDb } from "./db.js"
+import { emptyDb, mergeTools } from "./db.js"
 import {
   BrandTabs,
   DiffStat,
   FoldHeader,
   kvRead,
   kvReadOne,
-  kvWrite,
   kvWriteOne,
+  makeFoldToggle,
   type ThemeColors,
 } from "./chrome.js"
 import {
@@ -45,6 +44,7 @@ import { onGitMarksChange } from "./git.js"
 import { getOes } from "./oes.js"
 import { startMonitor } from "./monitor.js"
 import { openDocDetail, openFileDetail, openToolDetail, openWorkDetail } from "./detail.js"
+import { eventType, shouldRefreshDb } from "./events.js"
 import { getOpenCodeDbPath } from "./paths.js"
 import {
   TICK_MS,
@@ -52,6 +52,7 @@ import {
   applyFlow,
   composeMark,
   flowBlinkOn,
+  flowColor,
   flowFromEvent,
   formatAge,
   formatDuration,
@@ -63,7 +64,6 @@ import {
   pulseAgeMs,
   sessionBusyFromEvent,
   sessionIdFromEvent,
-  preferToolLabel,
   toolFlow,
   toolHitFromEvent,
   toolMark,
@@ -72,7 +72,6 @@ import {
   type FlowEntry,
   type ToolHit,
 } from "./pulse.js"
-import type { ToolView } from "./db.js"
 
 export type SidebarProps = {
   sessionId: string
@@ -93,9 +92,7 @@ function markColor(
   current = false,
   flow?: FlowDir | null,
 ): string {
-  if (flow === "recv") return colors.success
-  if (flow === "wait") return colors.warning || colors.text
-  if (flow === "tool") return colors.primary || colors.text
+  if (flow === "recv" || flow === "wait" || flow === "tool") return flowColor(flow, colors)
   if (mark === "live") return colors.success
   if (mark === "stale") return colors.warning || colors.text
   if (mark === "error") return colors.error || colors.text
@@ -245,41 +242,6 @@ const KV_FOLD_OMO = "oes.fold.omo"
 const KV_TAB = "oes.tab"
 const KV_OMO_TAB = "oes.omoTab"
 
-function mergeTools(
-  dbTools: ToolView[],
-  live: Record<string, ToolHit>,
-  now: number,
-  limit: number,
-): ToolView[] {
-  const byId = new Map<string, ToolView>()
-  for (const t of dbTools) byId.set(t.id, t)
-  for (const hit of Object.values(live)) {
-    const prev = byId.get(hit.id)
-    if (prev && (prev.status === "completed" || prev.status === "error") && hit.status === "running") {
-      continue
-    }
-    byId.set(hit.id, {
-      id: hit.id,
-      name: preferToolLabel(hit.name, prev?.name),
-      status: hit.status,
-      startedAt: prev?.startedAt ?? now,
-      endedAt: hit.status === "running" ? null : now,
-      durationMs:
-        hit.status === "running"
-          ? null
-          : prev?.durationMs ?? (prev?.startedAt != null ? Math.max(0, now - prev.startedAt) : null),
-    })
-  }
-  return [...byId.values()]
-    .sort((a, b) => {
-      const ar = a.status === "running" || a.status === "pending" ? 0 : 1
-      const br = b.status === "running" || b.status === "pending" ? 0 : 1
-      if (ar !== br) return ar - br
-      return (b.startedAt ?? 0) - (a.startedAt ?? 0)
-    })
-    .slice(0, limit)
-}
-
 /** Two independent groups: OES is the core, OMO is an optional add-on below it. */
 const OES_TABS = ["sessions", "current", "perf"] as const
 const OMO_TABS = ["works", "boulder", "docs"] as const
@@ -428,27 +390,6 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   queueMicrotask(hydrateDiff)
 
   let debounce: ReturnType<typeof setTimeout> | null = null
-  const eventType = (evt: unknown): string => {
-    if (evt && typeof evt === "object" && typeof (evt as { type?: unknown }).type === "string") {
-      return (evt as { type: string }).type
-    }
-    return ""
-  }
-  const shouldRefreshDb = (type: string): boolean => {
-    if (!type || type.includes(".delta")) return false
-    if (type.includes("tool.called") || type.includes("tool.success") || type.includes("tool.failed")) {
-      return true
-    }
-    if (type.includes("file.edited") || type.includes("session.diff")) return true
-    if (type.includes("session.status") || type.includes("session.idle") || type.includes("session.created")) {
-      return true
-    }
-    if (type.includes("part.updated")) return true
-    if (type.includes("step.started") || type.includes("step.ended") || type.includes("step.failed")) {
-      return true
-    }
-    return false
-  }
   const onEvent = (...args: unknown[]) => {
     const evt = args[0]
     const id = sessionIdFromEvent(evt) ?? props.sessionId
@@ -630,32 +571,14 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     return n
   })
 
-  const toggleAgents = () => {
-    setFoldAgents((prev) => {
-      const next = !prev
-      kvWrite(props.api, KV_FOLD_AGENTS, next)
-      return next
-    })
-    requestRender()
-  }
-
-  const toggleDelegates = () => {
-    setFoldDelegates((prev) => {
-      const next = !prev
-      kvWrite(props.api, KV_FOLD_DELEGATES, next)
-      return next
-    })
-    requestRender()
-  }
-
-  const toggleTools = () => {
-    setFoldTools((prev) => {
-      const next = !prev
-      kvWrite(props.api, KV_FOLD_TOOLS, next)
-      return next
-    })
-    requestRender()
-  }
+  const toggleAgents = makeFoldToggle(props.api, KV_FOLD_AGENTS, setFoldAgents, requestRender)
+  const toggleDelegates = makeFoldToggle(
+    props.api,
+    KV_FOLD_DELEGATES,
+    setFoldDelegates,
+    requestRender,
+  )
+  const toggleTools = makeFoldToggle(props.api, KV_FOLD_TOOLS, setFoldTools, requestRender)
 
   const oes = () => getOes(projectDir())
   const tools = createMemo(() => mergeTools(snap().db.tools, liveTools(), now(), oes().toolRows))
@@ -668,23 +591,8 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     return n
   })
 
-  const toggleSessions = () => {
-    setFoldSessions((prev) => {
-      const next = !prev
-      kvWrite(props.api, KV_FOLD_SESSIONS, next)
-      return next
-    })
-    requestRender()
-  }
-
-  const toggleFiles = () => {
-    setFoldFiles((prev) => {
-      const next = !prev
-      kvWrite(props.api, KV_FOLD_FILES, next)
-      return next
-    })
-    requestRender()
-  }
+  const toggleSessions = makeFoldToggle(props.api, KV_FOLD_SESSIONS, setFoldSessions, requestRender)
+  const toggleFiles = makeFoldToggle(props.api, KV_FOLD_FILES, setFoldFiles, requestRender)
 
   const filesAll = createMemo(() => {
     gitTick()
@@ -712,14 +620,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     requestRender()
   }
 
-  const toggleOmo = () => {
-    setFoldOmo((prev) => {
-      const next = !prev
-      kvWrite(props.api, KV_FOLD_OMO, next)
-      return next
-    })
-    requestRender()
-  }
+  const toggleOmo = makeFoldToggle(props.api, KV_FOLD_OMO, setFoldOmo, requestRender)
 
   const omoPresent = createMemo(() => snap().omo.present)
 
@@ -783,13 +684,20 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   const omoOpen = createMemo(() => !foldOmo() && omoRows() > 0)
   const works = createMemo(() => snap().omo.works)
 
-  /** Paused and abandoned are deliberate stops — they must not keep pulsing. */
-  const workMark = (status: string, updatedAt: number | null): AgentMark => {
-    if (!workIsTerminal(status)) {
-      return composeMark({ lifecycle: status, ageMs: pulseAgeMs(now(), updatedAt) })
-    }
-    return workStatusLabel(status) === "error" ? "error" : "ready"
-  }
+  const workLines = createMemo((): RowData[] =>
+    works().map((w) => {
+      const row = workRowView(w, now())
+      return {
+        kind: "agent" as const,
+        mark: row.mark,
+        glyph: row.glyph ?? undefined,
+        name: w.name,
+        suffix: row.suffix,
+        current: w.current,
+        onSelect: () => openWorkDetail(props.api, w, projectRoots(), colors()),
+      }
+    }),
+  )
 
   const omoSummary = createMemo(() => {
     const b = snap().omo.boulder
@@ -801,18 +709,6 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     if (age) bits.push(age)
     return clip(bits.join(" · ") || "no active work", oes().lineMax)
   })
-
-  const workLines = createMemo((): RowData[] =>
-    works().map((w) => ({
-      kind: "agent",
-      mark: workMark(w.status, w.updatedAt),
-      glyph: workStatusGlyph(w.status) ?? undefined,
-      name: w.name,
-      suffix: formatAge(pulseAgeMs(now(), w.updatedAt)),
-      current: w.current,
-      onSelect: () => openWorkDetail(props.api, w, projectRoots(), colors()),
-    })),
-  )
 
   /** Boulder is the one place that knows where a plan lives. */
   const planPaths = createMemo(() => {
@@ -856,13 +752,16 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   const boulderLines = createMemo((): RowData[] => {
     const b = snap().omo.boulder
     if (!b.name && b.counts.total === 0 && b.sessions.length === 0) return []
+    const header = b.status
+      ? workRowView({ status: b.status, updatedAt: b.updatedAt }, now())
+      : { mark: "queued" as const, glyph: "○", suffix: formatAge(pulseAgeMs(now(), b.updatedAt)) }
     const out: RowData[] = [
       {
         kind: "agent",
-        mark: b.status ? workMark(b.status, b.updatedAt) : "queued",
-        glyph: (b.status ? workStatusGlyph(b.status) : "○") ?? undefined,
+        mark: header.mark,
+        glyph: header.glyph ?? undefined,
         name: b.name || "work",
-        suffix: formatAge(pulseAgeMs(now(), b.updatedAt)),
+        suffix: header.suffix,
         current: true,
       },
     ]
@@ -1239,6 +1138,8 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
             livePhase={selfFlow()}
             livePhaseMs={selfPhaseMs()}
             currentSessionId={props.sessionId}
+            dbPath={snap().db.dbPath}
+            turns={oes().perfTurns}
             onSelect={(id) => selectSession(props.api, id)}
           />
         </Show>

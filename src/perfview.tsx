@@ -2,7 +2,9 @@
 /** Perf tab: where a session's wall clock goes, per model and per tool. */
 import { createMemo, createSignal, For, Show, type JSX } from "solid-js"
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
-import { FoldHeader, kvRead, kvWrite, type ThemeColors } from "./chrome.js"
+import { FoldHeader, kvRead, makeFoldToggle, type ThemeColors } from "./chrome.js"
+import { openPerfLog } from "./detail.js"
+import type { PerfLogKind } from "./perf.js"
 import {
   type ModelPerf,
   type PerfPhase,
@@ -12,12 +14,16 @@ import {
 } from "./perf.js"
 import {
   barGlyphs,
+  flowColor,
+  flowGlyph,
   formatDuration,
   formatPercent,
   formatRate,
   formatSpan,
-  formatTokens,
   packChips,
+  packStackedRow,
+  timeSummary,
+  tokenSummary,
   shortMiddle,
   sparkline,
   spinnerFrame,
@@ -32,18 +38,16 @@ const KV_FOLD_TREND = "oes.fold.perf.trend"
 const KV_FOLD_HISTORY = "oes.fold.perf.history"
 
 const PHASES: Array<{ key: PerfPhase; glyph: string; label: string }> = [
-  { key: "wait", glyph: "↑", label: "wait" },
+  { key: "wait", glyph: flowGlyph("wait"), label: "wait" },
   { key: "think", glyph: "∴", label: "think" },
-  { key: "recv", glyph: "↓", label: "recv" },
-  { key: "tool", glyph: "→", label: "tools" },
+  { key: "recv", glyph: flowGlyph("recv"), label: "recv" },
+  { key: "tool", glyph: flowGlyph("tool"), label: "tools" },
   { key: "idle", glyph: "·", label: "idle" },
 ]
 
 function phaseFg(phase: PerfPhase, colors: ThemeColors): string {
-  if (phase === "wait") return colors.warning || colors.text
+  if (phase === "wait" || phase === "recv" || phase === "tool") return flowColor(phase, colors)
   if (phase === "think") return colors.primary || colors.text
-  if (phase === "recv") return colors.success
-  if (phase === "tool") return colors.text
   return colors.textMuted
 }
 
@@ -90,14 +94,17 @@ function PhaseRow(props: {
   share: number | null
   colors: ThemeColors
   lineMax: number
+  onSelect?: () => void
 }): JSX.Element {
   const fg = () => phaseFg(props.phase, props.colors)
   // Fixed columns keep every bar starting and ending on the same screen column.
   const barWidth = () => Math.max(4, props.lineMax - 18)
   return (
-    <box flexDirection="row">
+    <box flexDirection="row" onMouseUp={props.onSelect}>
       <text fg={fg()}>{`${props.glyph} `}</text>
-      <text fg={props.colors.textMuted}>{props.label.padEnd(5)}</text>
+      <text fg={props.colors.textMuted} underline={Boolean(props.onSelect)}>
+        {props.label.padEnd(5)}
+      </text>
       <text fg={fg()}>{` ${barGlyphs(props.share, barWidth())}`}</text>
       <text fg={props.colors.textMuted}>
         {` ${formatPercent(props.share).padStart(4)} ${formatSpan(props.ms).padStart(4)}`}
@@ -114,30 +121,42 @@ function ModelRow(props: {
   live: boolean
 }): JSX.Element {
   const m = () => props.model
-  const chips = (): Chip[] => [
-    { text: `${m().turns}×`, rank: 2 },
-    { text: m().waitMs != null ? `↑${formatDuration(m().waitMs)}` : "", rank: 0 },
-    { text: m().thinkMs != null ? `∴${formatDuration(m().thinkMs)}` : "", rank: 3 },
-    { text: m().recvMs != null ? `↓${formatDuration(m().recvMs)}` : "", rank: 1 },
-    { text: formatRate(m().tokensPerSec), rank: 4 },
-  ]
+  const stacked = () =>
+    packStackedRow(
+      m().model,
+      [
+        { text: `${m().turns}×`, rank: 2 },
+        { text: m().waitMs != null ? `↑${formatDuration(m().waitMs)}` : "", rank: 0 },
+        { text: m().thinkMs != null ? `∴${formatDuration(m().thinkMs)}` : "", rank: 3 },
+        { text: m().recvMs != null ? `↓${formatDuration(m().recvMs)}` : "", rank: 1 },
+        { text: formatRate(m().tokensPerSec), rank: 4 },
+      ],
+      props.lineMax,
+    )
+  const name = () => stacked().name
+  const chips = () => stacked().chips
   const chipFg = (chip: Chip): string => {
-    if (chip.text.startsWith("↑")) return props.colors.warning || props.colors.text
+    if (chip.text.startsWith("↑")) return flowColor("wait", props.colors)
     if (chip.text.startsWith("∴")) return props.colors.primary || props.colors.text
-    if (chip.text.startsWith("↓")) return props.colors.success
+    if (chip.text.startsWith("↓")) return flowColor("recv", props.colors)
     return props.colors.textMuted
   }
   return (
-    <MetricRow
-      glyph={props.live ? spinnerFrame(props.frame) : "•"}
-      glyphFg={props.live ? props.colors.success : props.colors.textMuted}
-      name={m().model}
-      nameFg={props.colors.text}
-      chips={chips()}
-      chipFg={chipFg}
-      lineMax={props.lineMax}
-      minName={8}
-    />
+    <box flexDirection="column">
+      <box flexDirection="row">
+        <text fg={props.live ? props.colors.success : props.colors.textMuted}>
+          {`${props.live ? spinnerFrame(props.frame) : "•"} `}
+        </text>
+        <text fg={props.colors.text}>{name()}</text>
+      </box>
+      <box flexDirection="row" paddingLeft={2}>
+        <For each={chips()}>
+          {(chip, i) => (
+            <text fg={chipFg(chip)}>{i() === 0 ? chip.text : ` ${chip.text}`}</text>
+          )}
+        </For>
+      </box>
+    </box>
   )
 }
 
@@ -146,6 +165,7 @@ function ToolRow(props: {
   share: number | null
   colors: ThemeColors
   lineMax: number
+  onSelect?: () => void
 }): JSX.Element {
   const t = () => props.tool
   const chips = (): Chip[] => [
@@ -171,6 +191,7 @@ function ToolRow(props: {
       chipFg={chipFg}
       lineMax={props.lineMax}
       minName={6}
+      onSelect={props.onSelect}
     />
   )
 }
@@ -189,7 +210,7 @@ function HistoryRow(props: {
     { text: r().toolShare != null ? `→${formatPercent(r().toolShare)}` : "", rank: 1 },
   ]
   const chipFg = (chip: Chip): string =>
-    chip.text.startsWith("↑") ? props.colors.warning || props.colors.text : props.colors.textMuted
+    chip.text.startsWith("↑") ? flowColor("wait", props.colors) : props.colors.textMuted
   return (
     <MetricRow
       glyph="•"
@@ -233,6 +254,8 @@ export type PerfPanelProps = {
   livePhase: FlowDir | null
   livePhaseMs: number | null
   currentSessionId: string
+  dbPath: string
+  turns: number
   onSelect: (sessionId: string) => void
 }
 
@@ -243,15 +266,8 @@ export function PerfPanel(props: PerfPanelProps): JSX.Element {
   const [foldTrend, setFoldTrend] = createSignal(kvRead(props.api, KV_FOLD_TREND, false))
   const [foldHistory, setFoldHistory] = createSignal(kvRead(props.api, KV_FOLD_HISTORY, false))
 
-  const toggle = (
-    get: () => boolean,
-    set: (v: boolean) => void,
-    key: string,
-  ): (() => void) => () => {
-    const next = !get()
-    set(next)
-    kvWrite(props.api, key, next)
-  }
+  const toggle = (set: (fn: (prev: boolean) => boolean) => void, key: string) =>
+    makeFoldToggle(props.api, key, set)
 
   const totals = () => props.perf.totals
   const wall = () => Math.max(1, totals().wallMs)
@@ -269,36 +285,20 @@ export function PerfPanel(props: PerfPanelProps): JSX.Element {
     props.perf.trend.length > 1 &&
     (trendWait().some((v) => v != null) || trendRate().some((v) => v != null))
 
+  const openLog = (kind: PerfLogKind) =>
+    openPerfLog(props.api, props.colors, {
+      dbPath: props.dbPath,
+      sessionId: props.currentSessionId,
+      turns: props.turns,
+      kind,
+    })
+
   const liveLabel = () => {
     const dir = props.livePhase
     if (!dir) return null
     const label = dir === "wait" ? "wait" : dir === "recv" ? "recv" : "tool"
-    const fg =
-      dir === "wait"
-        ? props.colors.warning || props.colors.text
-        : dir === "recv"
-          ? props.colors.success
-          : props.colors.primary || props.colors.text
+    const fg = flowColor(dir, props.colors)
     return { label, fg, ms: props.livePhaseMs }
-  }
-
-  const tokenLine = () => {
-    const t = totals()
-    const parts = [
-      `↑${formatTokens(t.tokensIn)}`,
-      `↓${formatTokens(t.tokensOut)}`,
-      t.tokensReasoning > 0 ? `∴${formatTokens(t.tokensReasoning)}` : "",
-      t.cacheHit != null ? `⧉${formatPercent(t.cacheHit)}` : "",
-    ].filter(Boolean)
-    return parts.join(" ")
-  }
-
-  const summaryLine = () => {
-    const t = totals()
-    const parts = [`${t.turns} turns`, formatSpan(t.wallMs)]
-    if (t.errors > 0) parts.push(`${t.errors} err`)
-    if (t.aborts > 0) parts.push(`${t.aborts} abort`)
-    return parts.join(" · ")
   }
 
   return (
@@ -328,8 +328,10 @@ export function PerfPanel(props: PerfPanelProps): JSX.Element {
               title="Models"
               open={!foldModels()}
               count={props.perf.models.length}
+              suffix={tokenSummary(totals())}
               colors={props.colors}
-              onToggle={toggle(foldModels, setFoldModels, KV_FOLD_MODELS)}
+              onToggle={toggle(setFoldModels, KV_FOLD_MODELS)}
+              onDetail={() => openLog("models")}
             />
             <Show when={!foldModels()}>
               <box flexDirection="column" gap={0} paddingLeft={1}>
@@ -344,7 +346,6 @@ export function PerfPanel(props: PerfPanelProps): JSX.Element {
                     />
                   )}
                 </For>
-                <text fg={props.colors.textMuted}>{tokenLine()}</text>
               </box>
             </Show>
           </box>
@@ -353,9 +354,10 @@ export function PerfPanel(props: PerfPanelProps): JSX.Element {
             <FoldHeader
               title="Time"
               open={!foldTime()}
-              suffix={formatSpan(totals().wallMs)}
+              suffix={timeSummary(totals())}
               colors={props.colors}
-              onToggle={toggle(foldTime, setFoldTime, KV_FOLD_TIME)}
+              onToggle={toggle(setFoldTime, KV_FOLD_TIME)}
+              onDetail={() => openLog("time")}
             />
             <Show when={!foldTime()}>
               <box flexDirection="column" gap={0} paddingLeft={1}>
@@ -369,10 +371,10 @@ export function PerfPanel(props: PerfPanelProps): JSX.Element {
                       share={p.ms / wall()}
                       colors={props.colors}
                       lineMax={props.lineMax}
+                      onSelect={() => openLog(p.key)}
                     />
                   )}
                 </For>
-                <text fg={props.colors.textMuted}>{summaryLine()}</text>
               </box>
             </Show>
           </box>
@@ -385,7 +387,8 @@ export function PerfPanel(props: PerfPanelProps): JSX.Element {
                 count={props.perf.tools.length}
                 suffix={formatSpan(toolTotal())}
                 colors={props.colors}
-                onToggle={toggle(foldTools, setFoldTools, KV_FOLD_TOOLS)}
+                onToggle={toggle(setFoldTools, KV_FOLD_TOOLS)}
+                onDetail={() => openLog("tool")}
               />
               <Show when={!foldTools()}>
                 <box flexDirection="column" gap={0} paddingLeft={1}>
@@ -396,6 +399,7 @@ export function PerfPanel(props: PerfPanelProps): JSX.Element {
                         share={toolTotal() > 0 ? t.totalMs / toolTotal() : null}
                         colors={props.colors}
                         lineMax={props.lineMax}
+                        onSelect={() => openLog("tool")}
                       />
                     )}
                   </For>
@@ -411,7 +415,7 @@ export function PerfPanel(props: PerfPanelProps): JSX.Element {
                 open={!foldTrend()}
                 count={props.perf.trend.length}
                 colors={props.colors}
-                onToggle={toggle(foldTrend, setFoldTrend, KV_FOLD_TREND)}
+                onToggle={toggle(setFoldTrend, KV_FOLD_TREND)}
               />
               <Show when={!foldTrend()}>
                 <box flexDirection="column" gap={0} paddingLeft={1}>
@@ -441,7 +445,7 @@ export function PerfPanel(props: PerfPanelProps): JSX.Element {
                 open={!foldHistory()}
                 count={history().length}
                 colors={props.colors}
-                onToggle={toggle(foldHistory, setFoldHistory, KV_FOLD_HISTORY)}
+                onToggle={toggle(setFoldHistory, KV_FOLD_HISTORY)}
               />
               <Show when={!foldHistory()}>
                 <box flexDirection="column" gap={0} paddingLeft={1}>

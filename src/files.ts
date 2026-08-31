@@ -5,7 +5,11 @@
 import { readGitMarksFor, relToGitRoot, type GitLetter } from "./git.js"
 import { ignoredByGitignore } from "./gitignore.js"
 import { getOes, OES_DEFAULTS } from "./oes.js"
+import { eventKind, eventType } from "./events.js"
+import { basenameOf, finiteNum } from "./paths.js"
 import { sessionIdFromEvent } from "./pulse.js"
+
+export { basenameOf }
 
 export const FILE_ROWS = OES_DEFAULTS.fileRows
 
@@ -37,14 +41,6 @@ export type FileView = {
   letter: FileLetter | null
 }
 
-export function basenameOf(p: string): string {
-  const t = p.replace(/\\/g, "/").replace(/\/+$/, "").trim()
-  if (!t) return "file"
-  const i = t.lastIndexOf("/")
-  const base = i >= 0 ? t.slice(i + 1) : t
-  return base || "file"
-}
-
 /** Long names: start…end.ext — no directories. */
 export function shortFileName(raw: string, max = OES_DEFAULTS.lineMax): string {
   const base = basenameOf(raw)
@@ -68,7 +64,8 @@ export function formatDiffStat(add: number, del: number): string {
 }
 
 function num(v: unknown): number {
-  return typeof v === "number" && Number.isFinite(v) && v > 0 ? Math.round(v) : 0
+  const n = finiteNum(v)
+  return n > 0 ? Math.round(n) : 0
 }
 
 function matchInt(data: string, key: string): number {
@@ -154,11 +151,13 @@ function fileFromDiffRow(row: unknown, at: number, filter?: FileFilter): FileVie
 
 /** Paths + +/- only. Drops before/after and any other fields. */
 export function filesFromEvent(evt: unknown, sessionId: string, filter?: FileFilter): FileView[] {
-  const type = evt && typeof evt === "object" ? String((evt as { type?: unknown }).type ?? "") : ""
+  const type = eventType(evt)
   const bag = eventBag(evt)
   if (!bag) return []
   const sid = sessionIdFromEvent(evt)
   if (sid && sid !== sessionId) return []
+  const kind = eventKind(type)
+  if (type && kind !== "file" && kind !== "tool" && kind !== "db-refresh") return []
   const at = Date.now()
   const out: FileView[] = []
 

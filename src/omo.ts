@@ -1,11 +1,20 @@
 /**
  * Read-only oh-my-openagent helpers (boulder + plans + delegates + config).
- * Zero deps — only node:fs / node:path / os.
  */
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { canonicalizePath, fileStamp, resolveProjectFile } from "./paths.js"
+import { composeMark, formatAge, pulseAgeMs, toEpochMs, type AgentMark } from "./pulse.js"
+import {
+  taskRank,
+  toWorkLabel,
+  workIsTerminal,
+  workStatusGlyph,
+} from "./status.js"
+
+export { workIsTerminal, workStatusGlyph }
+export { toWorkLabel as workStatusLabel }
 
 export type PlanStep = { checked: boolean; text: string }
 
@@ -109,12 +118,7 @@ type RawTask = {
 }
 
 function parseStamp(v: string | number | undefined): number | null {
-  if (typeof v === "number" && Number.isFinite(v)) return v
-  if (typeof v === "string" && v.trim()) {
-    const n = Date.parse(v)
-    return Number.isNaN(n) ? null : n
-  }
-  return null
+  return toEpochMs(v)
 }
 
 type RawWork = {
@@ -162,31 +166,23 @@ function planLabel(name: string | null | undefined, activePlan: string | null | 
   return "plan"
 }
 
-/** Short work status — no full paths, no checklist text. */
-export function workStatusLabel(status: string): string {
-  const s = status.toLowerCase()
-  if (s === "in_progress" || s === "active") return "running"
-  if (s === "completed") return "done"
-  if (s === "failed") return "error"
-  if (s === "queued") return "pending"
-  return s
-}
-
-/** Works column glyph. Running stays a spinner (`null`). */
-export function workStatusGlyph(status: string): string | null {
-  const s = workStatusLabel(status)
-  if (s === "done") return "✓"
-  if (s === "error") return "×"
-  if (s === "running") return null
-  if (s === "paused") return "⏸"
-  if (s === "abandoned") return "⊘"
-  return "○"
-}
-
-/** Paused and abandoned are deliberate stops — they must not keep pulsing. */
-export function workIsTerminal(status: string): boolean {
-  const s = workStatusLabel(status)
-  return s === "done" || s === "error" || s === "paused" || s === "abandoned"
+/** One row's mark / glyph / age suffix for the OMO works list. */
+export function workRowView(
+  work: { status: string; updatedAt: number | null },
+  now: number,
+  seen?: number | null,
+): { mark: AgentMark; glyph: string | null; suffix: string } {
+  const ageMs = pulseAgeMs(now, work.updatedAt, seen)
+  const mark = workIsTerminal(work.status)
+    ? toWorkLabel(work.status) === "error"
+      ? "error"
+      : "ready"
+    : composeMark({ lifecycle: work.status, ageMs })
+  return {
+    mark,
+    glyph: workStatusGlyph(work.status),
+    suffix: formatAge(ageMs),
+  }
 }
 
 function relativePlanPath(projectRoot: string, activePlan: string | null | undefined): string | null {
@@ -272,12 +268,12 @@ function collectWorks(raw: RawBoulder, projectRoot: string): WorkView[] {
   return out.slice(0, 20)
 }
 
-/** Boulder + plan mtimes only — no JSON parse. */
+/** Boulder file only — drafts/notepads/evidence must not invalidate the hot path. */
 export function omoStamp(projectRoot?: string | null): string {
   if (!projectRoot) return "0"
   const boulderPath = findBoulder(canonicalizePath(projectRoot))
   if (!boulderPath) return "0"
-  return `${fileStamp(boulderPath)}|${fileStamp(path.dirname(boulderPath))}`
+  return fileStamp(boulderPath)
 }
 
 export function findBoulder(projectRoot: string): string | null {
@@ -297,19 +293,6 @@ export function findOmoWatchDirs(projectRoot: string): string[] {
   return out
 }
 
-function parsePlan(content: string): PlanStep[] {
-  const steps: PlanStep[] = []
-  for (const raw of content.split(/\r?\n/)) {
-    const m = raw.trim().match(/^[-*]\s*\[(\s|x|X)\]\s*(.*)$/)
-    if (!m) continue
-    steps.push({
-      checked: m[1] === "x" || m[1] === "X",
-      text: (m[2] ?? "").trim(),
-    })
-  }
-  return steps.slice(0, 40)
-}
-
 function resolvePlanPath(projectRoot: string, activePlan: string | null): string | null {
   if (!activePlan) return null
   const planPath = path.isAbsolute(activePlan)
@@ -323,23 +306,6 @@ function resolvePlanPath(projectRoot: string, activePlan: string | null): string
   } catch {
     return null
   }
-}
-
-function readPlanSteps(planPath: string | null): PlanStep[] {
-  if (!planPath) return []
-  try {
-    return parsePlan(fs.readFileSync(planPath, "utf8"))
-  } catch {
-    return []
-  }
-}
-
-function taskRank(status: string): number {
-  if (status === "running" || status === "in_progress" || status === "active") return 0
-  if (status === "pending" || status === "queued") return 1
-  if (status === "error" || status === "failed" || status === "cancelled") return 2
-  if (status === "completed" || status === "done") return 3
-  return 4
 }
 
 function collectTasks(raw: Record<string, RawTask> | undefined): TaskView[] {
@@ -453,9 +419,7 @@ export function readOmo(projectRoot: string | null | undefined): OmoSnapshot {
   )
 
   const planPath = resolvePlanPath(root, activePlan)
-  const steps = readPlanSteps(planPath)
-  const completed = steps.filter((s) => s.checked).length
-  const total = steps.length
+  // Plan checklist is not shown in the sidebar; Docs reads the file on demand.
 
   return {
     present: true,
@@ -464,12 +428,7 @@ export function readOmo(projectRoot: string | null | undefined): OmoSnapshot {
     status,
     agent,
     planName,
-    plan: {
-      total,
-      completed,
-      percent: total ? Math.round((completed / total) * 100) : 0,
-      steps,
-    },
+    plan: { total: 0, completed: 0, percent: 0, steps: [] },
     works,
     boulder: {
       workId: active?.workId ?? null,
@@ -485,7 +444,7 @@ export function readOmo(projectRoot: string | null | undefined): OmoSnapshot {
       counts: countTasks(tasks),
     },
     delegates: tasks.map(taskToDelegate),
-    stamp: `${fileStamp(boulderPath)}|${fileStamp(planPath)}`,
+    stamp: fileStamp(boulderPath),
   }
 }
 

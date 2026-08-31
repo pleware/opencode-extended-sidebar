@@ -1,30 +1,19 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import fs from "node:fs"
-import os from "node:os"
 import path from "node:path"
 import { groupDocs, readOmoDocs, resetDocsCache, type DocView } from "../../src/docs.js"
+import { createFixtureProject, type FixtureProject } from "../helpers/project.js"
 import { assertPrivacy } from "../helpers/privacy.js"
 
-const roots: string[] = []
+const held: FixtureProject[] = []
 
 afterEach(() => {
-  resetDocsCache()
-  for (const r of roots.splice(0)) fs.rmSync(r, { recursive: true, force: true })
+  for (const p of held.splice(0)) p.dispose()
 })
 
 function project(files: Record<string, string>, mtimes: Record<string, number> = {}): string {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "oes-docs-"))
-  roots.push(root)
-  for (const [rel, body] of Object.entries(files)) {
-    const abs = path.join(root, rel)
-    fs.mkdirSync(path.dirname(abs), { recursive: true })
-    fs.writeFileSync(abs, body)
-  }
-  for (const [rel, ms] of Object.entries(mtimes)) {
-    const abs = path.join(root, rel)
-    fs.utimesSync(abs, new Date(ms), new Date(ms))
-  }
-  return root
+  const proj = createFixtureProject({ files, mtimes })
+  held.push(proj)
+  return proj.root
 }
 
 const names = (docs: readonly DocView[], kind: string) =>
@@ -48,7 +37,6 @@ describe("readOmoDocs", () => {
     const docs = readOmoDocs(root)
     expect(names(docs, "draft")).toEqual(["auth-v2.md"])
     expect(names(docs, "notepad").sort()).toEqual(["decisions.md", "learnings.md"])
-    // Evidence is one folder per change, so the row keeps the change name.
     expect(names(docs, "proof").sort()).toEqual(["login-fix/shot.png", "login-fix/terminal.md"])
   })
 

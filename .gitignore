@@ -11,3 +11,8 @@ myworkspace/
 .cursor/
 .agents/
 skills-lock.json
+
+# agentize workspace (MassTrade)
+.agentize/
+opencode.json
+.omo/

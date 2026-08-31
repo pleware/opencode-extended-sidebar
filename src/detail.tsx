@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 /**
- * Detail dialogs for Files, Tools, Works and OMO documents
+ * Detail dialogs for Files, Tools, Works, OMO documents and Perf logs
  * (read-only metadata + optional preview).
  */
 import { createEffect, createMemo, For, Show, type JSX } from "solid-js"
@@ -11,6 +11,7 @@ import { copyText } from "./clipboard.js"
 import { type ThemeColors } from "./chrome.js"
 import type { ToolView } from "./db.js"
 import type { FileView } from "./files.js"
+import { readPerfLog, type PerfLogKind } from "./perf.js"
 import { formatDiffStat } from "./files.js"
 import type { DocView } from "./docs.js"
 import { DOC_KIND_LABEL } from "./docs.js"
@@ -23,7 +24,7 @@ import {
   previewViewportRows,
   readTextPreview,
 } from "./preview.js"
-import { formatAge, formatDuration } from "./pulse.js"
+import { formatAge, formatDuration, formatWhen } from "./pulse.js"
 
 export { canPreviewPath, isMarkdownPath, previewViewportRows, readTextPreview } from "./preview.js"
 
@@ -83,6 +84,23 @@ function DialogPad(props: { children: JSX.Element }): JSX.Element {
       {props.children}
     </box>
   )
+}
+
+/**
+ * Sets the dialog stack size AFTER render so it survives the replace()
+ * size-reset (host bug #44754). Does NOT wrap in api.ui.Dialog — the host
+ * DialogProvider already supplies the backdrop; adding a second Dialog creates
+ * a double-backdrop with double-dark background.
+ */
+function SizedDialog(props: {
+  api: TuiPluginApi
+  size: "medium" | "large" | "xlarge"
+  children: JSX.Element
+}): JSX.Element {
+  createEffect(() => {
+    props.api.ui.dialog.setSize(props.size)
+  })
+  return <>{props.children}</>
 }
 
 /** OpenTUI markdown styles from the host theme — same markup.* keys OpenCode uses. */
@@ -147,69 +165,71 @@ function PreviewBody(props: {
   )
 }
 
-function formatWhen(ts: number | null | undefined): string {
-  if (ts == null || !Number.isFinite(ts)) return "—"
-  const d = new Date(ts)
-  if (Number.isNaN(d.getTime())) return "—"
-  return d.toISOString().replace("T", " ").slice(0, 19)
-}
-
 function PreviewDialog(props: {
   api: TuiPluginApi
   colors: ThemeColors
+  heading?: string
   title: string
   subtitle: string | null
   pretty: boolean
   text: string
   truncated: boolean
+  copyLabel?: string
+  copyValue?: string | null
   syntaxStyle: ReturnType<typeof SyntaxStyle.fromStyles> | null
 }): JSX.Element {
   const dimensions = useTerminalDimensions()
   const showPath = () => Boolean(props.subtitle && props.subtitle !== props.title)
   const extra = () => (showPath() ? 1 : 0)
+  // Host dialog has paddingTop=height/4, leaving 3/4 of height. The 0.75
+  // ratio in previewViewportRows matches exactly — do not pass tall=true here.
   const bodyHeight = createMemo(() =>
-    previewViewportRows(dimensions().height, extra(), props.pretty),
+    previewViewportRows(dimensions().height, extra()),
   )
-  const Dialog = props.api.ui.Dialog
+  // replace() resets the stack size to medium (host bug #44754).
+  // createEffect fires after render (= after replace), so this wins the race.
+  // No api.ui.Dialog wrapper: the host DialogProvider already supplies the
+  // backdrop — a second Dialog creates a double-dark background.
   createEffect(() => {
-    if (props.pretty) props.api.ui.dialog.setSize("xlarge")
+    props.api.ui.dialog.setSize("xlarge")
   })
   return (
-    <Dialog size="xlarge" onClose={() => closeDialog(props.api)}>
-      <DialogPad>
-        <box flexDirection="column" gap={0} flexShrink={0}>
-          <box flexDirection="row" justifyContent="space-between" gap={1}>
-            <text fg={props.colors.text} bold>
-              Preview
-            </text>
-            <text fg={props.colors.text}>{props.title}</text>
-          </box>
-          <Show when={showPath()}>
-            <DetailLine text={props.subtitle!} colors={props.colors} muted />
-          </Show>
+    <DialogPad>
+      <box flexDirection="column" gap={0} flexShrink={0}>
+        <box flexDirection="row" justifyContent="space-between" gap={1}>
+          <text fg={props.colors.text} bold>
+            {props.heading ?? "Preview"}
+          </text>
+          <text fg={props.colors.text}>{props.title}</text>
         </box>
-        <scrollbox scrollY focused height={bodyHeight()} maxHeight={bodyHeight()}>
-          <PreviewBody
-            text={props.text}
-            pretty={props.pretty}
-            colors={props.colors}
-            syntaxStyle={props.syntaxStyle}
-          />
-          <Show when={props.truncated}>
-            <DetailLine text="… truncated" colors={props.colors} muted />
-          </Show>
-        </scrollbox>
-        <box flexDirection="column" gap={0} paddingTop={1} flexShrink={0}>
-          <ActionRow
-            label="Copy path"
-            colors={props.colors}
-            disabled={!props.subtitle}
-            onPick={() => copyRelativePath(props.api, props.subtitle)}
-          />
-          <ActionRow label="Close" colors={props.colors} onPick={() => closeDialog(props.api)} />
-        </box>
-      </DialogPad>
-    </Dialog>
+        <Show when={showPath()}>
+          <DetailLine text={props.subtitle!} colors={props.colors} muted />
+        </Show>
+      </box>
+      <scrollbox scrollY focused height={bodyHeight()} maxHeight={bodyHeight()}>
+        <PreviewBody
+          text={props.text}
+          pretty={props.pretty}
+          colors={props.colors}
+          syntaxStyle={props.syntaxStyle}
+        />
+        <Show when={props.truncated}>
+          <DetailLine text="… truncated" colors={props.colors} muted />
+        </Show>
+      </scrollbox>
+      <box flexDirection="column" gap={0} paddingTop={1} flexShrink={0}>
+        <ActionRow
+          label={props.copyLabel ?? "Copy path"}
+          colors={props.colors}
+          disabled={!((props.copyValue ?? props.subtitle) || "").trim()}
+          onPick={() => {
+            if (props.copyValue != null) copyPlain(props.api, props.copyValue)
+            else copyRelativePath(props.api, props.subtitle)
+          }}
+        />
+        <ActionRow label="Close" colors={props.colors} onPick={() => closeDialog(props.api)} />
+      </box>
+    </DialogPad>
   )
 }
 
@@ -239,7 +259,6 @@ function openTextPreview(
       syntaxStyle={syntaxStyle}
     />
   ))
-  if (pretty) api.ui.dialog.setSize("xlarge")
 }
 
 function copyRelativePath(api: TuiPluginApi, rel: string | null): void {
@@ -250,6 +269,13 @@ function copyRelativePath(api: TuiPluginApi, rel: string | null): void {
   void copyText(rel).then((ok) => {
     if (ok) toast(api, "Copied relative path", "success")
     else toast(api, "Copy failed — select path in the dialog manually", "warning")
+  })
+}
+
+function copyPlain(api: TuiPluginApi, text: string): void {
+  void copyText(text).then((ok) => {
+    if (ok) toast(api, "Copied log", "success")
+    else toast(api, "Copy failed — select the log in the dialog manually", "warning")
   })
 }
 
@@ -275,10 +301,8 @@ export function openFileDetail(
   const header = diff ? `${file.name} ${letter}  ${diff}`.trim() : `${file.name} ${letter}`.trim()
   const touch = file.touch === "read" ? "read" : "write"
 
-  const Dialog = api.ui.Dialog
-  api.ui.dialog.setSize("large")
   api.ui.dialog.replace(() => (
-    <Dialog size="large" onClose={() => closeDialog(api)}>
+    <SizedDialog api={api} size="large" >
       <DialogPad>
         <text fg={colors.text} bold>
           {header}
@@ -315,7 +339,7 @@ export function openFileDetail(
           <ActionRow label="Close" colors={colors} onPick={() => closeDialog(api)} />
         </box>
       </DialogPad>
-    </Dialog>
+    </SizedDialog>
   ))
 }
 
@@ -325,10 +349,8 @@ export function openToolDetail(api: TuiPluginApi, tool: ToolView, colors: ThemeC
       ? formatDuration(Math.max(0, Date.now() - tool.startedAt))
       : formatDuration(tool.durationMs)
   const header = [tool.tool, dur, tool.status].filter(Boolean).join(" · ")
-  const Dialog = api.ui.Dialog
-  api.ui.dialog.setSize("medium")
   api.ui.dialog.replace(() => (
-    <Dialog size="medium" onClose={() => closeDialog(api)}>
+    <SizedDialog api={api} size="medium" >
       <DialogPad>
         <text fg={colors.text} bold>
           {header}
@@ -343,7 +365,7 @@ export function openToolDetail(api: TuiPluginApi, tool: ToolView, colors: ThemeC
           <ActionRow label="Close" colors={colors} onPick={() => closeDialog(api)} />
         </box>
       </DialogPad>
-    </Dialog>
+    </SizedDialog>
   ))
 }
 
@@ -366,10 +388,8 @@ export function openWorkDetail(
   const updated = age ? `${age} ago` : "—"
   const agent = work.agent ? ` · ${work.agent}` : ""
 
-  const Dialog = api.ui.Dialog
-  api.ui.dialog.setSize("medium")
   api.ui.dialog.replace(() => (
-    <Dialog size="medium" onClose={() => closeDialog(api)}>
+    <SizedDialog api={api} size="medium" >
       <DialogPad>
         <text fg={colors.text} bold>
           {`Work: ${work.name}`}
@@ -385,7 +405,7 @@ export function openWorkDetail(
           <ActionRow label="Close" colors={colors} onPick={() => closeDialog(api)} />
         </box>
       </DialogPad>
-    </Dialog>
+    </SizedDialog>
   ))
 }
 
@@ -415,10 +435,8 @@ export function openDocDetail(
   if (!found) toast(api, "File not found on disk", "warning")
   const age = doc.updatedAt != null ? formatAge(Math.max(0, Date.now() - doc.updatedAt)) : ""
 
-  const Dialog = api.ui.Dialog
-  api.ui.dialog.setSize("medium")
   api.ui.dialog.replace(() => (
-    <Dialog size="medium" onClose={() => closeDialog(api)}>
+    <SizedDialog api={api} size="medium" >
       <DialogPad>
         <text fg={colors.text} bold>
           {doc.name}
@@ -440,6 +458,38 @@ export function openDocDetail(
           <ActionRow label="Close" colors={colors} onPick={() => closeDialog(api)} />
         </box>
       </DialogPad>
-    </Dialog>
+    </SizedDialog>
   ))
+}
+
+/** Dated column log from opencode.db — writes a sidecar file, then shows it. */
+export function openPerfLog(
+  api: TuiPluginApi,
+  colors: ThemeColors,
+  opts: { dbPath: string; sessionId: string; turns: number; kind: PerfLogKind; now?: number },
+): void {
+  const log = readPerfLog({ ...opts, now: opts.now ?? Date.now() })
+  if (!log) {
+    toast(api, "No perf stats to log", "warning")
+    return
+  }
+  try {
+    api.ui.dialog.replace(() => (
+      <PreviewDialog
+        api={api}
+        colors={colors}
+        heading="Log"
+        title={log.title}
+        subtitle={log.fileName}
+        pretty={false}
+        text={log.text}
+        truncated={false}
+        copyLabel="Copy log"
+        copyValue={log.text}
+        syntaxStyle={null}
+      />
+    ))
+  } catch {
+    toast(api, "Cannot open perf log", "warning")
+  }
 }

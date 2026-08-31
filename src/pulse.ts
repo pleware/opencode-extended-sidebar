@@ -1,4 +1,7 @@
 /** Pulse + lifecycle mark for agent rows. Evaluated against wall clock. */
+import { eventType } from "./events.js"
+import { basenameOf } from "./paths.js"
+import { normalizeStatus, toToolStatus } from "./status.js"
 
 export const LIVE_MS = 20_000
 export const STALE_MS = 40_000
@@ -33,10 +36,21 @@ export function pulseFromAge(ageMs: number): Pulse {
   return "idle"
 }
 
+/** Epoch ms. OpenCode may store seconds, ms, or ISO strings. */
+export function toEpochMs(v: unknown): number | null {
+  if (typeof v === "number" && Number.isFinite(v) && v > 0) {
+    return v < 1e11 ? v * 1000 : v
+  }
+  if (typeof v === "string" && v.trim()) {
+    const n = Date.parse(v)
+    return Number.isNaN(n) ? null : n
+  }
+  return null
+}
+
 /** OpenCode may store seconds or ms. */
 export function stampMs(v: number | null | undefined): number | null {
-  if (typeof v !== "number" || !Number.isFinite(v) || v <= 0) return null
-  return v < 1e11 ? v * 1000 : v
+  return toEpochMs(v)
 }
 
 /** Last activity: SQLite time_updated, TUI event, or boulder stamp. */
@@ -60,12 +74,12 @@ export function composeMark(opts: {
   busy?: boolean
 }): AgentMark {
   if (opts.archived) return "archived"
-  const s = (opts.lifecycle || "").toLowerCase()
-  if (s === "completed" || s === "done") return "ready"
-  if (s === "error" || s === "failed") return "error"
+  const c = normalizeStatus(opts.lifecycle)
+  if (c === "completed") return "ready"
+  if (c === "error") return "error"
   if (opts.busy) return opts.ageMs == null ? "live" : pulseFromAge(Math.min(opts.ageMs, LIVE_MS - 1))
   if (opts.ageMs == null) {
-    if (s === "running" || s === "in_progress" || s === "active") return "stale"
+    if (c === "running") return "stale"
     return "queued"
   }
   // Running is not terminal — same age window as Agents. A leftover
@@ -95,12 +109,29 @@ export function flowBlinkOn(frame: number): boolean {
   return Math.floor(Math.abs(frame) / BLINK_FRAMES) % 2 === 0
 }
 
+export function flowGlyph(dir: FlowDir): string {
+  if (dir === "recv") return "↓"
+  if (dir === "wait") return "↑"
+  return "→"
+}
+
+export type FlowColors = {
+  text: string
+  success: string
+  primary?: string
+  warning?: string
+}
+
+export function flowColor(dir: FlowDir, colors: FlowColors): string {
+  if (dir === "recv") return colors.success
+  if (dir === "wait") return colors.warning || colors.text
+  return colors.primary || colors.text
+}
+
 export function markGlyph(mark: AgentMark, frame = 0, flow?: FlowDir | null): string {
   if (mark === "error") return "×"
   if (mark === "ready" || mark === "queued" || mark === "archived") return "•"
-  if (flow === "recv") return "↓"
-  if (flow === "wait") return "↑"
-  if (flow === "tool") return "→"
+  if (flow === "recv" || flow === "wait" || flow === "tool") return flowGlyph(flow)
   if (mark === "live" || mark === "stale") return spinnerFrame(frame)
   return "•"
 }
@@ -149,11 +180,6 @@ export function phaseAgeMs(
 ): number | null {
   if (!entry || !dir || entry.dir !== dir) return null
   return Math.max(0, now - entry.since)
-}
-
-function eventType(evt: unknown): string {
-  if (!evt || typeof evt !== "object") return ""
-  return String((evt as Record<string, unknown>).type ?? "").toLowerCase()
 }
 
 function partKind(evt: unknown): string {
@@ -260,33 +286,68 @@ export function formatTokens(n: number | null | undefined): string {
   return String(Math.round(v))
 }
 
-export function formatAge(ageMs: number | null | undefined): string {
-  if (ageMs == null || !Number.isFinite(ageMs) || ageMs < 0) return ""
-  const s = Math.floor(ageMs / 1000)
+/** Models header: ↑in ↓out ∴reasoning. Reasoning omitted when zero. */
+export function tokenSummary(tokens: {
+  tokensIn: number
+  tokensOut: number
+  tokensReasoning?: number
+}): string {
+  const parts = [`↑${formatTokens(tokens.tokensIn)}`, `↓${formatTokens(tokens.tokensOut)}`]
+  if ((tokens.tokensReasoning ?? 0) > 0) parts.push(`∴${formatTokens(tokens.tokensReasoning)}`)
+  return parts.join(" ")
+}
+
+/** Time header: turns · wall · optional err/abort. */
+export function timeSummary(totals: {
+  turns: number
+  wallMs: number
+  errors?: number
+  aborts?: number
+}): string {
+  const parts = [`${totals.turns} turns`, formatSpan(totals.wallMs)]
+  if ((totals.errors ?? 0) > 0) parts.push(`${totals.errors} err`)
+  if ((totals.aborts ?? 0) > 0) parts.push(`${totals.aborts} abort`)
+  return parts.join(" · ")
+}
+
+/** s / m / h / d buckets shared by age, duration, and span formatters. */
+function formatCoarseSec(totalSec: number, compositeHours = false): string {
+  const s = Math.max(0, Math.floor(totalSec))
   if (s < 60) return `${s}s`
   const m = Math.floor(s / 60)
   if (m < 60) return `${m}m`
   const h = Math.floor(m / 60)
-  if (h < 48) return `${h}h`
+  if (h < 48) {
+    const rem = m % 60
+    return compositeHours && rem > 0 ? `${h}h${rem}m` : `${h}h`
+  }
   return `${Math.floor(h / 24)}d`
+}
+
+export function formatAge(ageMs: number | null | undefined): string {
+  if (ageMs == null || !Number.isFinite(ageMs) || ageMs < 0) return ""
+  return formatCoarseSec(ageMs / 1000)
 }
 
 export function formatDuration(ms: number | null | undefined): string {
   if (ms == null || !Number.isFinite(ms) || ms < 1) return ""
   if (ms < 1000) return `${Math.round(ms)}ms`
   if (ms < 10_000) return `${(ms / 1000).toFixed(1)}s`
-  return `${Math.round(ms / 1000)}s`
+  return formatCoarseSec(Math.round(ms / 1000))
+}
+
+/** UTC `YYYY-MM-DD HH:MM:SS` for logs and detail sheets. */
+export function formatWhen(ts: number | null | undefined): string {
+  if (ts == null || !Number.isFinite(ts)) return "—"
+  const d = new Date(ts)
+  if (Number.isNaN(d.getTime())) return "—"
+  return d.toISOString().replace("T", " ").slice(0, 19)
 }
 
 /** Coarser than formatDuration — minutes and hours for whole-session sums. */
 export function formatSpan(ms: number | null | undefined): string {
   if (ms == null || !Number.isFinite(ms) || ms < 1000) return "0s"
-  const s = Math.round(ms / 1000)
-  if (s < 60) return `${s}s`
-  const m = Math.floor(s / 60)
-  if (m < 60) return `${m}m`
-  const h = Math.floor(m / 60)
-  return h < 48 ? `${h}h${m % 60 ? `${m % 60}m` : ""}` : `${Math.floor(h / 24)}d`
+  return formatCoarseSec(Math.round(ms / 1000), true)
 }
 
 export function formatRate(perSec: number | null | undefined): string {
@@ -327,6 +388,16 @@ export function packChips(nameWidth: number, chips: Chip[], max: number): Chip[]
   return keep
 }
 
+/** Name and chips each take the full line — they do not compete for one row. */
+export function packStackedRow(
+  name: string,
+  chips: Chip[],
+  lineMax: number,
+): { name: string; chips: Chip[] } {
+  const room = Math.max(4, lineMax - 2)
+  return { name: shortMiddle(name, room), chips: packChips(0, chips, room) }
+}
+
 /** Middle ellipsis — `deepseek-v4-pro` keeps both the family and the tier. */
 export function shortMiddle(name: string, max: number): string {
   const t = name.replace(/\s+/g, " ").trim()
@@ -358,10 +429,10 @@ export function sparkline(values: Array<number | null>, width: number): string {
 }
 
 export function toolMark(status: string): AgentMark {
-  const s = status.toLowerCase()
-  if (s === "running") return "live"
-  if (s === "error") return "error"
-  if (s === "completed") return "ready"
+  const c = normalizeStatus(status)
+  if (c === "running") return "live"
+  if (c === "error") return "error"
+  if (c === "completed") return "ready"
   return "queued"
 }
 
@@ -380,12 +451,6 @@ function clipHint(s: string, max: number): string {
   const t = s.replace(/\s+/g, " ").trim()
   if (!t) return ""
   return t.length > max ? `${t.slice(0, max - 1)}…` : t
-}
-
-function basenameHint(p: string): string {
-  const t = p.replace(/\\/g, "/").replace(/\/+$/, "").trim()
-  const i = t.lastIndexOf("/")
-  return (i >= 0 ? t.slice(i + 1) : t) || "file"
 }
 
 function firstHint(
@@ -415,23 +480,30 @@ export function shortToolLabel(opts: {
   pattern?: string | null
   description?: string | null
   subagent?: string | null
+  /** Wider clip for logs; the panel keeps the default. */
+  maxHint?: number
 }): string {
   const tool = (opts.tool || "tool").trim() || "tool"
-  if (opts.filePath) return `${tool} ${clipHint(basenameHint(opts.filePath), 14)}`.trim()
-  if (opts.pattern) return `${tool} ${clipHint(opts.pattern, 12)}`.trim()
+  const max = opts.maxHint ?? 22
+  const fileMax = max > 22 ? 32 : 14
+  const patMax = max > 22 ? 40 : 12
+  if (opts.filePath) return `${tool} ${clipHint(basenameOf(opts.filePath), fileMax)}`.trim()
+  if (opts.pattern) return `${tool} ${clipHint(opts.pattern, patMax)}`.trim()
   const raw =
     firstHint(tool, [opts.description, opts.title], 80) ||
     firstHint(tool, [opts.command]) ||
     firstHint(tool, [opts.subagent], 80)
   const stripped = raw.replace(/^cd\s+\S+\s*(?:&&|;)\s*/i, "")
-  const fileish = stripped.match(/(?:^|[\s/\\])((?:[\w.-]+[/\\])*[\w.-]+\.[a-z0-9]{1,8})\b/i)
-  if (fileish?.[1]) return clipHint(basenameHint(fileish[1]), 20)
-  const bin = stripped.match(/\b(phpstan|rector|git|composer|npm|bun|uvx|graphify)\b/i)
-  if (bin?.[1]) {
-    const i = stripped.toLowerCase().indexOf(bin[1].toLowerCase())
-    return clipHint(stripped.slice(i), 22)
+  if (max <= 22) {
+    const fileish = stripped.match(/(?:^|[\s/\\])((?:[\w.-]+[/\\])*[\w.-]+\.[a-z0-9]{1,8})\b/i)
+    if (fileish?.[1]) return clipHint(basenameOf(fileish[1]), 20)
+    const bin = stripped.match(/\b(phpstan|rector|git|composer|npm|bun|uvx|graphify)\b/i)
+    if (bin?.[1]) {
+      const i = stripped.toLowerCase().indexOf(bin[1].toLowerCase())
+      return clipHint(stripped.slice(i), max)
+    }
   }
-  if (stripped) return clipHint(stripped, 22)
+  if (stripped) return clipHint(stripped, max)
   return tool
 }
 
@@ -519,10 +591,8 @@ function toolStatusFromEvent(evt: unknown): ToolHit["status"] | null {
   if (type.includes("tool.called")) return "running"
   for (const bag of eventBags(evt)) {
     const state = bag.state && typeof bag.state === "object" ? (bag.state as Record<string, unknown>) : null
-    const raw = String(state?.status ?? bag.status ?? "").toLowerCase()
-    if (raw === "error" || raw === "failed") return "error"
-    if (raw === "completed" || raw === "done" || raw === "success") return "completed"
-    if (raw === "running" || raw === "in_progress" || raw === "active") return "running"
+    const mapped = toToolStatus(String(state?.status ?? bag.status ?? ""))
+    if (mapped === "error" || mapped === "completed" || mapped === "running") return mapped
   }
   if (type.includes("part.updated") && partKind(evt).includes("tool")) return null
   return null

@@ -6,6 +6,8 @@ import os from "node:os"
 import path from "node:path"
 import { resetOesCache } from "../../src/oes.js"
 import { resetLiveCache } from "../../src/live.js"
+import { resetDocsCache } from "../../src/docs.js"
+import { resetPerfCache } from "../../src/perf.js"
 
 export type BoulderTask = {
   task_key?: string
@@ -24,6 +26,9 @@ export function createFixtureProject(opts?: {
   boulder?: Record<string, unknown> | null
   gitignore?: string
   oes?: Record<string, unknown>
+  plans?: Record<string, string>
+  files?: Record<string, string>
+  mtimes?: Record<string, number>
 }): FixtureProject {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "oes-proj-"))
   if (opts?.gitignore != null) {
@@ -32,9 +37,18 @@ export function createFixtureProject(opts?: {
   if (opts?.oes) {
     fs.writeFileSync(path.join(root, "oes.json"), JSON.stringify(opts.oes))
   }
+  for (const [rel, body] of Object.entries({ ...opts?.files, ...opts?.plans })) {
+    const abs = path.join(root, rel)
+    fs.mkdirSync(path.dirname(abs), { recursive: true })
+    fs.writeFileSync(abs, body)
+  }
+  for (const [rel, ms] of Object.entries(opts?.mtimes ?? {})) {
+    const abs = path.join(root, rel)
+    fs.utimesSync(abs, new Date(ms), new Date(ms))
+  }
   if (opts?.boulder) {
     const omo = path.join(root, ".omo")
-    fs.mkdirSync(omo)
+    fs.mkdirSync(omo, { recursive: true })
     fs.writeFileSync(path.join(omo, "boulder.json"), JSON.stringify(opts.boulder))
   }
   return {
@@ -42,6 +56,8 @@ export function createFixtureProject(opts?: {
     dispose: () => {
       resetOesCache()
       resetLiveCache()
+      resetDocsCache()
+      resetPerfCache()
       try {
         fs.rmSync(root, { recursive: true, force: true })
       } catch {

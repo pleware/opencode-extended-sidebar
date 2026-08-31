@@ -3,15 +3,44 @@ import {
   applyFlow,
   composeMark,
   flowFromEvent,
+  flowGlyph,
   formatDuration,
   formatSpan,
   formatTokens,
+  formatWhen,
+  timeSummary,
+  tokenSummary,
+  stampMs,
+  toEpochMs,
   hottestMark,
   packChips,
+  packStackedRow,
   preferToolLabel,
   shortToolLabel,
   sparkline,
 } from "../../src/pulse.js"
+
+describe("toEpochMs / stampMs", () => {
+  test("seconds, ms, ISO, and junk", () => {
+    expect(toEpochMs(1_700_000_000)).toBe(1_700_000_000_000)
+    expect(toEpochMs(1_700_000_000_000)).toBe(1_700_000_000_000)
+    expect(toEpochMs("2024-01-15T12:00:00.000Z")).toBe(Date.parse("2024-01-15T12:00:00.000Z"))
+    expect(toEpochMs(0)).toBeNull()
+    expect(toEpochMs(-1)).toBeNull()
+    expect(toEpochMs("not-a-date")).toBeNull()
+    expect(toEpochMs(null)).toBeNull()
+    expect(stampMs(1_700_000_000)).toBe(1_700_000_000_000)
+    expect(stampMs(null)).toBeNull()
+  })
+})
+
+describe("flowGlyph", () => {
+  test("wait recv tool arrows", () => {
+    expect(flowGlyph("wait")).toBe("↑")
+    expect(flowGlyph("recv")).toBe("↓")
+    expect(flowGlyph("tool")).toBe("→")
+  })
+})
 
 describe("formatTokens", () => {
   test("empty and small", () => {
@@ -25,17 +54,47 @@ describe("formatTokens", () => {
   })
 })
 
+describe("tokenSummary", () => {
+  test("in and out always; reasoning only when present", () => {
+    expect(tokenSummary({ tokensIn: 122_000, tokensOut: 22_000 })).toBe("↑122k ↓22k")
+    expect(tokenSummary({ tokensIn: 122_000, tokensOut: 22_000, tokensReasoning: 37_000 })).toBe(
+      "↑122k ↓22k ∴37k",
+    )
+    expect(tokenSummary({ tokensIn: 12, tokensOut: 3, tokensReasoning: 0 })).toBe("↑12 ↓3")
+  })
+})
+
+describe("timeSummary", () => {
+  test("turns and wall; err/abort only when non-zero", () => {
+    expect(timeSummary({ turns: 38, wallMs: 22 * 60_000 })).toBe("38 turns · 22m")
+    expect(timeSummary({ turns: 2, wallMs: 5_000, errors: 1, aborts: 2 })).toBe(
+      "2 turns · 5s · 1 err · 2 abort",
+    )
+    expect(timeSummary({ turns: 1, wallMs: 1_000, errors: 0, aborts: 0 })).toBe("1 turns · 1s")
+  })
+})
+
+describe("formatWhen", () => {
+  test("UTC stamp or dash", () => {
+    expect(formatWhen(1_700_000_000_000)).toBe("2023-11-14 22:13:20")
+    expect(formatWhen(null)).toBe("—")
+    expect(formatWhen(Number.NaN)).toBe("—")
+  })
+})
+
 describe("formatDuration / formatSpan", () => {
   test("duration buckets", () => {
     expect(formatDuration(0)).toBe("")
     expect(formatDuration(12)).toBe("12ms")
     expect(formatDuration(1_500)).toBe("1.5s")
     expect(formatDuration(12_000)).toBe("12s")
+    expect(formatDuration(10_000_000)).toBe("2h")
   })
   test("span buckets", () => {
     expect(formatSpan(500)).toBe("0s")
     expect(formatSpan(5_000)).toBe("5s")
     expect(formatSpan(120_000)).toBe("2m")
+    expect(formatSpan(10_000_000)).toBe("2h46m")
   })
 })
 
@@ -49,6 +108,19 @@ describe("packChips", () => {
     const kept = packChips(4, chips, 14)
     expect(kept.map((c) => c.text)).not.toContain("bbbb")
     expect(kept.length).toBeGreaterThan(0)
+  })
+})
+
+describe("packStackedRow", () => {
+  test("name keeps the full line; chips do not shrink it", () => {
+    const chips = [
+      { text: "38×", rank: 2 },
+      { text: "↑3.2s", rank: 0 },
+      { text: "∴14s", rank: 3 },
+    ]
+    const stacked = packStackedRow("deepseek-chat-pro", chips, 24)
+    expect(stacked.name).toBe("deepseek-chat-pro")
+    expect(stacked.chips.map((c) => c.text)).toEqual(["38×", "↑3.2s", "∴14s"])
   })
 })
 
@@ -115,5 +187,13 @@ describe("shortToolLabel / preferToolLabel", () => {
   test("keeps a specific label over a later bare name", () => {
     expect(preferToolLabel("bash", "ls src")).toBe("ls src")
     expect(preferToolLabel("git status", "bash")).toBe("git status")
+  })
+  test("maxHint keeps more of a long command for logs", () => {
+    const cmd = "bun test --timeout 5000 --reporter spec"
+    const panel = shortToolLabel({ tool: "bash", command: cmd })
+    const log = shortToolLabel({ tool: "bash", command: cmd, maxHint: 48 })
+    expect(panel.length).toBeLessThan(log.length)
+    expect(log).toContain("bun test")
+    expect(log).toContain("--reporter spec")
   })
 })

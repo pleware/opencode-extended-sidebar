@@ -1,20 +1,18 @@
-import { describe, expect, test } from "bun:test"
-import fs from "node:fs"
-import os from "node:os"
-import path from "node:path"
-import { currentTask, readOmo, workIsTerminal, workStatusGlyph } from "../../src/omo.js"
+import { afterEach, describe, expect, test } from "bun:test"
+import { currentTask, readOmo, workIsTerminal, workRowView, workStatusGlyph } from "../../src/omo.js"
+import { createFixtureProject, type FixtureProject } from "../helpers/project.js"
+
+const held: FixtureProject[] = []
 
 function fixture(boulder: Record<string, unknown>, plans?: Record<string, string>): string {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "oes-omo-"))
-  for (const [rel, body] of Object.entries(plans ?? {})) {
-    const abs = path.join(root, rel)
-    fs.mkdirSync(path.dirname(abs), { recursive: true })
-    fs.writeFileSync(abs, body)
-  }
-  fs.mkdirSync(path.join(root, ".omo"), { recursive: true })
-  fs.writeFileSync(path.join(root, ".omo", "boulder.json"), JSON.stringify(boulder))
-  return root
+  const proj = createFixtureProject({ boulder, plans })
+  held.push(proj)
+  return proj.root
 }
+
+afterEach(() => {
+  for (const p of held.splice(0)) p.dispose()
+})
 
 describe("omo works", () => {
   test("WorkView includes project-relative planPath per work", () => {
@@ -37,7 +35,6 @@ describe("omo works", () => {
     const work = snap.works.find((w) => w.workId === "work_a")
     expect(work?.planPath).toBe(planRel)
     expect(work?.sessionId).toBeNull()
-    fs.rmSync(root, { recursive: true, force: true })
   })
 
   test("work without active_plan inherits the boulder planPath", () => {
@@ -59,7 +56,6 @@ describe("omo works", () => {
     const work = readOmo(root).works.find((w) => w.workId === "work_b")
     expect(work?.planPath).toBe(planRel)
     expect(work?.sessionId).toBe("ses_abc")
-    fs.rmSync(root, { recursive: true, force: true })
   })
 
   test("two runs of the same plan stay two rows — dedup is by work_id", () => {
@@ -75,7 +71,6 @@ describe("omo works", () => {
     expect(works[0]?.workId).toBe("work_2")
     expect(works[0]?.current).toBe(true)
     expect(works[1]?.current).toBe(false)
-    fs.rmSync(root, { recursive: true, force: true })
   })
 
   test("the root mirror is not a separate work when a works map exists", () => {
@@ -88,7 +83,6 @@ describe("omo works", () => {
       },
     })
     expect(readOmo(root).works.length).toBe(1)
-    fs.rmSync(root, { recursive: true, force: true })
   })
 
   test("a legacy state with no works map is one work", () => {
@@ -97,7 +91,6 @@ describe("omo works", () => {
     expect(works.length).toBe(1)
     expect(works[0]?.name).toBe("legacy")
     expect(works[0]?.current).toBe(true)
-    fs.rmSync(root, { recursive: true, force: true })
   })
 
   test("a dangling active_work_id falls back to the newest work", () => {
@@ -112,7 +105,6 @@ describe("omo works", () => {
     expect(works[0]?.workId).toBe("fresh")
     expect(works[0]?.current).toBe(true)
     expect(works.filter((w) => w.current).length).toBe(1)
-    fs.rmSync(root, { recursive: true, force: true })
   })
 
   test("session_origins ride along with the work sessions", () => {
@@ -129,7 +121,6 @@ describe("omo works", () => {
     const sessions = readOmo(root).works[0]?.sessions ?? []
     expect(sessions.map((s) => s.id)).toEqual(["ses_root", "ses_child"])
     expect(sessions.map((s) => s.origin)).toEqual(["direct", "appended"])
-    fs.rmSync(root, { recursive: true, force: true })
   })
 })
 
@@ -175,8 +166,7 @@ describe("omo boulder", () => {
     expect(task?.taskKey).toBe("todo:3")
     expect(task?.label).toBe("todo:3")
     expect(task?.category).toBe("implement")
-    expect(task?.startedAt).toBe(3_000)
-    fs.rmSync(root, { recursive: true, force: true })
+    expect(task?.startedAt).toBe(3_000_000)
   })
 
   test("delegates still come out of the same task list", () => {
@@ -191,17 +181,16 @@ describe("omo boulder", () => {
     expect(snap.delegates.length).toBe(1)
     expect(snap.delegates[0]?.sessionId).toBe("ses_x")
     expect(snap.delegates[0]?.agent).toBe("oracle")
-    fs.rmSync(root, { recursive: true, force: true })
   })
 
   test("no boulder at all is an empty view, not a throw", () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), "oes-omo-none-"))
-    const snap = readOmo(root)
+    const proj = createFixtureProject()
+    held.push(proj)
+    const snap = readOmo(proj.root)
     expect(snap.present).toBe(false)
     expect(snap.works).toEqual([])
     expect(snap.boulder.counts.total).toBe(0)
     expect(currentTask(snap.boulder)).toBeNull()
-    fs.rmSync(root, { recursive: true, force: true })
   })
 })
 
@@ -228,5 +217,17 @@ describe("workIsTerminal", () => {
     expect(workIsTerminal("failed")).toBe(true)
     expect(workIsTerminal("active")).toBe(false)
     expect(workIsTerminal("queued")).toBe(false)
+  })
+})
+
+describe("workRowView", () => {
+  test("terminal error is an error mark; running pulses from age", () => {
+    const err = workRowView({ status: "failed", updatedAt: Date.now() }, Date.now())
+    expect(err.mark).toBe("error")
+    expect(err.glyph).toBe("×")
+    const live = workRowView({ status: "in_progress", updatedAt: Date.now() }, Date.now())
+    expect(live.mark).toBe("live")
+    expect(live.glyph).toBeNull()
+    expect(live.suffix).toBe("0s")
   })
 })

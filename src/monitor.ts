@@ -1,9 +1,9 @@
 /**
- * Watch OMO dirs + poll SQLite stamps. Invokes onChange when fingerprint changes.
+ * Watch boulder.json + poll SQLite stamps. Invokes onChange when fingerprint changes.
  */
 import fs from "node:fs"
 import path from "node:path"
-import { findOmoWatchDirs } from "./omo.js"
+import { findBoulder } from "./omo.js"
 import { computeFingerprint, readLiveSnapshot, type LiveSnapshot } from "./live.js"
 import { getOpenCodeDbPath } from "./paths.js"
 
@@ -63,18 +63,14 @@ export function startMonitor(opts: MonitorOptions): MonitorHandle {
 
   const root = opts.projectRoot
   if (root) {
-    for (const dir of findOmoWatchDirs(root)) {
+    const boulderPath = findBoulder(root)
+    if (boulderPath) {
       try {
-        watchers.push(fs.watch(dir, { persistent: false, recursive: true }, schedule))
+        watchers.push(fs.watch(boulderPath, { persistent: false }, schedule))
       } catch {
-        try {
-          watchers.push(fs.watch(dir, { persistent: false }, schedule))
-        } catch {
-          // poll covers it
-        }
+        // poll covers it
       }
     }
-    // also watch plan file parent if boulder points outside .omo (rare)
   }
 
   // SQLite: watching the file is flaky under WAL — poll stamps instead.
