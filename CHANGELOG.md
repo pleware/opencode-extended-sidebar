@@ -1,5 +1,6 @@
 # Changelog
 
+- **0.2.22** (2026-08-31) Enforce CRLF line endings via a repo .gitattributes (text=auto eol=crlf) so git stops warning about LF-to-CRLF conversions on Windows, and keep the shell hooks .
 - **0.2.21** (2026-08-31) Extract OpenCode and OMO string literals into documented per-domain constants (partType, eventType, toolName in core; planStatus, boulderStatus, backgroundTask,.
 - **0.2.20** (2026-08-31) Reorganize the plugin source into pware.-prefixed layered modules (core, opencode, omo, runtime, perf, ui) with per-layer barrels and an ARCHITECTURE.md module map, rename the live-snapshot symbols to runtime naming (RuntimeSnapshot, readRuntimeSnapshot, resetRuntimeCache), move SPARK_FRAMES back into pulse to restore the core-never-imports-ui layer rule, mirror the test tree to the new layout, repoint the plugin entry export, and add an always-on architecture rule
 - **0.2.19** (2026-08-31) Show the planner session state on pending-approval rows in My work (working/waiting/idle/archived/unknown) by enriching each approval via a new approvalState re.

@@ -1,0 +1,7 @@
+# Line endings: CRLF everywhere by default (Windows-first project), except
+# shell scripts where CRLF would break the shebang.
+* text=auto eol=crlf
+
+# Bash scripts must stay LF — a CRLF `#!/bin/sh` shebang fails.
+.githooks/** text eol=lf
+*.sh text eol=lf
