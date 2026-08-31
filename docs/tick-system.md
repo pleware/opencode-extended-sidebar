@@ -1,0 +1,182 @@
+# Tick system — flow
+
+How the panel re-renders: the animation heartbeat, the row clock, and the DB
+scan path — and why glyphs animate at full speed while rows and scans stay
+cheap. Line references point at `src/` as of the performance fix.
+
+All clock values live in one place: `src/pware.oc.core/pware.oc.core.timing.ts`
+(`TICK_MS`, `NOW_MS`, `FPS_READ_EVERY_TICKS`, `BLINK_TICKS`,
+`MONITOR_POLL_MS`, `MONITOR_WATCH_DEBOUNCE_MS`, `EVENT_SCAN_DEBOUNCE_MS`).
+
+## 1. The three render triggers
+
+The panel has three independent clocks/sources. **All run on the same event
+loop thread.**
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│  SOURCE 1: TICK (animation clock)         sidebar.tsx           │
+│    setInterval(..., TICK_MS = 300ms)                            │
+│    → setNow()  (coarse — advances at most every NOW_MS = 1s)    │
+│    → setFrame() (advances every tick — spinner/blink phase)     │
+│    → every FPS_READ_EVERY_TICKS (6) ticks: readRendererFps()    │
+├────────────────────────────────────────────────────────────────┤
+│  SOURCE 2: MONITOR (DB poll)              monitor.ts             │
+│    setInterval(..., MONITOR_POLL_MS = 1500ms) → emit()          │
+│    + fs.watch(boulder.json, dataDir) → schedule()               │
+│    emit(): fingerprint-gated — readRuntimeSnapshot only when    │
+│    the fingerprint changed; refresh() = emit(true) skips the    │
+│    gate so readRuntimeSnapshot always runs its (cheap) cache    │
+│    check                                                         │
+├────────────────────────────────────────────────────────────────┤
+│  SOURCE 3: HOST EVENTS                   sidebar.tsx:onEvent    │
+│    message.updated, session.status, tool.*, file.edited, ...    │
+│    → signal sets (busy/flow/tools/files) + requestRender        │
+│    → if shouldRefreshDb(type) → debounce EVENT_SCAN_DEBOUNCE_MS │
+│      (= 100ms, trailing) → refresh()                            │
+└────────────────────────────────────────────────────────────────┘
+         all three → synchronous Solid reactive cascade
+                                      ↓
+                         requestRender() (async)
+                                      ↓
+                         TUI renderer (measured fps)
+```
+
+## 2. Anatomy of one tick (300ms)
+
+```
+setInterval(TICK_MS = 300)                       ── sidebar.tsx
+│
+├─ selfTime("tick", ...)                         ── measured, now ~10-30ms
+│  │
+│  ├─ setNow(prev => …)                          ── CASCADE A (now consumers)
+│  │    advances only when a full second passed;
+│  │    returning `prev` skips the Solid cascade entirely
+│  │
+│  └─ setFrame(n => n + 1)                       ── CASCADE B (frame consumers)
+│       re-renders ONLY the glyph text/colour leaves
+│
+├─ tickCount % FPS_READ_EVERY_TICKS === 0 ?     ── every 1800ms
+│  └─ readRendererFps(api.renderer)             ── perf.self.ts
+│     ├─ getStats().fps
+│     └─ fallback getNativeStats().averageFrameTime
+│     └─ setSelfFps(fps, frameMs)
+```
+
+**Why it is cheap:** Solid tracks signal reads per binding. `frame` is passed
+down as an *accessor* (`() => number`) and read **only inside the glyph
+bindings** of `AgentLine` (`sections.tsx`) — the spinner character and its
+colour. The row body (`name`/`tokens`/`suffix` formatting in `rest()`) never
+reads `frame`, so a tick re-renders just the glyph nodes, not the rows.
+
+## 3. CASCADE A — `now()` consumers (recompute at most 1×/s)
+
+`now` advances only on a full-second boundary, so every memo below recomputes
+at most once per second instead of at every tick (3.3×/s before the fix):
+
+```
+setNow(prev => (Date.now() - prev >= NOW_MS ? Date.now() : prev))
+│
+├─ rowMark() / pulseAgeMs(now, ...)              sidebar.tsx
+│   ├─ mainMark / currentMark / delegateMark  ─ agent rows
+│   └─ session ages in JSX
+├─ rowFlow() → activeFlow(..., now(), ...)
+├─ workLines      → workRowView(w, now())       ─ row arrays
+├─ boulderLines   → workRowView(..., now())
+├─ omoSummary     → pulseAgeMs(now, b.updatedAt)
+├─ myWorkApprovals → re-scan plans (cache TTL 2s)
+├─ docs           → readOmoDocs (cache TTL 2s)
+├─ tool rows      → formatDuration(now - startedAt)
+├─ selfLine       → formatSelfLine(readSelfStats())
+└─ selfPhaseMs    → phaseAgeMs(flow, now, ...)
+```
+
+Displayed ages and durations already round to whole seconds
+(`formatCoarseSec`), so 1s granularity is invisible to the user.
+
+## 4. CASCADE B — `frame()` consumers (animate every tick, rows untouched)
+
+```
+setFrame(n + 1)
+│
+└─ Row helper (sidebar.tsx): frame={frame}       ← accessor, NOT frame()
+│
+└─ AgentLine (sections.tsx):
+    ├─ glyph text  → markGlyph(mark, frame(), flow)   ← braille spinner
+    └─ glyph colour→ glyphFg() → lit() → flowBlinkOn(frame())
+```
+
+`frame` is never read at row-construction scope (the `RowList`/`For`
+callbacks), so lists are **not** rebuilt per tick. `markGlyph` uses `frame`
+only for `live`/`stale` marks (spinner phase) and `flowBlinkOn` only for the
+arrow blink — both are glyph-level and cheap. The `PerfPanel` gets the same
+treatment: its live glyph reads `frame()` at the leaf, the panel body does not.
+
+## 5. Why the numbers were 3fps, and what changed
+
+Before the fix, every 300ms tick rebuilt the whole row tree (285ms) and every
+db-refresh event forced a full DB read (353ms) — the UI thread was busy ~100%.
+Now:
+
+```
+Idle state (no activity):
+  tick(300ms)      | glyph leaves only, ~10-30ms |
+  poll(1500ms)     |--- fingerprint (stat calls) ----------| 0ms when unchanged
+  renderer         |            full speed                  |
+
+Active state (streaming / tool calls):
+  tick(300ms)      | glyph leaves | glyph leaves | glyph leaves | ...
+  events           | scan (cache hit ~10ms) | ... only a full read
+                   | (~30-150ms) when the visible data actually changed
+  renderer         |            no longer starved            |
+```
+
+```
+UI thread (1s of active work, after the fix):
+┌──────┬──────┬──────┬──────┬──────┬──────┬──────┬──────┬──────┬──────┐
+│ g    │ g    │ g    │ g    │ g    │ g+row│ g    │ g    │ g    │ g    │
+│ 15ms │ 15ms │ 15ms │ 15ms │ 15ms │ 25ms │ 15ms │ 15ms │ 15ms │ 15ms │
+└──────┴──────┴──────┴──────┴──────┴──────┴──────┴──────┴──────┴──────┘
+   g = glyph-only tick   g+row = tick + coarse now (1×/s) re-renders rows
+   + occasional scan (~30-150ms) when tools/files/sessions actually change
+```
+
+## 6. How a scan lands on the same thread (cache-gated now)
+
+```
+host event (e.g. session.next.tool.called)
+  → onEvent()                 sidebar.tsx   (0.2ms — cheap signal sets)
+  → shouldRefreshDb(type)?    events.ts
+  → debounce 100ms (EVENT_SCAN_DEBOUNCE_MS, trailing)
+  → refresh()                 = monitor.refresh() → emit(true)
+  → readRuntimeSnapshot       runtime/resolver/index.ts
+      ├─ computeFingerprint   (stat stamps: db file, omo/oes/gitignore)
+      ├─ snapshotGraphStamp   (4 cheap SQL: session row + parts max +
+      │                        children max + non-archived mains max)
+      ├─ cache peek keyed by `${fingerprint}::${graphStamp}`
+      │    ├─ HIT  → fresh ages + generatedAt, return  (~5-20ms)
+      │    └─ MISS → full read (only when shown data changed):
+      │         ├─ readOmo  (boulder.json + works parse)
+      │         ├─ readDbSnapshot (session graph + tools + files)
+      │         └─ enrichDelegates + readOmoConfig
+```
+
+The cache is keyed by the *visible* data set — current session, its parts,
+its children, and any non-archived main session — plus the file fingerprint
+(db mtime, omo/oes/gitignore stamps). A no-op event (same part re-reported,
+redundant `session.status`) hits the cache; a real change (new tool part,
+child update, boulder edit) misses and re-reads. Under WAL the file mtime can
+lag, which is why the graph stamp adds the SQL-level checks — the poll and
+watch cover the rest.
+
+## Summary
+
+| Clock | Frequency | What updates | Cost |
+|---|---|---|---|
+| `frame` (spinner/blink) | every 300ms tick | glyph text + colour leaves only | ~10-30ms |
+| `now` (ages/marks) | 1×/s (`NOW_MS`) | row arrays, ages, marks | folded into the 1×/s tick |
+| scan (DB re-read) | on real change only | full snapshot | HIT ~5-20ms, MISS ~30-150ms+ |
+| fps read | every 6th tick | `self` line fps | negligible |
+
+The `self` line now shows the real cost: `0.2ms/ev · 1.2ms/sc · 59fps` instead
+of `0.2ms/ev · 353.4ms/sc · 285.3ms/tk · 3fps`.

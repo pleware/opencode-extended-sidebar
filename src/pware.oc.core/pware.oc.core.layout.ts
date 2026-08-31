@@ -22,6 +22,7 @@ export const SESSION_MORE_STEP = 4
 export const ROW_MIN = {
   delegates: 2,
   files: 3,
+  mywork: 2,
   omo: 3,
   sessions: 2,
   tools: 3,
@@ -98,25 +99,9 @@ export function packSections<K extends string>(
 }
 
 /**
- * Cut a row list to `budget`, spending one row on a `+N more` note when it does
- * not fit. A list that overflows must say so — silently dropping the tail hides
- * whole sections of the document index.
- */
-export function sliceWithOverflow<T>(
-  rows: readonly T[],
-  budget: number,
-): { rows: T[]; hidden: number } {
-  const max = Math.max(0, Math.round(budget))
-  if (max <= 0) return { rows: [], hidden: rows.length }
-  if (rows.length <= max) return { rows: [...rows], hidden: 0 }
-  const keep = Math.max(1, max - 1)
-  return { rows: rows.slice(0, keep), hidden: rows.length - keep }
-}
-
-/**
  * Show `shown` rows and report how many a "more" control can still reveal.
- * Unlike `sliceWithOverflow`, no row is spent on the note — the expander is a
- * separate clickable line the caller renders below the list.
+ * The expander is a separate clickable line (`RowList`) the caller renders
+ * below the list — no row is spent on the note.
  */
 export function sliceShown<T>(
   rows: readonly T[],

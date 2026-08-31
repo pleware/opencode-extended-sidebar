@@ -28,6 +28,7 @@ src/
 │   ├── pware.oc.core.pulse.ts
 │   ├── pware.oc.core.sqlite.ts
 │   ├── pware.oc.core.status.ts
+│   ├── pware.oc.core.timing.ts
 │   ├── constants/                         # OpenCode host string literals
 │   │   ├── index.ts
 │   │   ├── pware.oc.core.constants.partType.ts
@@ -127,13 +128,14 @@ Plugin registration: `id = "opencode-extended-sidebar"`, load toast,
 | `clipboard.ts` | OS clipboard, no npm deps | `copyText()`, `osc52Payload()` |
 | `debug.ts` | `OES_DEBUG_OPENCODE` JSON-line file logger | `dbg()`, `debugLogDir()`, `resetDebug()` |
 | `events.ts` | host event type/kind classification | `eventType()`, `eventKind()`, `shouldRefreshDb()` |
-| `layout.ts` | vertical row budget, overflow slicing | `panelRows()`, `packSections()`, `sliceShown()`, `sliceWithOverflow()`, `ROW_MIN`, `ROW_RANK` |
+| `layout.ts` | vertical row budget, overflow slicing | `panelRows()`, `packSections()`, `sliceShown()`, `ROW_MIN`, `ROW_RANK` |
 | `oes.ts` | `oes.json` merge + clamp | `OesOptions`, `OES_DEFAULTS`, `pick()`, `getOes()`, `oesStamp()`, `resetOesCache()` |
 | `paths.ts` | OpenCode path resolution, path folding | `getOpenCodeDbPath()`, `pluginRoot()`, `resolveProjectFile()`, `basenameOf()`, `fileStamp()`, `dbStamp()`, `str()`, `finiteNum()` |
 | `preview.ts` | text/markdown preview limits | `previewViewportRows()`, `canPreviewPath()`, `isMarkdownPath()`, `readTextPreview()` |
 | `pulse.ts` | agent marks, flow, time/token formatting | `toEpochMs()`, `pulseAgeMs()`, `composeMark()`, `hottestMark()`, `activeFlow()`, `applyFlow()`, `flowFromEvent()`, `sessionBusyFromEvent()`, `sessionIdFromEvent()`, `shortToolLabel()`, `toolHitFromEvent()`, `formatAge()`, `formatDuration()`, `formatTokens()`, `formatUsd()`, `sparkline()`, `packChips()`, `SPARK_FRAMES` |
 | `sqlite.ts` | readonly `bun:sqlite` / `node:sqlite` handle | `openReadonlyDb()`, `withDbRead()`, `resetReadonlyDb()`, `uniqueIds()` |
 | `status.ts` | canonical lifecycle/tool/work status | `normalizeStatus()`, `toToolStatus()`, `toWorkLabel()`, `isPendingWork()`, `workIsTerminal()`, `taskRank()` |
+| `timing.ts` | panel clock budgets | `TICK_MS`, `NOW_MS`, `FPS_READ_EVERY_TICKS`, `BLINK_TICKS`, `MONITOR_POLL_MS`, `MONITOR_WATCH_DEBOUNCE_MS`, `EVENT_SCAN_DEBOUNCE_MS` |
 
 ### `pware.oc.core/constants` — OpenCode host string literals
 
@@ -206,7 +208,7 @@ Plugin registration: `id = "opencode-extended-sidebar"`, load toast,
 | Module | Responsibility | Key exports |
 |---|---|---|
 | `chrome.tsx` | shared chrome, theme colours, kv persistence | `BrandTabs`, `ClickText`, `FoldHeader`, `DiffStat`, `textAttrs()`, `kvRead()`, `kvWrite()`, `kvReadOne()`, `kvWriteOne()`, `ThemeColors` |
-| `sections.tsx` | shared sidebar primitives: kv-persisted fold state, foldable sections, budget-sliced data groups, brand+tabs+panel columns | `useFold()`, `FoldSection`, `GroupSection`, `TabColumn` |
+| `sections.tsx` | shared sidebar primitives: kv-persisted fold state, foldable sections, the base row renderer + budget-sliced `RowList`, brand+tabs+panel columns | `useFold()`, `FoldSection`, `GroupSection`, `RowList`, `MoreReveal`, `useReveal()`, `AgentLine`, `RowData`, `TabColumn` |
 | `sidebar.tsx` | the panel: groups, tabs, live rows | `SidebarPanel` |
 | `menudialogs.tsx` | every popup via one `openDialog()` choke-point | `openFileDetail()`, `openToolDetail()`, `openWorkDetail()`, `openApprovalDialog()`, `openDocDetail()`, `openTextPreview()`, `openPerfLog()` |
 | `glyphs.tsx` | status → character mappings | `workStatusGlyph()`, `markGlyph()`, `flowGlyph()`, `spinnerFrame()`, `flowBlinkOn()`, `myWorkGlyph()`, `reviewLaneGlyph()`, `reviewStateSuffix()`, `fileLetterMark()`, `SPINNER_FRAMES`, `GROUP_GLYPH`, `THINK_GLYPH` |

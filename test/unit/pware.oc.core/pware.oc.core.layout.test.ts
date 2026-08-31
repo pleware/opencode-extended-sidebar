@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { ROW_MIN, ROW_RANK, packSections, panelRows, sliceShown, sliceWithOverflow } from "../../../src/pware.oc.core/pware.oc.core.layout.js"
+import { ROW_MIN, ROW_RANK, packSections, panelRows, sliceShown } from "../../../src/pware.oc.core/pware.oc.core.layout.js"
 
 describe("panelRows", () => {
   test("subtracts host chrome and never returns less than the floor", () => {
@@ -63,41 +63,6 @@ describe("packSections", () => {
 
   test("no sections is not a crash", () => {
     expect(packSections(20, 5, [])).toEqual({})
-  })
-})
-
-describe("sliceWithOverflow", () => {
-  const rows = [1, 2, 3, 4, 5]
-
-  test("a list that fits is untouched", () => {
-    expect(sliceWithOverflow(rows, 5)).toEqual({ rows, hidden: 0 })
-    expect(sliceWithOverflow(rows, 9)).toEqual({ rows, hidden: 0 })
-  })
-
-  test("an overflow spends one row on the note and reports the rest", () => {
-    const got = sliceWithOverflow(rows, 3)
-    expect(got.rows).toEqual([1, 2])
-    expect(got.hidden).toBe(3)
-    expect(got.rows.length + 1).toBeLessThanOrEqual(3)
-  })
-
-  test("a budget of one still shows a row plus the note", () => {
-    expect(sliceWithOverflow(rows, 1)).toEqual({ rows: [1], hidden: 4 })
-  })
-
-  test("no budget hides everything and says how much", () => {
-    expect(sliceWithOverflow(rows, 0)).toEqual({ rows: [], hidden: 5 })
-    expect(sliceWithOverflow(rows, -3)).toEqual({ rows: [], hidden: 5 })
-  })
-
-  test("an empty list never claims hidden rows", () => {
-    expect(sliceWithOverflow([], 4)).toEqual({ rows: [], hidden: 0 })
-  })
-
-  test("the source array is not mutated", () => {
-    const src = [1, 2, 3]
-    sliceWithOverflow(src, 2)
-    expect(src).toEqual([1, 2, 3])
   })
 })
 

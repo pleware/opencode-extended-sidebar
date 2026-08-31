@@ -3,7 +3,7 @@
 import { createMemo, For, Show, type JSX } from "solid-js"
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import { ClickText, type ThemeColors } from "../pware.oc.ui/pware.oc.ui.chrome.js"
-import { FoldSection, useFold } from "../pware.oc.ui/pware.oc.ui.sections.js"
+import { FoldSection, RowList, useFold, useReveal } from "../pware.oc.ui/pware.oc.ui.sections.js"
 import { openPerfLog } from "../pware.oc.ui/pware.oc.ui.menudialogs.js"
 import type { PerfLogKind } from "./pware.oc.perf.reader.js"
 import {
@@ -117,7 +117,8 @@ function ModelRow(props: {
   model: ModelPerf
   colors: ThemeColors
   lineMax: number
-  frame: number
+  /** Tick accessor — read only in the live glyph. */
+  frame: () => number
   live: boolean
 }): JSX.Element {
   const m = () => props.model
@@ -145,7 +146,7 @@ function ModelRow(props: {
     <box flexDirection="column">
       <box flexDirection="row">
         <text fg={props.live ? props.colors.success : props.colors.textMuted}>
-          {`${props.live ? spinnerFrame(props.frame) : "•"} `}
+          {`${props.live ? spinnerFrame(props.frame()) : "•"} `}
         </text>
         <text fg={props.colors.text}>{name()}</text>
       </box>
@@ -249,7 +250,8 @@ export type PerfPanelProps = {
   colors: ThemeColors
   lineMax: number
   rows: number
-  frame: number
+  /** Tick accessor — read only in the live glyph, so the panel is not rebuilt per tick. */
+  frame: () => number
   /** Phase the watched session is in right now, plus how long it has lasted. */
   livePhase: FlowDir | null
   livePhaseMs: number | null
@@ -272,10 +274,10 @@ export function PerfPanel(props: PerfPanelProps): JSX.Element {
     PHASES.map((p) => ({ ...p, ms: totals().phases[p.key] })).filter(
       (p) => p.ms > 0 || p.key === "wait" || p.key === "tool",
     )
-  const models = () => props.perf.models.slice(0, props.rows)
+  const modelsReveal = useReveal(props.rows)
+  const toolsReveal = useReveal(props.rows)
+  const historyReveal = useReveal(props.rows)
   const toolTotal = () => props.perf.tools.reduce((sum, t) => sum + t.totalMs, 0)
-  const tools = () => props.perf.tools.slice(0, props.rows)
-  const history = () => props.perf.history.slice(0, props.rows)
   const trendWait = () => props.perf.trend.map((p) => p.waitMs)
   const trendRate = () => props.perf.trend.map((p) => p.tokensPerSec)
   const hasTrend = () =>
@@ -304,7 +306,7 @@ export function PerfPanel(props: PerfPanelProps): JSX.Element {
       <Show when={liveLabel()}>
         {(live) => (
           <box flexDirection="row">
-            <text fg={live().fg}>{`${spinnerFrame(props.frame)} ${live().label}`}</text>
+            <text fg={live().fg}>{`${spinnerFrame(props.frame())} ${live().label}`}</text>
             <text fg={props.colors.textMuted}>
               {live().ms != null ? ` ${formatDuration(live().ms)}` : ""}
             </text>
@@ -330,8 +332,11 @@ export function PerfPanel(props: PerfPanelProps): JSX.Element {
             onToggle={foldModels.toggle}
             onDetail={() => openLog("models")}
           >
-            <For each={models()}>
-              {(m) => (
+            <RowList
+              items={props.perf.models}
+              budget={props.rows + modelsReveal.more()}
+              colors={props.colors}
+              renderItem={(m) => (
                 <ModelRow
                   model={m}
                   colors={props.colors}
@@ -340,7 +345,8 @@ export function PerfPanel(props: PerfPanelProps): JSX.Element {
                   live={Boolean(props.livePhase) && m === props.perf.models[0]}
                 />
               )}
-            </For>
+              more={{ onReveal: modelsReveal.reveal }}
+            />
           </FoldSection>
 
           <FoldSection
@@ -377,8 +383,11 @@ export function PerfPanel(props: PerfPanelProps): JSX.Element {
                 onToggle={foldTools.toggle}
                 onDetail={() => openLog("tool")}
               >
-                <For each={tools()}>
-                  {(t) => (
+                <RowList
+                  items={props.perf.tools}
+                  budget={props.rows + toolsReveal.more()}
+                  colors={props.colors}
+                  renderItem={(t) => (
                     <ToolRow
                       tool={t}
                       share={toolTotal() > 0 ? t.totalMs / toolTotal() : null}
@@ -387,7 +396,8 @@ export function PerfPanel(props: PerfPanelProps): JSX.Element {
                       onSelect={() => openLog("tool", t.name)}
                     />
                   )}
-                </For>
+                  more={{ onReveal: toolsReveal.reveal }}
+                />
               </FoldSection>
           </Show>
 
@@ -416,26 +426,30 @@ export function PerfPanel(props: PerfPanelProps): JSX.Element {
               </FoldSection>
           </Show>
 
-          <Show when={history().length > 0}>
-              <FoldSection
-                title="History"
-                open={foldHistory.open()}
-                count={history().length}
+          <Show when={props.perf.history.length > 0}>
+            <FoldSection
+              title="History"
+              open={foldHistory.open()}
+              count={props.perf.history.length}
+              colors={props.colors}
+              onToggle={foldHistory.toggle}
+            >
+              <RowList
+                items={props.perf.history}
+                budget={props.rows + historyReveal.more()}
                 colors={props.colors}
-                onToggle={foldHistory.toggle}
-              >
-                <For each={history()}>
-                  {(row) => (
-                    <HistoryRow
-                      row={row}
-                      colors={props.colors}
-                      lineMax={props.lineMax}
-                      current={row.id === props.currentSessionId}
-                      onSelect={() => props.onSelect(row.id)}
-                    />
-                  )}
-                </For>
-              </FoldSection>
+                renderItem={(row) => (
+                  <HistoryRow
+                    row={row}
+                    colors={props.colors}
+                    lineMax={props.lineMax}
+                    current={row.id === props.currentSessionId}
+                    onSelect={() => props.onSelect(row.id)}
+                  />
+                )}
+                more={{ onReveal: historyReveal.reveal }}
+              />
+            </FoldSection>
           </Show>
         </box>
       </Show>

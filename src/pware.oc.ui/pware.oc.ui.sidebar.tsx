@@ -51,25 +51,27 @@ import {
   SESSION_MORE_STEP,
   packSections,
   panelRows,
-  sliceShown,
-  sliceWithOverflow,
 } from "../pware.oc.core/pware.oc.core.layout.js"
 import { openReadonlyDb } from "../pware.oc.core/pware.oc.core.sqlite.js"
 import {
   GROUP_GLYPH,
   fileLetterMark,
-  flowBlinkOn,
-  markGlyph,
   myWorkGlyph,
   reviewStateSuffix,
   workStatusGlyph,
 } from "./pware.oc.ui.glyphs.js"
-import { ClickText, DiffStat, kvReadOne, kvWriteOne, type ThemeColors } from "./pware.oc.ui.chrome.js"
+import { kvReadOne, kvWriteOne, type ThemeColors } from "./pware.oc.ui.chrome.js"
 import {
+  AgentLine,
   FoldSection,
   GroupSection,
+  RowList,
   TabColumn,
+  agentDisplayName,
+  clip,
   useFold,
+  useReveal,
+  type RowData,
 } from "./pware.oc.ui.sections.js"
 import { emptyPerf, readPerfSnapshot } from "../pware.oc.perf/pware.oc.perf.reader.js"
 import { PerfPanel } from "../pware.oc.perf/pware.oc.perf.view.js"
@@ -78,9 +80,7 @@ import {
   decorateFiles,
   fileFilter,
   filesFromEvent,
-  formatDiffStat,
   mergeFiles,
-  shortFileName,
   sumDiff,
   type FileView,
 } from "../pware.oc.opencode/pware.oc.opencode.files.js"
@@ -93,16 +93,18 @@ import { eventType, shouldRefreshDb } from "../pware.oc.core/pware.oc.core.event
 import { dbg } from "../pware.oc.core/pware.oc.core.debug.js"
 import { getOpenCodeDbPath } from "../pware.oc.core/pware.oc.core.paths.js"
 import {
+  EVENT_SCAN_DEBOUNCE_MS,
+  FPS_READ_EVERY_TICKS,
+  NOW_MS,
   TICK_MS,
+} from "../pware.oc.core/pware.oc.core.timing.js"
+import {
   activeFlow,
   applyFlow,
   composeMark,
-  flowColor,
   flowFromEvent,
   formatAge,
   formatDuration,
-  formatTokens,
-  formatUsd,
   hottestMark,
   phaseAgeMs,
   pulseAgeMs,
@@ -122,124 +124,6 @@ export type SidebarProps = {
   sessionId: string
   api: TuiPluginApi
   theme: TuiTheme
-}
-
-function markColor(
-  mark: AgentMark,
-  colors: ThemeColors,
-  current = false,
-  flow?: FlowDir | null,
-  waiting = false,
-): string {
-  if (waiting) return colors.warning || colors.text
-  if (flow === "recv" || flow === "wait" || flow === "tool") return flowColor(flow, colors)
-  if (mark === "live") return colors.success
-  if (mark === "stale") return colors.warning || colors.text
-  if (mark === "error") return colors.error || colors.text
-  if (current) return colors.primary || colors.text
-  return colors.textMuted
-}
-
-function clip(s: string, max: number): string {
-  const t = s.replace(/\s+/g, " ").trim()
-  if (max <= 0) return ""
-  if (t.length <= max) return t
-  if (max === 1) return "…"
-  return `${t.slice(0, max - 1)}…`
-}
-
-type RowKind = "agent" | "tool" | "file" | "delegate" | "group"
-
-function agentDisplayName(name: string): string {
-  return (name || "agent").replace(/\s*-\s*/g, " ").trim() || "agent"
-}
-
-function shortName(name: string, kind: RowKind, max: number): string {
-  if (kind === "file") return shortFileName(name, max)
-  if (kind === "agent" || kind === "group") return clip(agentDisplayName(name), max)
-  return clip((name || "agent").replace(/\s+/g, " ").trim(), max)
-}
-
-type RowData = {
-  kind: RowKind
-  mark: AgentMark
-  name: string
-  glyph?: string
-  tokens?: number | null
-  cost?: number | null
-  title?: string
-  suffix?: string
-  diff?: { additions: number; deletions: number }
-  current?: boolean
-  flow?: FlowDir | null
-  /** Queued work — rendered in warning colour with a clock glyph, not the idle dot. */
-  waiting?: boolean
-  onSelect?: () => void
-}
-
-/** Single renderer for every sidebar row: glyph, name, tokens, title, suffix, diff. */
-function AgentLine(props: RowData & {
-  lineMax: number
-  frame?: number
-  colors: ThemeColors
-}): JSX.Element {
-  const directional = () =>
-    props.flow === "recv" || props.flow === "wait" || props.flow === "tool"
-  const lit = () => !directional() || flowBlinkOn(props.frame ?? 0)
-  const glyphFg = () =>
-    lit()
-      ? markColor(props.mark, props.colors, props.current, props.flow, props.waiting)
-      : props.colors.textMuted
-  const bodyFg = () =>
-    props.kind === "file"
-      ? props.colors.text
-      : props.kind === "group"
-        ? props.colors.textMuted
-        : markColor(props.mark, props.colors, props.current, props.flow, props.waiting)
-  const rest = () => {
-    const max = Math.max(0, props.lineMax - 2)
-    const suffix = props.suffix?.trim() ?? ""
-    const diffW = props.diff ? formatDiffStat(props.diff.additions, props.diff.deletions).length : 0
-    const extra = (suffix ? suffix.length + 1 : 0) + (diffW ? diffW + 1 : 0)
-    const room = Math.max(0, max - extra)
-    const tok = props.tokens === undefined ? "" : formatTokens(props.tokens)
-    const usd = formatUsd(props.cost)
-    const meta = [tok, usd].filter(Boolean).join(" ")
-    const metaW = meta ? meta.length + 1 : 0
-    const title = props.title?.replace(/\s+/g, " ").trim()
-    // One budget (`lineMax`): identity + meta (+ optional title) clipped once to `room`.
-    const nameBudget = title
-      ? Math.max(4, Math.floor((room - metaW) / 2))
-      : Math.max(1, room - metaW)
-    const agent = shortName(props.name, props.kind, nameBudget)
-    const head = [agent, tok, usd].filter(Boolean).join(" ")
-    const body = !title
-      ? clip(head, room)
-      : room - head.length < 9
-        ? clip(head, room)
-        : clip(`${head} ${title}`, room)
-    return suffix ? `${body} ${suffix}` : body
-  }
-  return (
-    <box flexDirection="row" onMouseUp={props.onSelect}>
-      <text fg={glyphFg()}>{`${props.glyph ?? markGlyph(props.mark, props.frame ?? 0, props.flow)} `}</text>
-      <ClickText
-        fg={bodyFg()}
-        bold={Boolean(props.current)}
-        underline={Boolean(props.onSelect)}
-      >
-        {rest()}
-      </ClickText>
-      <Show when={Boolean(props.diff && (props.diff.additions > 0 || props.diff.deletions > 0))}>
-        <text> </text>
-        <DiffStat
-          additions={props.diff?.additions ?? 0}
-          deletions={props.diff?.deletions ?? 0}
-          colors={props.colors}
-        />
-      </Show>
-    </box>
-  )
 }
 
 function selectSession(api: TuiPluginApi, sessionId: string | null | undefined): void {
@@ -478,7 +362,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     debounce = setTimeout(() => {
       debounce = null
       refresh()
-    }, 100)
+    }, EVENT_SCAN_DEBOUNCE_MS)
   })
 
   const listen = (type: string, fn: (...args: unknown[]) => void): (() => void) => {
@@ -530,11 +414,16 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   let tickCount = 0
   const tick = setInterval(() => {
     selfTime("tick", () => {
-      setNow(Date.now())
+      // Coarse: ages/marks recompute at most once a second; the spinner phase
+      // (`frame`) still animates every tick. Returning `prev` skips the cascade.
+      setNow((prev) => {
+        const n = Date.now()
+        return n - prev >= NOW_MS ? n : prev
+      })
       setFrame((n) => n + 1)
     })
     tickCount += 1
-    if (tickCount % 6 === 0) {
+    if (tickCount % FPS_READ_EVERY_TICKS === 0) {
       const r = readRendererFps(props.api.renderer)
       setSelfFps(r.fps, r.frameMs)
     }
@@ -835,8 +724,8 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
           section(
             myWorkFold[g.kind].open(),
             `mywork.${g.kind}`,
-            g.items.length + 1,
-            1,
+            g.items.length,
+            ROW_MIN.mywork,
             ROW_RANK.mywork,
           )
         }
@@ -864,26 +753,12 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     return typeof v === "number" ? v : fallback
   }
 
-  const filesSlice = createMemo(() => {
-    const all = filesAll()
-    if (filesExpanded()) return { rows: all, hidden: 0 }
-    return sliceWithOverflow(all, rowsFor("files", oes().fileRows))
-  })
-  const files = createMemo(() => filesSlice().rows)
-  const filesHidden = createMemo(() => filesSlice().hidden)
-
-  const [projectToolsMore, setProjectToolsMore] = createSignal(0)
-  const [toolsMore, setToolsMore] = createSignal(0)
-  const projectToolsSlice = createMemo(() =>
-    sliceShown(projectFeed().tools, rowsFor("tools", oes().toolRows) + projectToolsMore()),
-  )
-  const toolsSlice = createMemo(() =>
-    sliceShown(tools(), rowsFor("tools", oes().toolRows) + toolsMore()),
-  )
-  const [sessionsMore, setSessionsMore] = createSignal(0)
-  const sessionsSlice = createMemo(() =>
-    sliceShown(snap().db.recent, rowsFor("sessions", oes().sessionRows) + sessionsMore()),
-  )
+  const sessionsReveal = useReveal(SESSION_MORE_STEP)
+  const projectToolsReveal = useReveal(Math.max(1, oes().toolRows))
+  const toolsReveal = useReveal(Math.max(1, oes().toolRows))
+  const worksReveal = useReveal(4)
+  const boulderReveal = useReveal(4)
+  const projectFilesReveal = useReveal(4)
 
   const omoRows = createMemo(() => (omoPresent() ? rowsFor("omo", 0) : 0))
   const omoOpen = createMemo(() => foldOmo.open() && omoRows() > 0)
@@ -1097,66 +972,68 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     <AgentLine
       {...row}
       lineMax={oes().lineMax}
-      frame={frame()}
+      frame={frame}
       colors={colors()}
     />
   )
 
-  /** A bounded mixed row list: group headers + rows, `+N more` when it overflows. */
-  const BoundedRows = (rows: RowData[], budget: number): JSX.Element => {
-    const cut = sliceWithOverflow(rows, budget)
+  /** Flatten delegates to rows (agent headers + members) for `RowList`. */
+  const delegateLines = (list: DelegateView[]): RowData[] => {
+    const out: RowData[] = []
+    for (const item of groupDelegates(list)) {
+      if (item.kind === "header") {
+        out.push({
+          kind: "group",
+          mark: hottestMark(item.members.map(delegateMark)),
+          glyph: GROUP_GLYPH,
+          name: `${agentDisplayName(item.agent)} (${item.count})`,
+        })
+        continue
+      }
+      const d = item.delegate
+      const isBusy = Boolean(d.sessionId && busy()[d.sessionId])
+      const waiting = isPendingWork(d.status)
+      const mark = delegateMark(d)
+      const dir = rowFlow(d.sessionId, isBusy)
+      out.push({
+        kind: item.grouped ? "delegate" : "agent",
+        mark,
+        glyph2: waiting ? (workStatusGlyph(d.status) ?? undefined) : undefined,
+        waiting,
+        name: item.grouped ? d.title || d.taskKey || "task" : d.agent || "agent",
+        tokens: d.tokensTotal,
+        title: item.grouped ? undefined : d.title,
+        current: Boolean(d.sessionId && d.sessionId === props.sessionId),
+        flow: dir,
+        onSelect: () => selectSession(props.api, d.sessionId),
+      })
+    }
+    return out
+  }
+
+  /** A delegate list with its own "… +N more" revealer. */
+  const DelegateList = (props: { list: DelegateView[]; budget: number }): JSX.Element => {
+    const reveal = useReveal(4)
     return (
-      <box flexDirection="column" gap={0}>
-        <For each={cut.rows}>{(line) => <Row {...line} />}</For>
-        <Show when={cut.hidden > 0}>
-          <text fg={colors().textMuted}>{`  … +${cut.hidden} more`}</text>
-        </Show>
-      </box>
+      <RowList
+        items={delegateLines(props.list)}
+        budget={props.budget + reveal.more()}
+        colors={colors()}
+        renderItem={(r) => <Row {...r} />}
+        more={{ onReveal: reveal.reveal }}
+      />
     )
   }
 
-  /** Every OMO tab draws through here, so the row budget is applied once. */
-  const OmoRows = (rows: RowData[]): JSX.Element => BoundedRows(rows, omoRows())
-
-  const DelegateRows = (list: DelegateView[], limit: number): JSX.Element => (
-    <For each={groupDelegates(list).slice(0, Math.max(0, limit))}>
-      {(item) => {
-        if (item.kind === "header") {
-          return (
-            <Row
-              kind="group"
-              mark={hottestMark(item.members.map(delegateMark))}
-              glyph={GROUP_GLYPH}
-              name={`${agentDisplayName(item.agent)} (${item.count})`}
-            />
-          )
-        }
-        const d = item.delegate
-        const isBusy = Boolean(d.sessionId && busy()[d.sessionId])
-        const waiting = isPendingWork(d.status)
-        const mark = delegateMark(d)
-        const dir = rowFlow(d.sessionId, isBusy)
-        return (
-          <Row
-            kind={item.grouped ? "delegate" : "agent"}
-            mark={mark}
-            glyph={waiting ? workStatusGlyph(d.status) ?? undefined : undefined}
-            waiting={waiting}
-            name={item.grouped ? d.title || d.taskKey || "task" : d.agent || "agent"}
-            tokens={d.tokensTotal}
-            title={item.grouped ? undefined : d.title}
-            current={Boolean(d.sessionId && d.sessionId === props.sessionId)}
-            flow={dir}
-            onSelect={() => selectSession(props.api, d.sessionId)}
-          />
-        )
-      }}
-    </For>
-  )
+  /** Live self-cost line — reads the tick clock so the Solid insert re-evaluates every tick. */
+  const selfLine = createMemo(() => {
+    now()
+    return formatSelfLine(readSelfStats())
+  })
 
   return (
     <box flexDirection="column" gap={1} paddingTop={1}>
-      <text fg={colors().textMuted}>{formatSelfLine(readSelfStats())}</text>
+      <text fg={colors().textMuted}>{selfLine()}</text>
       <TabColumn
         brand="OES"
         tabs={OES_TABS}
@@ -1224,8 +1101,11 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
             colors={colors()}
             onToggle={foldSessions.toggle}
           >
-            <For each={sessionsSlice().rows}>
-              {(s) => {
+            <RowList
+              items={snap().db.recent}
+              budget={rowsFor("sessions", oes().sessionRows) + sessionsReveal.more()}
+              colors={colors()}
+              renderItem={(s) => {
                 const isBusy = Boolean(busy()[s.id])
                 const mark = rowMark(
                   s.status === "archived" ? "archived" : null,
@@ -1247,21 +1127,18 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
                   />
                 )
               }}
-            </For>
-            <Show when={sessionsSlice().hidden > 0}>
-              <box onMouseUp={() => setSessionsMore(sessionsMore() + SESSION_MORE_STEP)}>
-                <ClickText fg={colors().textMuted} underline>
-                  {`… +${sessionsSlice().hidden} more`}
-                </ClickText>
-              </box>
-            </Show>
+              more={{ onReveal: sessionsReveal.reveal }}
+            />
           </FoldSection>
         </Show>
 
         <Show when={projectFeed().tools.length > 0}>
           <FoldSection title="Tool Calls" open={foldTools.open()} colors={colors()} onToggle={foldTools.toggle}>
-            <For each={projectToolsSlice().rows}>
-              {(t) => {
+            <RowList
+              items={projectFeed().tools}
+              budget={rowsFor("tools", oes().toolRows) + projectToolsReveal.more()}
+              colors={colors()}
+              renderItem={(t) => {
                 const mark = toolMark(t.status)
                 const dir = toolFlow(t.status)
                 const dur =
@@ -1279,14 +1156,8 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
                   />
                 )
               }}
-            </For>
-            <Show when={projectToolsSlice().hidden > 0}>
-              <box onMouseUp={() => setProjectToolsMore(projectToolsMore() + oes().toolRows)}>
-                <ClickText fg={colors().textMuted} underline>
-                  {`… +${projectToolsSlice().hidden} more`}
-                </ClickText>
-              </box>
-            </Show>
+              more={{ onReveal: projectToolsReveal.reveal }}
+            />
           </FoldSection>
         </Show>
 
@@ -1299,8 +1170,11 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
             colors={colors()}
             onToggle={foldFiles.toggle}
           >
-            <For each={projectFeed().files.slice(0, rowsFor("files", oes().fileRows))}>
-              {(f) => (
+            <RowList
+              items={projectFeed().files}
+              budget={rowsFor("files", oes().fileRows) + projectFilesReveal.more()}
+              colors={colors()}
+              renderItem={(f) => (
                 <Row
                   kind="file"
                   mark={fileLetterMark(f.letter)}
@@ -1310,7 +1184,8 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
                   onSelect={() => openFileDetail(props.api, f, projectRoots(), colors())}
                 />
               )}
-            </For>
+              more={{ onReveal: projectFilesReveal.reveal }}
+            />
           </FoldSection>
         </Show>
 
@@ -1326,7 +1201,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
             {snap().delegates.length === 0 ? (
               <text fg={colors().textMuted}>• none</text>
             ) : (
-              DelegateRows(snap().delegates, rowsFor("delegates", 6))
+              <DelegateList list={snap().delegates} budget={rowsFor("delegates", 6)} />
             )}
           </FoldSection>
         </Show>
@@ -1368,7 +1243,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
             {sessionDelegates().length === 0 ? (
               <text fg={colors().textMuted}>• none</text>
             ) : (
-              DelegateRows(sessionDelegates(), rowsFor("delegates", 6))
+              <DelegateList list={sessionDelegates()} budget={rowsFor("delegates", 6)} />
             )}
           </FoldSection>
         </Show>
@@ -1377,8 +1252,11 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
             {tools().length === 0 ? (
               <text fg={colors().textMuted}>• none</text>
             ) : (
-              <For each={toolsSlice().rows}>
-                {(t) => {
+              <RowList
+                items={tools()}
+                budget={rowsFor("tools", oes().toolRows) + toolsReveal.more()}
+                colors={colors()}
+                renderItem={(t) => {
                   const mark = toolMark(t.status)
                   const dir = toolFlow(t.status)
                   const dur =
@@ -1396,15 +1274,9 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
                     />
                   )
                 }}
-              </For>
+                more={{ onReveal: toolsReveal.reveal }}
+              />
             )}
-            <Show when={toolsSlice().hidden > 0}>
-              <box onMouseUp={() => setToolsMore(toolsMore() + oes().toolRows)}>
-                <ClickText fg={colors().textMuted} underline>
-                  {`… +${toolsSlice().hidden} more`}
-                </ClickText>
-              </box>
-            </Show>
           </FoldSection>
 
           <FoldSection
@@ -1415,11 +1287,18 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
             colors={colors()}
             onToggle={foldFiles.toggle}
           >
-            {files().length === 0 ? (
+            {filesAll().length === 0 ? (
               <text fg={colors().textMuted}>• none</text>
             ) : (
-              <For each={files()}>
-                {(f) => (
+              <RowList
+                items={filesAll()}
+                budget={
+                  filesExpanded()
+                    ? Number.POSITIVE_INFINITY
+                    : rowsFor("files", oes().fileRows)
+                }
+                colors={colors()}
+                renderItem={(f) => (
                   <Row
                     kind="file"
                     mark={fileLetterMark(f.letter)}
@@ -1429,15 +1308,14 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
                     onSelect={() => openFileDetail(props.api, f, projectRoots(), colors())}
                   />
                 )}
-              </For>
+                more={{
+                  onReveal: () => setFilesExpanded(true),
+                  toggle: true,
+                  expanded: filesExpanded(),
+                  onToggle: () => setFilesExpanded(false),
+                }}
+              />
             )}
-            <Show when={filesHidden() > 0 || filesExpanded()}>
-              <box onMouseUp={() => setFilesExpanded(!filesExpanded())}>
-                <ClickText fg={colors().textMuted} underline>
-                  {filesExpanded() ? "… less" : `… ${filesHidden()} more`}
-                </ClickText>
-              </box>
-            </Show>
           </FoldSection>
             </box>
           ),
@@ -1448,7 +1326,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
               colors={colors()}
               lineMax={oes().lineMax}
               rows={oes().perfRows}
-              frame={frame()}
+              frame={frame}
               livePhase={selfFlow()}
               livePhaseMs={selfPhaseMs()}
               currentSessionId={props.sessionId}
@@ -1478,13 +1356,25 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
               workLines().length === 0 ? (
                 <text fg={colors().textMuted}>• none</text>
               ) : (
-                OmoRows(workLines())
+                <RowList
+                  items={workLines()}
+                  budget={omoRows() + worksReveal.more()}
+                  colors={colors()}
+                  renderItem={(r) => <Row {...r} />}
+                  more={{ onReveal: worksReveal.reveal }}
+                />
               ),
             boulder: () =>
               boulderLines().length === 0 ? (
                 <text fg={colors().textMuted}>• no active work</text>
               ) : (
-                OmoRows(boulderLines())
+                <RowList
+                  items={boulderLines()}
+                  budget={omoRows() + boulderReveal.more()}
+                  colors={colors()}
+                  renderItem={(r) => <Row {...r} />}
+                  more={{ onReveal: boulderReveal.reveal }}
+                />
               ),
             docs: () => {
               const groups = docGroups()

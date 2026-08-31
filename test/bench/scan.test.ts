@@ -86,7 +86,6 @@ describe("5k-part session budgets", () => {
         sessionId: "ses_bench",
         projectRoot: null,
         dbPath: fix.dbPath,
-        force: true,
       })
       expect(snap.db.present).toBe(true)
     })

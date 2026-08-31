@@ -80,7 +80,6 @@ describe("no .omo — SQLite only", () => {
       sessionId: "ses_main",
       projectRoot: projFix.root,
       dbPath: dbFix.dbPath,
-      force: true,
     })
     expect(snap.omo.present).toBe(false)
     expect(snap.db.present).toBe(true)
@@ -118,7 +117,6 @@ describe("foreign boulder parent", () => {
       sessionId: "ses_current",
       projectRoot: projFix.root,
       dbPath: dbFix.dbPath,
-      force: true,
     })
     expect(snap.delegates.some((d) => d.sessionId === "ses_foreign")).toBe(true)
     expect(delegatesForSession(snap, "ses_current")).toEqual([])
@@ -161,7 +159,6 @@ describe("finished child vs leftover boulder running", () => {
       sessionId: "ses_main",
       projectRoot: projFix.root,
       dbPath: dbFix.dbPath,
-      force: true,
     })
     const d = snap.delegates.find((x) => x.sessionId === "ses_child")
     expect(d?.status).toBe("completed")
@@ -229,7 +226,6 @@ describe("boulder schema v2 views", () => {
       sessionId: "ses_main",
       projectRoot: projFix.root,
       dbPath: dbFix.dbPath,
-      force: true,
     })
 
     // Same plan run twice stays two rows; the root mirror is not a third.

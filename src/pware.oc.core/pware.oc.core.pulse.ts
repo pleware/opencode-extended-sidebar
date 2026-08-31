@@ -23,7 +23,6 @@ import { TOOL_BASH, TOOL_TASK } from "./constants/pware.oc.core.constants.toolNa
 
 export const LIVE_MS = 5_000
 export const STALE_MS = 10_000
-export const TICK_MS = 300
 /** Downstream tokens still count as recv. */
 export const FLOW_RECV_MS = 2_000
 /** Keep ↑ after step.started while the runner is still busy. */

@@ -8,7 +8,7 @@ import { createStampCache } from "../../pware.oc.core/pware.oc.core.cache.js"
 import { gitignoreStamp } from "../../pware.oc.core/git/pware.oc.core.gitignore.js"
 import { oesStamp } from "../../pware.oc.core/pware.oc.core.oes.js"
 import { dbStamp, getOpenCodeDbPath } from "../../pware.oc.core/pware.oc.core.paths.js"
-import { openReadonlyDb, withDbRead } from "../../pware.oc.core/pware.oc.core.sqlite.js"
+import { openReadonlyDb, withDbRead, type SqlDb } from "../../pware.oc.core/pware.oc.core.sqlite.js"
 import {
   emptyDb,
   readDbSnapshot,
@@ -54,11 +54,29 @@ export function computeFingerprint(opts: {
   ].join("::")
 }
 
+/**
+ * Visible-session-graph stamp: the current session row + its parts + its
+ * children + any non-archived main session. Covers everything readDbSnapshot
+ * displays, so the live cache only misses when shown data actually changed
+ * (sessionScanStamp alone would miss delegate/recent rows).
+ */
+function snapshotGraphStamp(db: SqlDb, sessionId: string): { scan: string; graph: string } {
+  const scan = sessionScanStamp(db, sessionId)
+  const kids = db.get<{ m: number }>(
+    `SELECT MAX(time_updated) AS m FROM session WHERE parent_id = ?`,
+    sessionId,
+  )
+  const mains = db.get<{ m: number }>(
+    `SELECT MAX(time_updated) AS m FROM session
+     WHERE parent_id IS NULL AND (time_archived IS NULL OR time_archived = 0)`,
+  )
+  return { scan, graph: `${scan}|${kids?.m ?? 0}|${mains?.m ?? 0}` }
+}
+
 export function readRuntimeSnapshot(opts: {
   sessionId: string
   projectRoot: string | null
   dbPath?: string
-  force?: boolean
 }): RuntimeSnapshot {
   const dbPath = opts.dbPath || getOpenCodeDbPath(process.env, undefined, opts.projectRoot)
   const cheap = computeFingerprint({
@@ -66,28 +84,29 @@ export function readRuntimeSnapshot(opts: {
     projectRoot: opts.projectRoot,
     sessionId: opts.sessionId,
   })
-  const omoKey = omoStamp(opts.projectRoot)
   let scan = "0"
+  let graph = "0"
   if (opts.sessionId) {
-    scan = withDbRead(() => {
+    const stamps = withDbRead(() => {
       const handle = openReadonlyDb(dbPath)
-      if (!handle) return "0"
-      return sessionScanStamp(handle, opts.sessionId)
-    }, () => "x")
+      return handle ? snapshotGraphStamp(handle, opts.sessionId) : null
+    }, () => null)
+    if (stamps) {
+      scan = stamps.scan
+      graph = stamps.graph
+    }
   }
 
-  const cacheId = `${opts.sessionId}::${scan}::${omoKey}`
-  if (!opts.force) {
-    const hit = liveCache.peek(cacheId)
-    if (hit) {
-      const now = Date.now()
-      return {
-        ...hit.snap,
-        generatedAt: now,
-        fingerprint: `${cheap}::${scan}`,
-        scanStamp: scan,
-        db: withAges(hit.snap.db, now),
-      }
+  const cacheId = `${cheap}::${graph}`
+  const hit = liveCache.peek(cacheId)
+  if (hit) {
+    const now = Date.now()
+    return {
+      ...hit,
+      generatedAt: now,
+      fingerprint: cacheId,
+      scanStamp: scan,
+      db: withAges(hit.db, now),
     }
   }
 
@@ -110,23 +129,18 @@ export function readRuntimeSnapshot(opts: {
 
   const snap: RuntimeSnapshot = {
     generatedAt: Date.now(),
-    fingerprint: `${cheap}::${scan}`,
+    fingerprint: cacheId,
     scanStamp: scan,
     db,
     omo,
     omoConfig: readOmoConfig(),
     delegates: enrichDelegates(omo, db),
   }
-  liveCache.set(cacheId, { sessionId: opts.sessionId, scan, omo: omoKey, snap })
+  liveCache.set(cacheId, snap)
   return snap
 }
 
-const liveCache = createStampCache<{
-  sessionId: string
-  scan: string
-  omo: string
-  snap: RuntimeSnapshot
-}>()
+const liveCache = createStampCache<RuntimeSnapshot>()
 
 /** Drop the in-memory live snapshot so the next read is a real load. */
 export function resetRuntimeCache(): void {

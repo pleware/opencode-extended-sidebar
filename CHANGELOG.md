@@ -1,5 +1,6 @@
 # Changelog
 
+- **0.2.26** (2026-08-31) Make every panel list end in a clickable "+N more" revealer via a shared RowList with useReveal and MoreReveal (replacing sliceWithOverflow so no content row is.
 - **0.2.25** (2026-08-31) Extract shared sidebar primitives into a new pware.oc.ui.sections module (useFold over the legacy folded kv contract, FoldSection, budget-sliced GroupSection, a.
 - **0.2.24** (2026-08-31) Add a live plugin self-cost status line above the panel that samples event, scan and tick latency plus renderer FPS through a new perf.self reader, export it fr.
 - **0.2.23** (2026-08-31) Show the ulw-plan review lifecycle on My work approval rows (R<round> per-lane momus/independent glyphs) by parsing the draft frontmatter review block in plan.t.

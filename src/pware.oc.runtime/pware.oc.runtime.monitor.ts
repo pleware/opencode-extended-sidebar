@@ -6,6 +6,7 @@ import path from "node:path"
 import { findBoulder } from "../pware.oc.omo/resolver/index.js"
 import { computeFingerprint, readRuntimeSnapshot, type RuntimeSnapshot } from "./resolver/index.js"
 import { getOpenCodeDbPath } from "../pware.oc.core/pware.oc.core.paths.js"
+import { MONITOR_POLL_MS, MONITOR_WATCH_DEBOUNCE_MS } from "../pware.oc.core/pware.oc.core.timing.js"
 import { dbg } from "../pware.oc.core/pware.oc.core.debug.js"
 
 export type MonitorOptions = {
@@ -24,7 +25,7 @@ export type MonitorHandle = {
 export function startMonitor(opts: MonitorOptions): MonitorHandle {
   const dbPath = opts.dbPath || getOpenCodeDbPath(process.env, undefined, opts.projectRoot)
   dbg("monitor", "start", { dbPath, sessionId: opts.sessionId, projectRoot: opts.projectRoot ?? null })
-  const pollMs = opts.pollMs ?? 1500
+  const pollMs = opts.pollMs ?? MONITOR_POLL_MS
   let lastFp = ""
   let stopped = false
   let debounce: ReturnType<typeof setTimeout> | null = null
@@ -45,7 +46,6 @@ export function startMonitor(opts: MonitorOptions): MonitorHandle {
         sessionId: opts.sessionId,
         projectRoot: opts.projectRoot,
         dbPath,
-        force,
       }),
     )
   }
@@ -56,7 +56,7 @@ export function startMonitor(opts: MonitorOptions): MonitorHandle {
     debounce = setTimeout(() => {
       debounce = null
       emit()
-    }, 120)
+    }, MONITOR_WATCH_DEBOUNCE_MS)
   }
 
   // Initial

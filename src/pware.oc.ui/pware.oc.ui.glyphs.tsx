@@ -7,6 +7,7 @@
  */
 import type { FileLetter } from "../pware.oc.opencode/pware.oc.opencode.files.js"
 import type { AgentMark, FlowDir } from "../pware.oc.core/pware.oc.core.pulse.js"
+import { BLINK_TICKS } from "../pware.oc.core/pware.oc.core.timing.js"
 import type { MyWorkKind } from "../pware.oc.runtime/pware.oc.runtime.mywork.js"
 import type { ReviewLane, ReviewState } from "../pware.oc.omo/resolver/pware.oc.omo.resolver.plan.js"
 import {
@@ -30,9 +31,9 @@ export function spinnerFrame(frame: number): string {
   return SPINNER_FRAMES[i] ?? "⠋"
 }
 
-/** ↑/↓ blink half-period in ticks (300ms × 2 ≈ 600ms). */
+/** ↑/↓ blink half-period in ticks (TICK_MS × BLINK_TICKS ≈ 600ms). */
 export function flowBlinkOn(frame: number): boolean {
-  return Math.floor(Math.abs(frame) / 2) % 2 === 0
+  return Math.floor(Math.abs(frame) / BLINK_TICKS) % 2 === 0
 }
 
 export function flowGlyph(dir: FlowDir): string {
