@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { ignoredByGitignore } from "../../src/gitignore.js"
+import { ignoredByGitignore, ignoredByOesignore } from "../../src/gitignore.js"
 import { createFixtureProject } from "../helpers/project.js"
 
 describe("ignoredByGitignore", () => {
@@ -20,5 +20,44 @@ describe("ignoredByGitignore", () => {
   })
   test("missing root is never ignored", () => {
     expect(ignoredByGitignore("src/a.ts", null)).toBe(false)
+  })
+  test("absolute path under the root is relativized", () => {
+    const proj = createFixtureProject({ gitignore: "dist/\n" })
+    try {
+      const abs = `${proj.root.replace(/\\/g, "/")}/dist/out.js`
+      expect(ignoredByGitignore(abs, proj.root)).toBe(true)
+    } finally {
+      proj.dispose()
+    }
+  })
+})
+
+describe("ignoredByOesignore", () => {
+  test("dir-only, basename glob, and negation", () => {
+    const proj = createFixtureProject({
+      oesignore: ["tmp/", ".hidden/", "*.json", "!keep.json"].join("\n"),
+    })
+    try {
+      const root = proj.root
+      expect(ignoredByOesignore("tmp/out.js", root)).toBe(true)
+      expect(ignoredByOesignore("a/b/.hidden/x.md", root)).toBe(true)
+      expect(ignoredByOesignore("package.json", root)).toBe(true)
+      expect(ignoredByOesignore("src/data.json", root)).toBe(true)
+      expect(ignoredByOesignore("keep.json", root)).toBe(false)
+      expect(ignoredByOesignore("src/a.ts", root)).toBe(false)
+    } finally {
+      proj.dispose()
+    }
+  })
+  test("no .oesignore file ignores nothing", () => {
+    const proj = createFixtureProject()
+    try {
+      expect(ignoredByOesignore("tmp/out.js", proj.root)).toBe(false)
+    } finally {
+      proj.dispose()
+    }
+  })
+  test("missing root is never ignored", () => {
+    expect(ignoredByOesignore("tmp/out.js", null)).toBe(false)
   })
 })

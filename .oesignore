@@ -1,0 +1,17 @@
+# Directories hidden from the Files panel.
+tmp/
+.tmp/
+.omo/
+.agentize/
+.hidden/
+
+# Boilerplate root files.
+.gitignore
+backlog.md
+CHANGELOG.md
+LICENSE
+oes.json
+opencode.json
+package.json
+README.md
+skills-lock.json

@@ -81,7 +81,7 @@ describe("5k-part session budgets", () => {
     expect(db).toBeTruthy()
     const ms = elapsed(() => {
       listToolEvents(db!, "ses_bench")
-      listSessionFiles(db!, "ses_bench", { skipDirs: ["tmp"] })
+      listSessionFiles(db!, "ses_bench")
     })
     expect(ms).toBeLessThan(TOOLS_FILES_MS)
   })

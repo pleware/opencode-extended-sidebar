@@ -28,7 +28,7 @@ afterEach(() => {
 
 describe("no .omo — SQLite only", () => {
   test("panel loads agents, sessions, tools, files; delegates stay empty", () => {
-    projFix = createFixtureProject()
+    projFix = createFixtureProject({ oesignore: "tmp/\n" })
     dbFix = createFixtureDb({
       sessions: [
         {
@@ -286,7 +286,7 @@ describe("tools and files views", () => {
     const handle = openReadonlyDb(dbFix.dbPath)
     expect(handle).toBeTruthy()
     const tools = listToolEvents(handle!, "ses_main")
-    const files = listSessionFiles(handle!, "ses_main", { skipDirs: ["tmp"] })
+    const files = listSessionFiles(handle!, "ses_main")
     expect(tools.some((t) => t.name === "ls src")).toBe(true)
     const edit = files.find((f) => f.name === "oes.ts")
     expect(edit?.additions).toBe(4)

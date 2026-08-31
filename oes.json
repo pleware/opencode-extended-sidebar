@@ -6,7 +6,6 @@
   "perfRows": 5,
   "perfTurns": 120,
   "sessionRows": 4,
-  "skipDirs": ["tmp", ".tmp"],
   "skipGitignore": false,
   "toolRows": 8
 }

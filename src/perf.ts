@@ -6,6 +6,7 @@
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
+import { dbg } from "./debug.js"
 import { createStampCache } from "./cache.js"
 import { finiteNum } from "./paths.js"
 import { formatDuration, formatWhen, shortToolLabel, toEpochMs } from "./pulse.js"
@@ -253,6 +254,13 @@ function avg(total: number, n: number): number | null {
   return n > 0 ? Math.round(total / n) : null
 }
 
+/** Tools that pause for a human rather than do work — never tool timing. */
+const NON_TOOLS = new Set(["question"])
+
+function countsAsTool(tool: string | null | undefined): boolean {
+  return !NON_TOOLS.has((tool || "").trim().toLowerCase())
+}
+
 /** Drop the provider prefix; keep the tail, which carries the variant. */
 function modelLabel(provider: string | null, model: string | null): string {
   const m = (model || "").trim()
@@ -401,6 +409,7 @@ export function collectPerfLogRows(
   if (kind === "tool" || kind === "time") {
     for (const part of parts) {
       if ((part.kind || "") !== "tool") continue
+      if (!countsAsTool(part.tool)) continue
       const start = toEpochMs(part.tstart)
       const end = toEpochMs(part.tend)
       const ms = span(start, end)
@@ -618,6 +627,7 @@ function collectParts(rows: PartRow[]): {
       continue
     }
 
+    if (!countsAsTool(row.tool)) continue
     const start = toEpochMs(row.tstart)
     const end = toEpochMs(row.tend)
     const ms = span(start, end)
@@ -862,11 +872,16 @@ export function readPerfSnapshot(opts: PerfOptions): PerfSnapshot {
 
   const load = (): PerfSnapshot => {
     if (!opts.dbPath || !fs.existsSync(opts.dbPath)) {
+      dbg("perf", "db missing", { dbPath: opts.dbPath, sessionId: opts.sessionId })
       return emptyPerf(opts.sessionId, "db missing")
     }
     const db = openReadonlyDb(opts.dbPath)
-    if (!db) return emptyPerf(opts.sessionId, "sqlite unavailable")
+    if (!db) {
+      dbg("perf", "sqlite unavailable", { dbPath: opts.dbPath })
+      return emptyPerf(opts.sessionId, "sqlite unavailable")
+    }
     const { msgs, parts } = readRows(db, opts.sessionId, opts.turns)
+    dbg("perf", "loaded", { dbPath: opts.dbPath, sessionId: opts.sessionId, msgs: msgs.length, parts: parts.length })
     const snap = aggregate(opts.sessionId, msgs, parts)
     const hKey = (opts.history ?? []).map((h) => h.id).join(",")
     const now = Date.now()

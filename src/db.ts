@@ -496,7 +496,6 @@ export function readDbSnapshot(opts: {
       todos: [],
       tools: listToolEvents(db, row.id, oes.toolRows),
       files: listSessionFiles(db, row.id, {
-        skipDirs: oes.skipDirs,
         skipGitignore: oes.skipGitignore,
         projectRoot: opts.projectRoot,
       }),

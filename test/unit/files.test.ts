@@ -5,7 +5,6 @@ import {
   filesFromPatchData,
   fileHitFromExtracted,
   formatDiffStat,
-  isSkipped,
   shortFileName,
 } from "../../src/files.js"
 
@@ -26,26 +25,11 @@ describe("basenameOf / shortFileName / formatDiffStat", () => {
   })
 })
 
-describe("isSkipped", () => {
-  test("bare name matches a directory segment, not a file named tmp.md", () => {
-    expect(isSkipped("project/tmp/scratch.md", ["tmp"])).toBe(true)
-    expect(isSkipped("C:/work/tmp/out.json", ["tmp"])).toBe(true)
-    expect(isSkipped("src/tmp.md", ["tmp"])).toBe(false)
-  })
-  test("slash rule matches a relative prefix", () => {
-    expect(isSkipped("docs/media/demo.gif", ["docs/media"])).toBe(true)
-    expect(isSkipped("docs/readme.md", ["docs/media"])).toBe(false)
-  })
-  test("empty list shows everything", () => {
-    expect(isSkipped("tmp/x.ts", [])).toBe(false)
-  })
-})
-
 describe("patch / part parse (regex helpers)", () => {
   test("filesFromPatchData takes paths only", () => {
     const data = JSON.stringify({ type: "patch", files: ["src/a.ts", "tmp/x.ts"] })
-    const files = filesFromPatchData(data, 1, { skipDirs: ["tmp"] })
-    expect(files.map((f) => f.name)).toEqual(["a.ts"])
+    const files = filesFromPatchData(data, 1)
+    expect(files.map((f) => f.name)).toEqual(["a.ts", "x.ts"])
   })
   test("fileHitFromPartData uses edit metadata +/-", () => {
     const data = JSON.stringify({

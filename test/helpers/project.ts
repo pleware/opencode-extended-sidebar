@@ -25,6 +25,7 @@ export type FixtureProject = {
 export function createFixtureProject(opts?: {
   boulder?: Record<string, unknown> | null
   gitignore?: string
+  oesignore?: string
   oes?: Record<string, unknown>
   plans?: Record<string, string>
   files?: Record<string, string>
@@ -33,6 +34,9 @@ export function createFixtureProject(opts?: {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "oes-proj-"))
   if (opts?.gitignore != null) {
     fs.writeFileSync(path.join(root, ".gitignore"), opts.gitignore)
+  }
+  if (opts?.oesignore != null) {
+    fs.writeFileSync(path.join(root, ".oesignore"), opts.oesignore)
   }
   if (opts?.oes) {
     fs.writeFileSync(path.join(root, "oes.json"), JSON.stringify(opts.oes))

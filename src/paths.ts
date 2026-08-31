@@ -5,8 +5,14 @@
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
+import { fileURLToPath } from "node:url"
 
 export type Env = Record<string, string | undefined>
+
+/** Absolute path to the plugin's root directory (one level above `src/`). */
+export function pluginRoot(): string {
+  return path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
+}
 
 export function getDataDir(env: Env = process.env, homedir = os.homedir()): string {
   let dataDir = env.XDG_DATA_HOME

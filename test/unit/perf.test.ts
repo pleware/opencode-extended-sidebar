@@ -73,6 +73,19 @@ describe("aggregate", () => {
     expect(snap.totals.aborts).toBe(1)
     expect(snap.totals.errors).toBe(1)
   })
+
+  test("question tool is excluded from tool timing and slow tools", () => {
+    const t0 = 1_700_000_000_000
+    const msgs = [msg({ id: "m1", created: t0, completed: t0 + 6_000 })]
+    const parts: PartRow[] = [
+      { mid: "m1", kind: "tool", pstart: null, pend: null, tool: "bash", status: "completed", tstart: t0 + 1_000, tend: t0 + 2_000 },
+      { mid: "m1", kind: "tool", pstart: null, pend: null, tool: "question", status: "completed", tstart: t0 + 3_000, tend: t0 + 5_000 },
+    ]
+    const snap = aggregate("ses", msgs, parts)
+    expect(snap.totals.phases.tool).toBe(1_000)
+    expect(snap.tools.map((t) => t.name)).toEqual(["bash"])
+    expect(snap.models[0]?.tools).toBe(1)
+  })
 })
 
 describe("formatColumns", () => {
@@ -178,5 +191,14 @@ describe("perf log", () => {
     expect(text).toContain("# Perf tools · bash log")
     expect(text).toContain("bash")
     expect(text).not.toContain("read")
+  })
+
+  test("question tool is absent from the tools log", () => {
+    const hinted: PartRow[] = [
+      { mid: "m1", kind: "tool", pstart: null, pend: null, tool: "bash", status: "completed", tstart: t0 + 3_000, tend: t0 + 4_000 },
+      { mid: "m1", kind: "tool", pstart: null, pend: null, tool: "question", status: "completed", tstart: t0 + 4_000, tend: t0 + 5_000 },
+    ]
+    const rows = collectPerfLogRows("tool", msgs, hinted)
+    expect(rows.map((r) => r.tool)).toEqual(["bash"])
   })
 })

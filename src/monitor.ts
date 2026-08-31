@@ -6,6 +6,7 @@ import path from "node:path"
 import { findBoulder } from "./omo.js"
 import { computeFingerprint, readLiveSnapshot, type LiveSnapshot } from "./live.js"
 import { getOpenCodeDbPath } from "./paths.js"
+import { dbg } from "./debug.js"
 
 export type MonitorOptions = {
   sessionId: string
@@ -22,6 +23,7 @@ export type MonitorHandle = {
 
 export function startMonitor(opts: MonitorOptions): MonitorHandle {
   const dbPath = opts.dbPath || getOpenCodeDbPath(process.env, undefined, opts.projectRoot)
+  dbg("monitor", "start", { dbPath, sessionId: opts.sessionId, projectRoot: opts.projectRoot ?? null })
   const pollMs = opts.pollMs ?? 1500
   let lastFp = ""
   let stopped = false
@@ -36,6 +38,7 @@ export function startMonitor(opts: MonitorOptions): MonitorHandle {
       sessionId: opts.sessionId,
     })
     if (!force && fp === lastFp) return
+    dbg("monitor", "emit", { force, fp: fp.slice(0, 40) })
     lastFp = fp
     opts.onChange(
       readLiveSnapshot({

@@ -3,7 +3,7 @@
  * Never keeps path, before/after, or tool I/O.
  */
 import { readGitMarksFor, relToGitRoot, type GitLetter } from "./git.js"
-import { ignoredByGitignore } from "./gitignore.js"
+import { ignoredByGitignore, ignoredByOesignore } from "./gitignore.js"
 import { getOes, OES_DEFAULTS } from "./oes.js"
 import { eventKind, eventType } from "./events.js"
 import { basenameOf, finiteNum } from "./paths.js"
@@ -14,14 +14,13 @@ export { basenameOf }
 export const FILE_ROWS = OES_DEFAULTS.fileRows
 
 export type FileFilter = {
-  skipDirs?: string[]
   skipGitignore?: boolean
   projectRoot?: string | null
 }
 
 export function fileFilter(projectRoot?: string | null): FileFilter {
   const o = getOes(projectRoot)
-  return { skipDirs: o.skipDirs, skipGitignore: o.skipGitignore, projectRoot: projectRoot ?? null }
+  return { skipGitignore: o.skipGitignore, projectRoot: projectRoot ?? null }
 }
 
 export type FileTouch = "read" | "write"
@@ -84,28 +83,8 @@ function statsFromBag(o: Record<string, unknown> | null | undefined): { add: num
   }
 }
 
-/** True when a relative/posix path sits under a skipDirs rule. Exported for tests. */
-export function isSkipped(posixPath: string, skip: string[]): boolean {
-  if (!skip.length) return false
-  const segs = posixPath.toLowerCase().split("/").filter(Boolean)
-  segs.pop()
-  const dir = segs.join("/")
-  for (const rule of skip) {
-    const r = rule.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "").toLowerCase()
-    if (!r) continue
-    if (r.includes("/")) {
-      if (dir === r || dir.startsWith(`${r}/`) || dir.endsWith(`/${r}`) || dir.includes(`/${r}/`)) {
-        return true
-      }
-    } else if (segs.includes(r)) {
-      return true
-    }
-  }
-  return false
-}
-
 function hidden(posixPath: string, filter?: FileFilter): boolean {
-  if (isSkipped(posixPath, filter?.skipDirs ?? OES_DEFAULTS.skipDirs)) return true
+  if (ignoredByOesignore(posixPath, filter?.projectRoot)) return true
   return Boolean(filter?.skipGitignore && ignoredByGitignore(posixPath, filter.projectRoot))
 }
 

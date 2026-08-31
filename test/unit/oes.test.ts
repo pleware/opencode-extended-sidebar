@@ -17,12 +17,10 @@ describe("pick", () => {
     expect(next.fileRows).toBe(OES_DEFAULTS.fileRows)
     expect(next.toolRows).toBe(OES_DEFAULTS.toolRows)
   })
-  test("skipDirs replaces, does not append; [] disables", () => {
-    const replaced = pick({ skipDirs: ["docs/media"] }, OES_DEFAULTS)
-    expect(replaced.skipDirs).toEqual(["docs/media"])
-    expect(replaced.skipDirs).not.toContain("tmp")
-    const off = pick({ skipDirs: [] }, OES_DEFAULTS)
-    expect(off.skipDirs).toEqual([])
+  test("skipGitignore replaces the flag; missing keeps the base", () => {
+    expect(pick({ skipGitignore: true }, OES_DEFAULTS).skipGitignore).toBe(true)
+    expect(pick({ skipGitignore: false }, OES_DEFAULTS).skipGitignore).toBe(false)
+    expect(pick({ fileRows: 5 }, OES_DEFAULTS).skipGitignore).toBe(OES_DEFAULTS.skipGitignore)
   })
   test("null raw returns the base", () => {
     expect(pick(null, OES_DEFAULTS)).toBe(OES_DEFAULTS)

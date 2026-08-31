@@ -593,6 +593,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
 
   const toggleSessions = makeFoldToggle(props.api, KV_FOLD_SESSIONS, setFoldSessions, requestRender)
   const toggleFiles = makeFoldToggle(props.api, KV_FOLD_FILES, setFoldFiles, requestRender)
+  const [filesExpanded, setFilesExpanded] = createSignal(false)
 
   const filesAll = createMemo(() => {
     gitTick()
@@ -679,7 +680,13 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     return typeof v === "number" ? v : fallback
   }
 
-  const files = createMemo(() => filesAll().slice(0, rowsFor("files", oes().fileRows)))
+  const filesSlice = createMemo(() => {
+    const all = filesAll()
+    if (filesExpanded()) return { rows: all, hidden: 0 }
+    return sliceWithOverflow(all, rowsFor("files", oes().fileRows))
+  })
+  const files = createMemo(() => filesSlice().rows)
+  const filesHidden = createMemo(() => filesSlice().hidden)
   const omoRows = createMemo(() => (omoPresent() ? rowsFor("omo", 0) : 0))
   const omoOpen = createMemo(() => !foldOmo() && omoRows() > 0)
   const works = createMemo(() => snap().omo.works)
@@ -902,7 +909,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
         colors={colors()}
         onPick={pickTab}
       />
-      <box flexDirection="column" gap={1} paddingLeft={1}>
+      <box flexDirection="column" gap={1}>
         <Show when={tab() === "sessions"}>
         <box flexDirection="column" gap={1}>
         <box flexDirection="column" gap={0}>
@@ -1121,6 +1128,13 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
                   )}
                 </For>
               )}
+              <Show when={filesHidden() > 0 || filesExpanded()}>
+                <box onMouseUp={() => setFilesExpanded(!filesExpanded())}>
+                  <text fg={colors().textMuted} underline>
+                    {filesExpanded() ? "… less" : `… ${filesHidden()} more`}
+                  </text>
+                </box>
+              </Show>
             </box>
           </Show>
         </box>
