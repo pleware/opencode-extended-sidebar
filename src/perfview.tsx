@@ -3,7 +3,7 @@
 import { createMemo, createSignal, For, Show, type JSX } from "solid-js"
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import { ClickText, FoldHeader, kvRead, makeFoldToggle, type ThemeColors } from "./chrome.js"
-import { openPerfLog } from "./detail.js"
+import { openPerfLog } from "./pware.oc.ui.menudialogs.js"
 import type { PerfLogKind } from "./perf.js"
 import {
   type ModelPerf,

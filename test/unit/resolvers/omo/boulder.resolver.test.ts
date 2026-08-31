@@ -6,8 +6,8 @@ import {
   workIsTerminal,
   workRowView,
   workStatusGlyph,
-} from "../../src/omo.js"
-import { createFixtureProject, type FixtureProject } from "../helpers/project.js"
+} from "../../../../src/resolvers/omo/boulder.resolver.js"
+import { createFixtureProject, type FixtureProject } from "../../../helpers/project.js"
 
 const held: FixtureProject[] = []
 
@@ -190,6 +190,20 @@ describe("omo boulder", () => {
     expect(snap.delegates[0]?.agent).toBe("oracle")
   })
 
+  test("a task_sessions entry without status is pending until it started", () => {
+    const root = fixture({
+      task_sessions: {
+        queued: { task_title: "waiting" },
+        started: { task_title: "going", started_at: 1_000 },
+      },
+      status: "active",
+    })
+    const tasks = readOmo(root).boulder.tasks
+    const byTitle = new Map(tasks.map((t) => [t.title, t.status]))
+    expect(byTitle.get("waiting")).toBe("pending")
+    expect(byTitle.get("going")).toBe("running")
+  })
+
   test("no boulder at all is an empty view, not a throw", () => {
     const proj = createFixtureProject()
     held.push(proj)
@@ -237,14 +251,14 @@ describe("omo presence", () => {
 describe("workStatusGlyph", () => {
   test("maps done / pending / error; running stays a spinner", () => {
     expect(workStatusGlyph("completed")).toBe("✓")
-    expect(workStatusGlyph("queued")).toBe("○")
+    expect(workStatusGlyph("queued")).toBe("◷")
     expect(workStatusGlyph("failed")).toBe("×")
     expect(workStatusGlyph("in_progress")).toBeNull()
     expect(workStatusGlyph("unknown")).toBe("○")
   })
 
   test("paused and abandoned get their own glyph", () => {
-    expect(workStatusGlyph("paused")).toBe("⏸")
+    expect(workStatusGlyph("paused")).toBe("║")
     expect(workStatusGlyph("abandoned")).toBe("⊘")
   })
 })

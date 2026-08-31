@@ -1,0 +1,161 @@
+/**
+ * pware.oc.core.opencode.resolver
+ *
+ * Aggregate of the opencode SQLite resolvers: readDbSnapshot composes the
+ * session graph + tools + files for the panel; readProjectFeed rolls the
+ * Sessions-tab feed across a set of sessions. Re-exports the entity resolvers.
+ */
+import fs from "node:fs"
+import type { FileFilter, FileView } from "../../files.js"
+import { getOes } from "../../oes.js"
+import { openReadonlyDb, withDbRead } from "../../sqlite.js"
+import {
+  getSessionById,
+  getSessionsByIds,
+  listChildSessions,
+  listRecentMainSessions,
+  toSessionView,
+  type SessionView,
+} from "./session.resolver.js"
+import { listRecentToolEvents, listToolEvents, type ToolView } from "./tool.resolver.js"
+import { listSessionFiles, listRecentSessionFiles } from "./file.resolver.js"
+import type { TodoRow } from "./todo.resolver.js"
+
+export * from "./session.resolver.js"
+export * from "./todo.resolver.js"
+export * from "./tool.resolver.js"
+export * from "./file.resolver.js"
+export * from "./question.resolver.js"
+
+export type DbSnapshot = {
+  present: boolean
+  dbPath: string
+  current: SessionView | null
+  /** Orchestrator: parent if current is a child, otherwise current. */
+  main: SessionView | null
+  parent: SessionView | null
+  children: SessionView[]
+  siblings: SessionView[]
+  /** Sessions keyed by id — current, main, and any looked-up delegates. */
+  byId: Record<string, SessionView>
+  /** Recent main (parent_id null) sessions in this project. */
+  recent: SessionView[]
+  todos: TodoRow[]
+  /** Current session tool parts — name + status only, no args/outputs. */
+  tools: ToolView[]
+  /** Basenames + optional +/- from edit/write parts. No paths, no bodies. */
+  files: FileView[]
+  error: string | null
+}
+
+export function emptyDb(dbPath: string, error: string | null = null): DbSnapshot {
+  return {
+    present: false,
+    dbPath,
+    current: null,
+    main: null,
+    parent: null,
+    children: [],
+    siblings: [],
+    byId: {},
+    recent: [],
+    todos: [],
+    tools: [],
+    files: [],
+    error,
+  }
+}
+
+export function readDbSnapshot(opts: {
+  dbPath: string
+  sessionId: string
+  extraIds?: string[]
+  projectRoot?: string | null
+}): DbSnapshot {
+  if (!opts.dbPath || !fs.existsSync(opts.dbPath)) {
+    return emptyDb(opts.dbPath, "db missing")
+  }
+
+  const run = (): DbSnapshot => {
+    const db = openReadonlyDb(opts.dbPath)
+    if (!db) return emptyDb(opts.dbPath, "sqlite unavailable")
+
+    const now = Date.now()
+    const row = getSessionById(db, opts.sessionId)
+    if (!row) {
+      return { ...emptyDb(opts.dbPath, "session not in db yet"), present: true }
+    }
+    const current = toSessionView(row, now)
+    let parent: SessionView | null = null
+    const children = listChildSessions(db, row.id).map((r) => toSessionView(r, now))
+    if (row.parent_id) {
+      const p = getSessionById(db, row.parent_id)
+      if (p) parent = toSessionView(p, now)
+    }
+
+    const main = parent ?? current
+    const extra = getSessionsByIds(db, opts.extraIds ?? []).map((r) =>
+      toSessionView(r, now),
+    )
+    const byId: Record<string, SessionView> = {}
+    const oes = getOes(opts.projectRoot)
+    const recent = listRecentMainSessions(db, {
+      projectId: row.project_id,
+      limit: oes.sessionRows,
+    }).map((r) => toSessionView(r, now))
+    for (const v of [current, parent, main, ...children, ...extra, ...recent]) {
+      if (v) byId[v.id] = v
+    }
+
+    return {
+      present: true,
+      dbPath: opts.dbPath,
+      current,
+      main,
+      parent,
+      children,
+      siblings: [],
+      byId,
+      recent,
+      todos: [],
+      tools: listToolEvents(db, row.id, oes.toolFetch),
+      files: listSessionFiles(db, row.id, {
+        skipGitignore: oes.skipGitignore,
+        projectRoot: opts.projectRoot,
+      }),
+      error: null,
+    }
+  }
+
+  return withDbRead(run, (e) =>
+    emptyDb(opts.dbPath, e instanceof Error ? e.message : "db read failed"),
+  )
+}
+
+export type ProjectFeed = {
+  tools: ToolView[]
+  files: FileView[]
+}
+
+export function emptyProjectFeed(): ProjectFeed {
+  return { tools: [], files: [] }
+}
+
+/** Lazy read — callers gate on the Sessions tab so the queries never run elsewhere. */
+export function readProjectFeed(opts: {
+  dbPath: string
+  sessionIds: string[]
+  toolLimit: number
+  filter?: FileFilter
+}): ProjectFeed {
+  const empty = emptyProjectFeed()
+  if (!opts.dbPath || opts.sessionIds.length === 0 || !fs.existsSync(opts.dbPath)) return empty
+  return withDbRead(() => {
+    const db = openReadonlyDb(opts.dbPath)
+    if (!db) return empty
+    return {
+      tools: listRecentToolEvents(db, opts.sessionIds, opts.toolLimit),
+      files: listRecentSessionFiles(db, opts.sessionIds, opts.filter),
+    }
+  }, () => empty)
+}

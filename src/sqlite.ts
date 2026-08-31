@@ -101,6 +101,11 @@ function openFresh(dbPath: string): SqlDb | null {
   }
 }
 
+/** De-duplicated, non-empty string ids for `IN (...)` queries. */
+export function uniqueIds(ids: readonly string[]): string[] {
+  return [...new Set(ids.filter((id) => typeof id === "string" && id.length > 0))]
+}
+
 /** Drop the cached handle so the next open is a real reopen. */
 export function resetReadonlyDb(): void {
   if (!hold) return

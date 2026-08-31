@@ -1,14 +1,16 @@
 /**
+ * pware.oc.core.omo.resolver.doc
+ *
  * OMO document index: the plan, drafts, notepads and evidence under `.omo/`.
  * Names, ages and sizes only — a document is read on click, by preview.ts.
  * Scanned lazily (Docs tab open) behind a short TTL, never on the poll path.
  */
 import fs from "node:fs"
 import path from "node:path"
-import { findOmoWatchDirs } from "./omo.js"
-import { canonicalizePath } from "./paths.js"
-import { canPreviewPath } from "./preview.js"
-import { createStampCache } from "./cache.js"
+import { createStampCache } from "../../cache.js"
+import { canonicalizePath } from "../../paths.js"
+import { canPreviewPath } from "../../preview.js"
+import { findOmoWatchDirs } from "./boulder.resolver.js"
 
 export type DocKind = "plan" | "draft" | "notepad" | "proof"
 

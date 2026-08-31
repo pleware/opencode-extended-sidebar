@@ -4,13 +4,37 @@ import { useTerminalDimensions } from "@opentui/solid"
 import type { TuiKeymap, TuiPluginApi, TuiTheme } from "@opencode-ai/plugin/tui"
 import {
   currentTask,
+  delegatesForSession,
+  emptyDb,
   emptyOmo,
+  emptyProjectFeed,
+  groupDelegates,
+  groupDocs,
+  groupMyWork,
+  listOpenQuestions,
+  listPendingApprovals,
+  mergeTools,
+  myWorkGlyph,
+  myWorkLabel,
+  readOmoDocs,
+  readProjectFeed,
+  sessionForPlanFile,
+  startWorkCommand,
+  toApprovalItems,
+  toQuestionItems,
   workRowView,
+  workStatusGlyph,
   workStatusLabel,
-} from "./omo.js"
-import { ROW_MIN, ROW_RANK, packSections, panelRows, sliceWithOverflow } from "./layout.js"
-import { DOC_KIND_LABEL, groupDocs, readOmoDocs } from "./docs.js"
-import { emptyDb, emptyProjectFeed, mergeTools, readProjectFeed, type ProjectFeed } from "./db.js"
+  type DelegateView,
+  type DocView,
+  type LiveSnapshot,
+  type MyWorkItem,
+  type ProjectFeed,
+  type StartWorkMode,
+} from "./resolvers/index.js"
+import { ROW_MIN, ROW_RANK, packSections, panelRows, sliceShown, sliceWithOverflow } from "./layout.js"
+import { DOC_KIND_LABEL, approvalContinueHint } from "./resolvers/index.js"
+import { openReadonlyDb } from "./sqlite.js"
 import {
   BrandTabs,
   ClickText,
@@ -22,12 +46,6 @@ import {
   makeFoldToggle,
   type ThemeColors,
 } from "./chrome.js"
-import {
-  delegatesForSession,
-  groupDelegates,
-  type DelegateView,
-  type LiveSnapshot,
-} from "./live.js"
 import { emptyPerf, readPerfSnapshot } from "./perf.js"
 import { PerfPanel } from "./perfview.js"
 import {
@@ -43,8 +61,9 @@ import {
 } from "./files.js"
 import { onGitMarksChange } from "./git.js"
 import { getOes } from "./oes.js"
+import { isPendingWork } from "./status.js"
 import { startMonitor } from "./monitor.js"
-import { openDocDetail, openFileDetail, openToolDetail, openWorkDetail } from "./detail.js"
+import { openApprovalDialog, openDocDetail, openFileDetail, openToolDetail, openWorkDetail } from "./pware.oc.ui.menudialogs.js"
 import { eventType, shouldRefreshDb } from "./events.js"
 import { getOpenCodeDbPath } from "./paths.js"
 import {
@@ -92,7 +111,9 @@ function markColor(
   colors: ThemeColors,
   current = false,
   flow?: FlowDir | null,
+  waiting = false,
 ): string {
+  if (waiting) return colors.warning || colors.text
   if (flow === "recv" || flow === "wait" || flow === "tool") return flowColor(flow, colors)
   if (mark === "live") return colors.success
   if (mark === "stale") return colors.warning || colors.text
@@ -133,6 +154,8 @@ type RowData = {
   diff?: { additions: number; deletions: number }
   current?: boolean
   flow?: FlowDir | null
+  /** Queued work — rendered in warning colour with a clock glyph, not the idle dot. */
+  waiting?: boolean
   onSelect?: () => void
 }
 
@@ -147,14 +170,14 @@ function AgentLine(props: RowData & {
   const lit = () => !directional() || flowBlinkOn(props.frame ?? 0)
   const glyphFg = () =>
     lit()
-      ? markColor(props.mark, props.colors, props.current, props.flow)
+      ? markColor(props.mark, props.colors, props.current, props.flow, props.waiting)
       : props.colors.textMuted
   const bodyFg = () =>
     props.kind === "file"
       ? props.colors.text
       : props.kind === "group"
         ? props.colors.textMuted
-        : markColor(props.mark, props.colors, props.current, props.flow)
+        : markColor(props.mark, props.colors, props.current, props.flow, props.waiting)
   const rest = () => {
     const max = Math.max(0, props.lineMax - 2)
     const suffix = props.suffix?.trim() ?? ""
@@ -267,12 +290,13 @@ const KV_TAB = "oes.tab"
 const KV_OMO_TAB = "oes.omoTab"
 
 /** Two independent groups: OES is the core, OMO is an optional add-on below it. */
-const OES_TABS = ["sessions", "current", "perf"] as const
+const OES_TABS = ["mywork", "sessions", "current", "perf"] as const
 const OMO_TABS = ["works", "boulder", "docs"] as const
 type OesTab = (typeof OES_TABS)[number]
 type OmoTab = (typeof OMO_TABS)[number]
 
 const TAB_LABELS: Record<string, string> = {
+  mywork: "My work",
   sessions: "Project",
   current: "Session",
   perf: "Perf",
@@ -604,15 +628,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   const toggleTools = makeFoldToggle(props.api, KV_FOLD_TOOLS, setFoldTools, requestRender)
 
   const oes = () => getOes(projectDir())
-  const tools = createMemo(() => mergeTools(snap().db.tools, liveTools(), now(), oes().toolRows))
-
-  const toolsLive = createMemo(() => {
-    let n = 0
-    for (const t of tools()) {
-      if (t.status === "running" || t.status === "pending") n += 1
-    }
-    return n
-  })
+  const tools = createMemo(() => mergeTools(snap().db.tools, liveTools(), now(), oes().toolFetch))
 
   /**
    * Project-wide feed — tools/files from every main session. The DB queries run
@@ -621,20 +637,12 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   const projectFeed = createMemo<ProjectFeed>(() => {
     if (tab() !== "sessions") return emptyProjectFeed()
     const db = snap().db
-    const o = oes()
     return readProjectFeed({
       dbPath: db.dbPath,
       sessionIds: db.recent.map((s) => s.id),
-      toolLimit: o.toolRows,
+      toolLimit: oes().toolFetch,
       filter: fileFilter(projectDir()),
     })
-  })
-  const projectToolsLive = createMemo(() => {
-    let n = 0
-    for (const t of projectFeed().tools) {
-      if (t.status === "running" || t.status === "pending") n += 1
-    }
-    return n
   })
   const projectFilesStat = createMemo(() => sumDiff(projectFeed().files))
 
@@ -671,6 +679,68 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   const toggleOmo = makeFoldToggle(props.api, KV_FOLD_OMO, setFoldOmo, requestRender)
 
   const omoPresent = createMemo(() => snap().omo.present)
+
+  /** Open questions across current + recent sessions — the "answer me" queue. */
+  const myWorkQuestions = createMemo<MyWorkItem[]>(() => {
+    if (tab() !== "mywork") return []
+    const db = snap().db
+    const ids = [db.current?.id, ...db.recent.map((s) => s.id)].filter(
+      (x): x is string => typeof x === "string" && x.length > 0,
+    )
+    return toQuestionItems(listOpenQuestions({ dbPath: db.dbPath, sessionIds: ids }), (sid) => {
+      if (db.current?.id === sid) return db.current.title || "current"
+      return db.recent.find((s) => s.id === sid)?.title || "session"
+    })
+  })
+
+  /** OMO drafts/plans awaiting approval — only when omo is present. */
+  const myWorkApprovals = createMemo<MyWorkItem[]>(() => {
+    if (tab() !== "mywork" || !omoPresent()) return []
+    now() // re-scan while open; the plans cache TTL gates the filesystem read
+    return toApprovalItems(listPendingApprovals(projectDir()))
+  })
+
+  const myWorkItems = createMemo<MyWorkItem[]>(() => [
+    ...myWorkQuestions(),
+    ...myWorkApprovals(),
+  ])
+
+  /** OMO `start work` — the command endpoint first, a plain chat message as fallback. */
+  const runStartWork = (mode: StartWorkMode, planName: string): void => {
+    const chat = (props.api as TuiPluginApi & {
+      client?: {
+        chat?: {
+          command?: (arg: unknown) => Promise<{ error?: unknown } | undefined> | { error?: unknown } | undefined
+          promptAsync?: (arg: unknown) => Promise<unknown> | unknown
+        }
+      }
+    }).client?.chat
+    if (!chat) return
+    const text = startWorkCommand(mode, planName)
+    const flag = mode === "make-pr" ? "--make-pr" : mode === "ship" ? "--ship" : ""
+    const args =
+      [planName, flag].map((s) => s.trim()).filter(Boolean).join(" ") || undefined
+    const go = async () => {
+      try {
+        if (typeof chat.command === "function") {
+          const res = await chat.command({
+            sessionID: props.sessionId,
+            command: "start-work",
+            arguments: args,
+          })
+          if (res && !res.error) return
+        }
+      } catch {
+        // command not registered — send as a plain message below
+      }
+      try {
+        await chat.promptAsync?.({ sessionID: props.sessionId, parts: [{ type: "text", text }] })
+      } catch {
+        // host without message send
+      }
+    }
+    void go()
+  }
 
   /**
    * Rows are handed out on every render: chrome that always costs a line is
@@ -709,6 +779,10 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
       section(foldDelegates(), "delegates", 6, ROW_MIN.delegates, ROW_RANK.delegates)
       section(foldTools(), "tools", o.toolRows, ROW_MIN.tools, ROW_RANK.tools)
       section(foldFiles(), "files", o.fileRows, ROW_MIN.files, ROW_RANK.files)
+    } else if (t === "mywork") {
+      header()
+      const rows = groupMyWork(myWorkItems()).reduce((n, g) => n + 1 + g.items.length, 0)
+      if (rows > 0) section(false, "mywork", rows, ROW_MIN.mywork, ROW_RANK.mywork)
     } else {
       // Perf lays out its own sections and already caps itself with perfRows.
       fixed += 18
@@ -737,6 +811,16 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   })
   const files = createMemo(() => filesSlice().rows)
   const filesHidden = createMemo(() => filesSlice().hidden)
+
+  const [projectToolsMore, setProjectToolsMore] = createSignal(0)
+  const [toolsMore, setToolsMore] = createSignal(0)
+  const projectToolsSlice = createMemo(() =>
+    sliceShown(projectFeed().tools, rowsFor("tools", oes().toolRows) + projectToolsMore()),
+  )
+  const toolsSlice = createMemo(() =>
+    sliceShown(tools(), rowsFor("tools", oes().toolRows) + toolsMore()),
+  )
+
   const omoRows = createMemo(() => (omoPresent() ? rowsFor("omo", 0) : 0))
   const omoOpen = createMemo(() => !foldOmo() && omoRows() > 0)
   const works = createMemo(() => snap().omo.works)
@@ -800,6 +884,64 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
           suffix: formatAge(age),
           onSelect: () => openDocDetail(props.api, d, projectRoots(), colors()),
         })
+      }
+    }
+    return out
+  })
+
+  const myWorkLines = createMemo((): RowData[] => {
+    const out: RowData[] = []
+    for (const group of groupMyWork(myWorkItems())) {
+      out.push({
+        kind: "group",
+        mark: "ready",
+        glyph: "▾",
+        name: `${myWorkLabel(group.kind)} (${group.items.length})`,
+      })
+      for (const item of group.items) {
+        if (item.kind === "question") {
+          const age = pulseAgeMs(now(), item.startedAt)
+          out.push({
+            kind: "agent",
+            mark: "ready",
+            glyph: myWorkGlyph("question"),
+            name: item.title,
+            suffix: formatAge(age),
+            waiting: true,
+            onSelect: () => selectSession(props.api, item.sessionId),
+          })
+        } else {
+          out.push({
+            kind: "file",
+            mark: "ready",
+            glyph: myWorkGlyph("approval"),
+            name: item.name,
+            waiting: true,
+            onSelect: () => {
+              const db = openReadonlyDb(snap().db.dbPath)
+              const sessionId = db ? sessionForPlanFile(db, item.rel) : null
+              openApprovalDialog(props.api, colors(), {
+                title: item.name,
+                rel: item.rel,
+                sessionId,
+                continueHint: approvalContinueHint(sessionId, Boolean(db)),
+                onContinue: (sid) => selectSession(props.api, sid),
+                onStartWork: (mode) => runStartWork(mode, item.name),
+                onDocs: () => {
+                  const doc: DocView = {
+                    kind: "draft",
+                    name: item.name,
+                    rel: item.rel,
+                    updatedAt: item.updatedAt,
+                    sizeBytes: 0,
+                    previewable: true,
+                  }
+                  openDocDetail(props.api, doc, projectRoots(), colors())
+                },
+              })
+            },
+          })
+        }
       }
     }
     return out
@@ -903,9 +1045,9 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     />
   )
 
-  /** Every OMO tab draws through here, so the row budget is applied once. */
-  const OmoRows = (rows: RowData[]): JSX.Element => {
-    const cut = sliceWithOverflow(rows, omoRows())
+  /** A bounded mixed row list: group headers + rows, `+N more` when it overflows. */
+  const BoundedRows = (rows: RowData[], budget: number): JSX.Element => {
+    const cut = sliceWithOverflow(rows, budget)
     return (
       <box flexDirection="column" gap={0}>
         <For each={cut.rows}>{(line) => <Row {...line} />}</For>
@@ -915,6 +1057,9 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
       </box>
     )
   }
+
+  /** Every OMO tab draws through here, so the row budget is applied once. */
+  const OmoRows = (rows: RowData[]): JSX.Element => BoundedRows(rows, omoRows())
 
   const DelegateRows = (list: DelegateView[], limit: number): JSX.Element => (
     <For each={groupDelegates(list).slice(0, Math.max(0, limit))}>
@@ -931,12 +1076,15 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
         }
         const d = item.delegate
         const isBusy = Boolean(d.sessionId && busy()[d.sessionId])
+        const waiting = isPendingWork(d.status)
         const mark = delegateMark(d)
         const dir = rowFlow(d.sessionId, isBusy)
         return (
           <Row
             kind={item.grouped ? "delegate" : "agent"}
             mark={mark}
+            glyph={waiting ? workStatusGlyph(d.status) ?? undefined : undefined}
+            waiting={waiting}
             name={item.grouped ? d.title || d.taskKey || "task" : d.agent || "agent"}
             tokens={d.tokensTotal}
             title={item.grouped ? undefined : d.title}
@@ -960,6 +1108,13 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
         onPick={pickTab}
       />
       <box flexDirection="column" gap={1}>
+        <Show when={tab() === "mywork"}>
+          {myWorkLines().length === 0 ? (
+            <text fg={colors().textMuted}>• nothing</text>
+          ) : (
+            BoundedRows(myWorkLines(), rowsFor("mywork", 8))
+          )}
+        </Show>
         <Show when={tab() === "sessions"}>
         <box flexDirection="column" gap={1}>
         <box flexDirection="column" gap={0}>
@@ -1037,16 +1192,14 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
         <Show when={projectFeed().tools.length > 0}>
           <box flexDirection="column" gap={0}>
             <FoldHeader
-              title="Tools"
+              title="Tool Calls"
               open={!foldTools()}
-              count={projectFeed().tools.length}
-              live={projectToolsLive()}
               colors={colors()}
               onToggle={toggleTools}
             />
             <Show when={!foldTools()}>
               <box flexDirection="column" gap={0} paddingLeft={1}>
-                <For each={projectFeed().tools.slice(0, rowsFor("tools", oes().toolRows))}>
+                <For each={projectToolsSlice().rows}>
                   {(t) => {
                     const mark = toolMark(t.status)
                     const dir = toolFlow(t.status)
@@ -1066,6 +1219,13 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
                     )
                   }}
                 </For>
+                <Show when={projectToolsSlice().hidden > 0}>
+                  <box onMouseUp={() => setProjectToolsMore(projectToolsMore() + oes().toolRows)}>
+                    <ClickText fg={colors().textMuted} underline>
+                      {`… +${projectToolsSlice().hidden} more`}
+                    </ClickText>
+                  </box>
+                </Show>
               </box>
             </Show>
           </box>
@@ -1182,10 +1342,8 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
 
         <box flexDirection="column" gap={0}>
           <FoldHeader
-            title="Tools"
+            title="Tool Calls"
             open={!foldTools()}
-            count={tools().length > 0 ? tools().length : undefined}
-            live={toolsLive()}
             colors={colors()}
             onToggle={toggleTools}
           />
@@ -1194,7 +1352,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
               {tools().length === 0 ? (
                 <text fg={colors().textMuted}>• none</text>
               ) : (
-                <For each={tools().slice(0, rowsFor("tools", oes().toolRows))}>
+                <For each={toolsSlice().rows}>
                   {(t) => {
                     const mark = toolMark(t.status)
                     const dir = toolFlow(t.status)
@@ -1215,6 +1373,13 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
                   }}
                 </For>
               )}
+              <Show when={toolsSlice().hidden > 0}>
+                <box onMouseUp={() => setToolsMore(toolsMore() + oes().toolRows)}>
+                  <ClickText fg={colors().textMuted} underline>
+                    {`… +${toolsSlice().hidden} more`}
+                  </ClickText>
+                </box>
+              </Show>
             </box>
           </Show>
         </box>

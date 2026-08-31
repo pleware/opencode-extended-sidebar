@@ -1,13 +1,13 @@
 import { describe, expect, test } from "bun:test"
-import { emptyDb, type SessionView } from "../../src/db.js"
+import { emptyDb, type SessionView } from "../../../../src/resolvers/opencode/index.js"
+import { emptyOmo } from "../../../../src/resolvers/omo/boulder.resolver.js"
 import {
   delegatesForSession,
   groupDelegates,
   reconcileDelegateStatus,
   type DelegateView,
-  type LiveSnapshot,
-} from "../../src/live.js"
-import { emptyOmo } from "../../src/omo.js"
+} from "../../../../src/resolvers/live/delegate.resolver.js"
+import type { LiveSnapshot } from "../../../../src/resolvers/live/index.js"
 
 function agent(over: Partial<SessionView> & { id: string }): SessionView {
   return {
@@ -156,5 +156,9 @@ describe("reconcileDelegateStatus", () => {
     expect(reconcileDelegateStatus("running", { status: "archived" })).toBe("completed")
     expect(reconcileDelegateStatus("running", null)).toBe("running")
     expect(reconcileDelegateStatus("unknown", { status: "running" })).toBe("running")
+  })
+  test("a running sqlite session means live, not queued", () => {
+    expect(reconcileDelegateStatus("pending", { status: "running" })).toBe("running")
+    expect(reconcileDelegateStatus("queued", { status: "running" })).toBe("running")
   })
 })

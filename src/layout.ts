@@ -19,6 +19,7 @@ export function panelRows(termHeight: number): number {
 export const ROW_MIN = {
   delegates: 2,
   files: 3,
+  mywork: 2,
   omo: 3,
   sessions: 2,
   tools: 3,
@@ -26,12 +27,14 @@ export const ROW_MIN = {
 
 /**
  * Higher gives up rows first. Live activity outranks history: on Current the
- * tool feed survives longest, on Sessions the session list does. OMO ties with
+ * tool feed survives longest, on Sessions the session list does. My work is a
+ * queue of things awaiting the user, so it ties with Sessions. OMO ties with
  * Delegates so the optional group never starves the core on its own.
  */
 export const ROW_RANK = {
   delegates: 3,
   files: 2,
+  mywork: 1,
   omo: 3,
   sessions: 1,
   tools: 1,
@@ -106,4 +109,18 @@ export function sliceWithOverflow<T>(
   if (rows.length <= max) return { rows: [...rows], hidden: 0 }
   const keep = Math.max(1, max - 1)
   return { rows: rows.slice(0, keep), hidden: rows.length - keep }
+}
+
+/**
+ * Show `shown` rows and report how many a "more" control can still reveal.
+ * Unlike `sliceWithOverflow`, no row is spent on the note — the expander is a
+ * separate clickable line the caller renders below the list.
+ */
+export function sliceShown<T>(
+  rows: readonly T[],
+  shown: number,
+): { rows: T[]; hidden: number } {
+  const s = Math.max(0, Math.round(shown))
+  const kept = rows.slice(0, s)
+  return { rows: kept, hidden: Math.max(0, rows.length - kept.length) }
 }

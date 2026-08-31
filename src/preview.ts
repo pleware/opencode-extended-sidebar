@@ -1,5 +1,6 @@
 /**
- * File preview helpers (no OpenTUI). Unit tests import this, not detail.tsx.
+ * File preview helpers (no OpenTUI). Unit tests import this, not the dialogs
+ * module (pware.oc.ui.menudialogs.tsx).
  */
 import fs from "node:fs"
 import path from "node:path"

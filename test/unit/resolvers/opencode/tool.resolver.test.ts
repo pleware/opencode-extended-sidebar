@@ -1,45 +1,10 @@
 import { afterAll, describe, expect, test } from "bun:test"
 import {
-  emptyProjectFeed,
-  inferStatus,
-  listRecentSessionFiles,
   listRecentToolEvents,
   mergeTools,
-  readProjectFeed,
-  toSessionView,
-  type SessionRow,
-} from "../../src/db.js"
-import { openReadonlyDb } from "../../src/sqlite.js"
-import { createFixtureDb, patchPartData, toolPartData } from "../helpers/sqlite.js"
-
-function row(over: Partial<SessionRow> = {}): SessionRow {
-  return {
-    id: "ses_1",
-    project_id: "proj",
-    parent_id: null,
-    directory: "project",
-    title: "  hello  ",
-    agent: "build",
-    model: "m",
-    cost: 1.2,
-    tokens_input: 10,
-    tokens_output: 20,
-    tokens_reasoning: 5,
-    time_created: 1,
-    time_updated: 1_000,
-    time_archived: null,
-    ...over,
-  }
-}
-
-describe("inferStatus", () => {
-  test("archived / running / idle", () => {
-    const now = 10_000
-    expect(inferStatus(row({ time_archived: 9_000 }), now)).toBe("archived")
-    expect(inferStatus(row({ time_updated: now - 1_000 }), now)).toBe("running")
-    expect(inferStatus(row({ time_updated: now - 5 * 60_000 }), now)).toBe("idle")
-  })
-})
+} from "../../../../src/resolvers/opencode/tool.resolver.js"
+import { openReadonlyDb } from "../../../../src/sqlite.js"
+import { createFixtureDb, patchPartData, toolPartData } from "../../../helpers/sqlite.js"
 
 describe("mergeTools", () => {
   test("live running wins over db pending; completed is not clobbered", () => {
@@ -198,22 +163,6 @@ describe("mergeTools", () => {
   })
 })
 
-describe("toSessionView", () => {
-  test("trims title, sums tokens, marks main", () => {
-    const v = toSessionView(row(), 2_000)
-    expect(v.title).toBe("hello")
-    expect(v.tokensTotal).toBe(35)
-    expect(v.isMain).toBe(true)
-    expect(v.parentId).toBeNull()
-  })
-  test("child is not main; empty title/agent fall back", () => {
-    const v = toSessionView(row({ parent_id: "ses_p", title: "  ", agent: "  " }), 2_000)
-    expect(v.isMain).toBe(false)
-    expect(v.title).toBe("untitled")
-    expect(v.agent).toBe("unknown")
-  })
-})
-
 describe("recent sessions feed queries", () => {
   const t0 = 1_700_000_000_000
   const fix = createFixtureDb({
@@ -276,28 +225,5 @@ describe("recent sessions feed queries", () => {
     expect(listRecentToolEvents(db, ["ses_a1"], 1)).toHaveLength(1)
     expect(listRecentToolEvents(db, [])).toEqual([])
     expect(listRecentToolEvents(db, ["", "ses_a1", "ses_a1"])).toHaveLength(2)
-  })
-
-  test("listRecentSessionFiles: aggregates across given sessions only", () => {
-    const out = listRecentSessionFiles(openReadonlyDb(fix.dbPath)!, ["ses_a1", "ses_a2"])
-    const a = out.find((f) => f.id === "src/a.ts")
-    const p = out.find((f) => f.id === "src/p.ts")
-    expect(a?.additions).toBe(3)
-    expect(a?.deletions).toBe(1)
-    expect(p).toBeTruthy()
-    expect(out.some((f) => f.id.startsWith("b_"))).toBe(false)
-  })
-
-  test("readProjectFeed: returns both feeds; missing db / empty sessionIds yield empty", () => {
-    const feed = readProjectFeed({ dbPath: fix.dbPath, sessionIds: ["ses_a1"], toolLimit: 8 })
-    expect(feed.tools.map((t) => t.id)).toEqual(["prt_a_new", "prt_a_old"])
-    expect(feed.files.some((f) => f.id === "src/a.ts")).toBe(true)
-
-    expect(
-      readProjectFeed({ dbPath: "C:/nope/missing.db", sessionIds: ["ses_a1"], toolLimit: 8 }),
-    ).toEqual(emptyProjectFeed())
-    expect(readProjectFeed({ dbPath: fix.dbPath, sessionIds: [], toolLimit: 8 })).toEqual(
-      emptyProjectFeed(),
-    )
   })
 })

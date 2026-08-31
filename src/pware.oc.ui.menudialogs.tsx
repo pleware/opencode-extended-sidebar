@@ -1,7 +1,10 @@
 /** @jsxImportSource @opentui/solid */
 /**
- * Detail dialogs for Files, Tools, Works, OMO documents and Perf logs
- * (read-only metadata + optional preview).
+ * All popups for the panel: detail dialogs for Files, Tools, Works, OMO
+ * documents, Perf logs, the pending-approval menu, and the text/markdown
+ * preview. Every popup goes through the single `openDialog()` choke-point —
+ * nothing outside this module touches `api.ui.dialog`.
+ * Read-only metadata + optional preview.
  */
 import { createEffect, createMemo, For, Show, type JSX } from "solid-js"
 import { SyntaxStyle } from "@opentui/core"
@@ -9,14 +12,16 @@ import { useTerminalDimensions } from "@opentui/solid"
 import type { TuiPluginApi, TuiTheme } from "@opencode-ai/plugin/tui"
 import { copyText } from "./clipboard.js"
 import { ClickText, textAttrs, type ThemeColors } from "./chrome.js"
-import type { ToolView } from "./db.js"
+import type { ToolView } from "./resolvers/opencode/tool.resolver.js"
 import type { FileView } from "./files.js"
 import { readPerfLog, type PerfLogKind } from "./perf.js"
 import { formatDiffStat } from "./files.js"
-import type { DocView } from "./docs.js"
-import { DOC_KIND_LABEL } from "./docs.js"
-import type { WorkView } from "./omo.js"
-import { workStatusLabel } from "./omo.js"
+import type { DocView } from "./resolvers/omo/doc.resolver.js"
+import { DOC_KIND_LABEL } from "./resolvers/omo/doc.resolver.js"
+import type { WorkView } from "./resolvers/omo/boulder.resolver.js"
+import { workStatusLabel } from "./resolvers/omo/index.js"
+import type { StartWorkMode } from "./resolvers/mywork.resolver.js"
+import { startWorkCommand } from "./resolvers/mywork.resolver.js"
 import { resolveProjectFile } from "./paths.js"
 import {
   canPreviewPath,
@@ -25,8 +30,6 @@ import {
   readTextPreview,
 } from "./preview.js"
 import { formatAge, formatDuration, formatWhen } from "./pulse.js"
-
-export { canPreviewPath, isMarkdownPath, previewViewportRows, readTextPreview } from "./preview.js"
 
 function closeDialog(api: TuiPluginApi): void {
   try {
@@ -101,6 +104,22 @@ function SizedDialog(props: {
     props.api.ui.dialog.setSize(props.size)
   })
   return <>{props.children}</>
+}
+
+/**
+ * The single entry point for every popup. All openers below route through
+ * this; nothing else in the plugin calls api.ui.dialog directly.
+ */
+function openDialog(
+  api: TuiPluginApi,
+  size: "medium" | "large" | "xlarge",
+  render: () => JSX.Element,
+): void {
+  try {
+    api.ui.dialog.replace(() => <SizedDialog api={api} size={size}>{render()}</SizedDialog>)
+  } catch {
+    // host without dialog stack
+  }
 }
 
 /** OpenTUI markdown styles from the host theme — same markup.* keys OpenCode uses. */
@@ -186,13 +205,6 @@ function PreviewDialog(props: {
   const bodyHeight = createMemo(() =>
     previewViewportRows(dimensions().height, extra()),
   )
-  // replace() resets the stack size to medium (host bug #44754).
-  // createEffect fires after render (= after replace), so this wins the race.
-  // No api.ui.Dialog wrapper: the host DialogProvider already supplies the
-  // backdrop — a second Dialog creates a double-dark background.
-  createEffect(() => {
-    props.api.ui.dialog.setSize("xlarge")
-  })
   return (
     <DialogPad>
       <box flexDirection="column" gap={0} flexShrink={0}>
@@ -233,34 +245,6 @@ function PreviewDialog(props: {
   )
 }
 
-function openTextPreview(
-  api: TuiPluginApi,
-  colors: ThemeColors,
-  title: string,
-  subtitle: string | null,
-  absPath: string,
-): void {
-  const preview = readTextPreview(absPath)
-  if (!preview) {
-    toast(api, "Cannot preview this file", "warning")
-    return
-  }
-  const pretty = isMarkdownPath(absPath)
-  const syntaxStyle = pretty ? markdownStyleFromTheme(api.theme) : null
-  api.ui.dialog.replace(() => (
-    <PreviewDialog
-      api={api}
-      colors={colors}
-      title={title}
-      subtitle={subtitle}
-      pretty={pretty}
-      text={preview.text}
-      truncated={preview.truncated}
-      syntaxStyle={syntaxStyle}
-    />
-  ))
-}
-
 function copyRelativePath(api: TuiPluginApi, rel: string | null): void {
   if (!rel) {
     toast(api, "No path to copy", "warning")
@@ -277,6 +261,34 @@ function copyPlain(api: TuiPluginApi, text: string): void {
     if (ok) toast(api, "Copied log", "success")
     else toast(api, "Copy failed — select the log in the dialog manually", "warning")
   })
+}
+
+export function openTextPreview(
+  api: TuiPluginApi,
+  colors: ThemeColors,
+  title: string,
+  subtitle: string | null,
+  absPath: string,
+): void {
+  const preview = readTextPreview(absPath)
+  if (!preview) {
+    toast(api, "Cannot preview this file", "warning")
+    return
+  }
+  const pretty = isMarkdownPath(absPath)
+  const syntaxStyle = pretty ? markdownStyleFromTheme(api.theme) : null
+  openDialog(api, "xlarge", () => (
+    <PreviewDialog
+      api={api}
+      colors={colors}
+      title={title}
+      subtitle={subtitle}
+      pretty={pretty}
+      text={preview.text}
+      truncated={preview.truncated}
+      syntaxStyle={syntaxStyle}
+    />
+  ))
 }
 
 export function openFileDetail(
@@ -301,45 +313,43 @@ export function openFileDetail(
   const header = diff ? `${file.name} ${letter}  ${diff}`.trim() : `${file.name} ${letter}`.trim()
   const touch = file.touch === "read" ? "read" : "write"
 
-  api.ui.dialog.replace(() => (
-    <SizedDialog api={api} size="large" >
-      <DialogPad>
-        <text fg={colors.text} attributes={textAttrs(true)}>
-          {header}
-        </text>
-        {divider(colors)}
-        <DetailLine text={rel ?? file.name} colors={colors} />
+  openDialog(api, "large", () => (
+    <DialogPad>
+      <text fg={colors.text} attributes={textAttrs(true)}>
+        {header}
+      </text>
+      {divider(colors)}
+      <DetailLine text={rel ?? file.name} colors={colors} />
+      <DetailLine
+        text={`Touch: ${touch}${file.letter ? ` · Letter: ${file.letter}` : ""}`}
+        colors={colors}
+        muted
+      />
+      <Show when={file.additions > 0 || file.deletions > 0}>
         <DetailLine
-          text={`Touch: ${touch}${file.letter ? ` · Letter: ${file.letter}` : ""}`}
+          text={`Diff: ${diff} (session metadata, not patch body)`}
           colors={colors}
           muted
         />
-        <Show when={file.additions > 0 || file.deletions > 0}>
-          <DetailLine
-            text={`Diff: ${diff} (session metadata, not patch body)`}
-            colors={colors}
-            muted
-          />
-        </Show>
-        <box flexDirection="column" gap={0} paddingTop={1}>
-          <ActionRow
-            label="Copy relative path"
-            colors={colors}
-            disabled={!rel}
-            onPick={() => copyRelativePath(api, rel)}
-          />
-          <ActionRow
-            label="Preview"
-            colors={colors}
-            disabled={!canPreview}
-            onPick={() => {
-              if (abs) openTextPreview(api, colors, file.name, rel, abs)
-            }}
-          />
-          <ActionRow label="Close" colors={colors} onPick={() => closeDialog(api)} />
-        </box>
-      </DialogPad>
-    </SizedDialog>
+      </Show>
+      <box flexDirection="column" gap={0} paddingTop={1}>
+        <ActionRow
+          label="Copy relative path"
+          colors={colors}
+          disabled={!rel}
+          onPick={() => copyRelativePath(api, rel)}
+        />
+        <ActionRow
+          label="Preview"
+          colors={colors}
+          disabled={!canPreview}
+          onPick={() => {
+            if (abs) openTextPreview(api, colors, file.name, rel, abs)
+          }}
+        />
+        <ActionRow label="Close" colors={colors} onPick={() => closeDialog(api)} />
+      </box>
+    </DialogPad>
   ))
 }
 
@@ -349,23 +359,21 @@ export function openToolDetail(api: TuiPluginApi, tool: ToolView, colors: ThemeC
       ? formatDuration(Math.max(0, Date.now() - tool.startedAt))
       : formatDuration(tool.durationMs)
   const header = [tool.tool, dur, tool.status].filter(Boolean).join(" · ")
-  api.ui.dialog.replace(() => (
-    <SizedDialog api={api} size="medium" >
-      <DialogPad>
-        <text fg={colors.text} attributes={textAttrs(true)}>
-          {header}
-        </text>
-        {divider(colors)}
-        <DetailLine text={`Label: ${tool.name}`} colors={colors} />
-        <DetailLine text={`Tool: ${tool.tool}`} colors={colors} muted />
-        <DetailLine text={`Started: ${formatWhen(tool.startedAt)}`} colors={colors} muted />
-        <DetailLine text={`Duration: ${dur || "—"}`} colors={colors} muted />
-        <DetailLine text={`Status: ${tool.status}`} colors={colors} muted />
-        <box flexDirection="column" gap={0} paddingTop={1}>
-          <ActionRow label="Close" colors={colors} onPick={() => closeDialog(api)} />
-        </box>
-      </DialogPad>
-    </SizedDialog>
+  openDialog(api, "medium", () => (
+    <DialogPad>
+      <text fg={colors.text} attributes={textAttrs(true)}>
+        {header}
+      </text>
+      {divider(colors)}
+      <DetailLine text={`Label: ${tool.name}`} colors={colors} />
+      <DetailLine text={`Tool: ${tool.tool}`} colors={colors} muted />
+      <DetailLine text={`Started: ${formatWhen(tool.startedAt)}`} colors={colors} muted />
+      <DetailLine text={`Duration: ${dur || "—"}`} colors={colors} muted />
+      <DetailLine text={`Status: ${tool.status}`} colors={colors} muted />
+      <box flexDirection="column" gap={0} paddingTop={1}>
+        <ActionRow label="Close" colors={colors} onPick={() => closeDialog(api)} />
+      </box>
+    </DialogPad>
   ))
 }
 
@@ -388,24 +396,96 @@ export function openWorkDetail(
   const updated = age ? `${age} ago` : "—"
   const agent = work.agent ? ` · ${work.agent}` : ""
 
-  api.ui.dialog.replace(() => (
-    <SizedDialog api={api} size="medium" >
-      <DialogPad>
-        <text fg={colors.text} attributes={textAttrs(true)}>
-          {`Work: ${work.name}`}
-        </text>
-        {divider(colors)}
-        <DetailLine text={`Status: ${status}${agent}`} colors={colors} />
-        <DetailLine text={`Work id: ${work.workId}`} colors={colors} muted />
-        <DetailLine text={`Updated: ${updated}`} colors={colors} muted />
-        <Show when={work.planPath}>
-          <DetailLine text={work.planPath!} colors={colors} muted />
+  openDialog(api, "medium", () => (
+    <DialogPad>
+      <text fg={colors.text} attributes={textAttrs(true)}>
+        {`Work: ${work.name}`}
+      </text>
+      {divider(colors)}
+      <DetailLine text={`Status: ${status}${agent}`} colors={colors} />
+      <DetailLine text={`Work id: ${work.workId}`} colors={colors} muted />
+      <DetailLine text={`Updated: ${updated}`} colors={colors} muted />
+      <Show when={work.planPath}>
+        <DetailLine text={work.planPath!} colors={colors} muted />
+      </Show>
+      <box flexDirection="column" gap={0} paddingTop={1}>
+        <ActionRow label="Close" colors={colors} onPick={() => closeDialog(api)} />
+      </box>
+    </DialogPad>
+  ))
+}
+
+/**
+ * Pending-approval menu: Continue jumps to the session that wrote the plan,
+ * Docs opens the draft as a preview, and the three start-work rows launch the
+ * OMO plan in the current session (plain / --make-pr / --ship).
+ */
+export function openApprovalDialog(
+  api: TuiPluginApi,
+  colors: ThemeColors,
+  opts: {
+    title: string
+    rel: string | null
+    sessionId: string | null
+    /** Muted reason shown under Continue when it is disabled. */
+    continueHint?: string | null
+    onContinue: (sessionId: string) => void
+    onStartWork: (mode: StartWorkMode) => void
+    onDocs: () => void
+  },
+): void {
+  openDialog(api, "medium", () => (
+    <DialogPad>
+      <text fg={colors.text} attributes={textAttrs(true)}>
+        {opts.title}
+      </text>
+      {divider(colors)}
+      <Show when={opts.rel}>
+        <DetailLine text={opts.rel!} colors={colors} muted />
+      </Show>
+      <box flexDirection="column" gap={0} paddingTop={1}>
+        <ActionRow
+          label="Continue"
+          colors={colors}
+          disabled={!opts.sessionId}
+          onPick={() => {
+            if (opts.sessionId) {
+              closeDialog(api)
+              opts.onContinue(opts.sessionId)
+            }
+          }}
+        />
+        <Show when={!opts.sessionId && opts.continueHint}>
+          <DetailLine text={opts.continueHint!} colors={colors} muted />
         </Show>
-        <box flexDirection="column" gap={0} paddingTop={1}>
-          <ActionRow label="Close" colors={colors} onPick={() => closeDialog(api)} />
-        </box>
-      </DialogPad>
-    </SizedDialog>
+        <ActionRow label="Docs" colors={colors} onPick={opts.onDocs} />
+        <ActionRow
+          label={startWorkCommand("plain", opts.title)}
+          colors={colors}
+          onPick={() => {
+            closeDialog(api)
+            opts.onStartWork("plain")
+          }}
+        />
+        <ActionRow
+          label={startWorkCommand("make-pr", opts.title)}
+          colors={colors}
+          onPick={() => {
+            closeDialog(api)
+            opts.onStartWork("make-pr")
+          }}
+        />
+        <ActionRow
+          label={startWorkCommand("ship", opts.title)}
+          colors={colors}
+          onPick={() => {
+            closeDialog(api)
+            opts.onStartWork("ship")
+          }}
+        />
+        <ActionRow label="Close" colors={colors} onPick={() => closeDialog(api)} />
+      </box>
+    </DialogPad>
   ))
 }
 
@@ -435,30 +515,28 @@ export function openDocDetail(
   if (!found) toast(api, "File not found on disk", "warning")
   const age = doc.updatedAt != null ? formatAge(Math.max(0, Date.now() - doc.updatedAt)) : ""
 
-  api.ui.dialog.replace(() => (
-    <SizedDialog api={api} size="medium" >
-      <DialogPad>
-        <text fg={colors.text} attributes={textAttrs(true)}>
-          {doc.name}
-        </text>
-        {divider(colors)}
-        <DetailLine text={`Kind: ${DOC_KIND_LABEL[doc.kind]}`} colors={colors} />
-        <DetailLine
-          text={`Size: ${formatBytes(doc.sizeBytes)} · Updated: ${age ? `${age} ago` : "—"}`}
+  openDialog(api, "medium", () => (
+    <DialogPad>
+      <text fg={colors.text} attributes={textAttrs(true)}>
+        {doc.name}
+      </text>
+      {divider(colors)}
+      <DetailLine text={`Kind: ${DOC_KIND_LABEL[doc.kind]}`} colors={colors} />
+      <DetailLine
+        text={`Size: ${formatBytes(doc.sizeBytes)} · Updated: ${age ? `${age} ago` : "—"}`}
+        colors={colors}
+        muted
+      />
+      <DetailLine text={doc.rel} colors={colors} muted />
+      <box flexDirection="column" gap={0} paddingTop={1}>
+        <ActionRow
+          label="Copy path"
           colors={colors}
-          muted
+          onPick={() => copyRelativePath(api, doc.rel)}
         />
-        <DetailLine text={doc.rel} colors={colors} muted />
-        <box flexDirection="column" gap={0} paddingTop={1}>
-          <ActionRow
-            label="Copy path"
-            colors={colors}
-            onPick={() => copyRelativePath(api, doc.rel)}
-          />
-          <ActionRow label="Close" colors={colors} onPick={() => closeDialog(api)} />
-        </box>
-      </DialogPad>
-    </SizedDialog>
+        <ActionRow label="Close" colors={colors} onPick={() => closeDialog(api)} />
+      </box>
+    </DialogPad>
   ))
 }
 
@@ -474,7 +552,7 @@ export function openPerfLog(
     return
   }
   try {
-    api.ui.dialog.replace(() => (
+    openDialog(api, "xlarge", () => (
       <PreviewDialog
         api={api}
         colors={colors}

@@ -1,17 +1,15 @@
 /**
- * Read-only oh-my-openagent helpers (boulder + plans + delegates + config).
+ * pware.oc.core.omo.resolver.boulder
+ *
+ * Read-only boulder.json resolution: works, tasks, delegates, the active
+ * boulder mirror, and the `.omo`/`.sisyphus` layout probes (boulder path,
+ * watch dirs, presence marker, stamps).
  */
 import fs from "node:fs"
-import os from "node:os"
 import path from "node:path"
-import { canonicalizePath, fileStamp, resolveProjectFile } from "./paths.js"
-import { composeMark, formatAge, pulseAgeMs, toEpochMs, type AgentMark } from "./pulse.js"
-import {
-  taskRank,
-  toWorkLabel,
-  workIsTerminal,
-  workStatusGlyph,
-} from "./status.js"
+import { canonicalizePath, fileStamp, resolveProjectFile } from "../../paths.js"
+import { composeMark, formatAge, pulseAgeMs, toEpochMs, type AgentMark } from "../../pulse.js"
+import { taskRank, toWorkLabel, workIsTerminal, workStatusGlyph } from "../../status.js"
 
 export { workIsTerminal, workStatusGlyph }
 export { toWorkLabel as workStatusLabel }
@@ -96,13 +94,6 @@ export type OmoSnapshot = {
   stamp: string
 }
 
-export type OmoConfigView = {
-  present: boolean
-  path: string | null
-  teamMode: boolean | null
-  agents: string[]
-}
-
 type RawTask = {
   task_key?: string
   task_label?: string
@@ -138,6 +129,49 @@ type RawWork = {
 type RawBoulder = RawWork & {
   active_work_id?: string
   works?: Record<string, RawWork>
+}
+
+export function findBoulder(projectRoot: string): string | null {
+  for (const rel of [".omo/boulder.json", ".sisyphus/boulder.json"]) {
+    const p = path.join(projectRoot, rel)
+    if (fs.existsSync(p)) return p
+  }
+  return null
+}
+
+export function findOmoWatchDirs(projectRoot: string): string[] {
+  const out: string[] = []
+  for (const rel of [".omo", ".sisyphus"]) {
+    const p = path.join(projectRoot, rel)
+    if (fs.existsSync(p)) out.push(p)
+  }
+  return out
+}
+
+/** Installed omo means its config marker — `.omo/omo.jsonc` or `.sisyphus/omo.jsonc`. */
+export function isOmoPresent(projectRoot: string): boolean {
+  for (const rel of [".omo", ".sisyphus"]) {
+    if (fs.existsSync(path.join(projectRoot, rel, "omo.jsonc"))) return true
+  }
+  return false
+}
+
+/**
+ * Boulder + omo config marker. Drafts/notepads/evidence must not invalidate the
+ * hot path, but the marker (`.omo/omo.jsonc`) must — its arrival is what turns
+ * the OMO group from hidden to visible.
+ */
+export function omoStamp(projectRoot?: string | null): string {
+  if (!projectRoot) return "0"
+  const root = canonicalizePath(projectRoot)
+  const parts: string[] = []
+  const boulderPath = findBoulder(root)
+  if (boulderPath) parts.push(fileStamp(boulderPath))
+  for (const rel of [".omo/omo.jsonc", ".sisyphus/omo.jsonc"]) {
+    const p = path.join(root, rel)
+    if (fs.existsSync(p)) parts.push(fileStamp(p))
+  }
+  return parts.join("|") || "0"
 }
 
 function stripSessionPrefix(id: string | null | undefined): string | null {
@@ -268,49 +302,6 @@ function collectWorks(raw: RawBoulder, projectRoot: string): WorkView[] {
   return out.slice(0, 20)
 }
 
-/**
- * Boulder + omo config marker. Drafts/notepads/evidence must not invalidate the
- * hot path, but the marker (`.omo/omo.jsonc`) must — its arrival is what turns
- * the OMO group from hidden to visible.
- */
-export function omoStamp(projectRoot?: string | null): string {
-  if (!projectRoot) return "0"
-  const root = canonicalizePath(projectRoot)
-  const parts: string[] = []
-  const boulderPath = findBoulder(root)
-  if (boulderPath) parts.push(fileStamp(boulderPath))
-  for (const rel of [".omo/omo.jsonc", ".sisyphus/omo.jsonc"]) {
-    const p = path.join(root, rel)
-    if (fs.existsSync(p)) parts.push(fileStamp(p))
-  }
-  return parts.join("|") || "0"
-}
-
-export function findBoulder(projectRoot: string): string | null {
-  for (const rel of [".omo/boulder.json", ".sisyphus/boulder.json"]) {
-    const p = path.join(projectRoot, rel)
-    if (fs.existsSync(p)) return p
-  }
-  return null
-}
-
-export function findOmoWatchDirs(projectRoot: string): string[] {
-  const out: string[] = []
-  for (const rel of [".omo", ".sisyphus"]) {
-    const p = path.join(projectRoot, rel)
-    if (fs.existsSync(p)) out.push(p)
-  }
-  return out
-}
-
-/** Installed omo means its config marker — `.omo/omo.jsonc` or `.sisyphus/omo.jsonc`. */
-export function isOmoPresent(projectRoot: string): boolean {
-  for (const rel of [".omo", ".sisyphus"]) {
-    if (fs.existsSync(path.join(projectRoot, rel, "omo.jsonc"))) return true
-  }
-  return false
-}
-
 function resolvePlanPath(projectRoot: string, activePlan: string | null): string | null {
   if (!activePlan) return null
   const planPath = path.isAbsolute(activePlan)
@@ -338,7 +329,7 @@ function collectTasks(raw: Record<string, RawTask> | undefined): TaskView[] {
       sessionId: stripSessionPrefix(t.session_id),
       agent: t.agent ?? null,
       category: t.category ?? null,
-      status: (t.status || "unknown").toLowerCase(),
+      status: (t.status || "").toLowerCase() || (t.started_at ? "running" : "pending"),
       startedAt: parseStamp(t.started_at),
       endedAt: parseStamp(t.ended_at),
       elapsedMs: typeof t.elapsed_ms === "number" && Number.isFinite(t.elapsed_ms) ? t.elapsed_ms : null,
@@ -468,30 +459,4 @@ export function readOmo(projectRoot: string | null | undefined): OmoSnapshot {
     delegates: tasks.map(taskToDelegate),
     stamp: fileStamp(boulderPath),
   }
-}
-
-export function readOmoConfig(): OmoConfigView {
-  const home = os.homedir()
-  const candidates = [
-    path.join(process.env.XDG_CONFIG_HOME || path.join(home, ".config"), "opencode", "oh-my-openagent.json"),
-    path.join(home, ".config", "opencode", "oh-my-openagent.json"),
-  ]
-  for (const p of candidates) {
-    try {
-      if (!fs.existsSync(p)) continue
-      const raw = JSON.parse(fs.readFileSync(p, "utf8")) as {
-        team_mode?: { enabled?: boolean }
-        agents?: Record<string, unknown>
-      }
-      return {
-        present: true,
-        path: p,
-        teamMode: raw.team_mode?.enabled ?? null,
-        agents: Object.keys(raw.agents || {}),
-      }
-    } catch {
-      // next
-    }
-  }
-  return { present: false, path: null, teamMode: null, agents: [] }
 }

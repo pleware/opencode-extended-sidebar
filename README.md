@@ -32,9 +32,9 @@ OpenCode gives you one conversation at a time. Real work looks different: an orc
 
 > A braille spinner for work in progress, a dot for idle, and a glyph for what is happening now: **↑** waiting on the model, **↓** receiving tokens, **→** a tool in flight. Colours come from your OpenCode theme.
 
-## ≡ Tool feed that names things
+## ≡ Tool Calls feed that names things
 
-> Each row is labelled with what actually ran — command, file, pattern, or task — plus how long it took. Running calls tick live; failures show `×`. Click a tool for a metadata sheet (never args or output). **Project** carries the same feed rolled up from the sessions above.
+> Each row is labelled with what actually ran — command, file, pattern, or task — plus how long it took. Running calls tick live; failures show `×`. Click a tool for a metadata sheet (never args or output). **Project** carries the same feed rolled up from the sessions above. The feed shows the latest `toolRows` (default 5) and ends in a `… +N more` control that reveals the next batch with each click, up to `toolFetch` (default 20) rows of history.
 
 ## ± File changes with diff stats
 
@@ -45,6 +45,10 @@ OpenCode gives you one conversation at a time. Real work looks different: an orc
 ## ⋔ Delegates and sub-agents
 
 > When an orchestrator hands work off, delegates appear as their own rows — tokens, status, pulse, click to jump. **Project** lists the project's boulder. **Session** lists only this session's children.
+
+## ? My work — what is waiting on you
+
+> One queue of things that need **your** action, shown first in the core group. Open `question` tools from the current and recent sessions appear as `?` rows — click to jump to the session and answer. OMO plans and drafts with `status: awaiting-approval` appear as `!` rows (plan name only, no extension) — click for a **Continue / Docs** menu plus **start work** execution options (`start work`, `start work --make-pr`, `start work --ship`): Continue jumps to the session that wrote the plan (disabled with a muted reason when no session is found), Docs opens the draft as a preview, start work launches the OMO plan in the current session. When `.omo/` is absent the approval section is simply gone; the question queue works on OpenCode alone.
 
 ## ▤ OMO works, boulder and docs
 
@@ -60,18 +64,18 @@ OpenCode gives you one conversation at a time. Real work looks different: an orc
 
 > **Perf** splits the wall clock into wait, think, stream and tools, then ranks models and slow calls. Click a phase, a section title, or a tool row for a dated column log. The scan runs only while this tab is open.
 
-## ▣ Two groups, six views
+## ▣ Two groups, seven views
 
 > ```
-> OES | Project | Session | Perf
+> OES | My work | Project | Session | Perf
 > OMO | Works | Boulder | Docs
 > ```
 >
-> **Project** is the project-wide view — recent sessions plus the tools and files every one of them touched. **Session** is this agent, its delegates, tools and files. **Perf** is timing. Tabs and folds are remembered. Clickable labels underline on hover.
+> **My work** is the queue of things waiting on you — open questions and pending plan approvals. **Project** is the project-wide view — recent sessions plus the tools and files every one of them touched. **Session** is this agent, its delegates, tools and files. **Perf** is timing. Tabs and folds are remembered. Clickable labels underline on hover.
 
 ## ⇕ Rows that fit the window
 
-> `oes.json` row counts are ceilings. A short terminal trims live activity last, then Files, then Delegates and OMO. Headers keep the full count (`Files (12)`); a trimmed Files list ends in a clickable `… +N more` that expands to every file.
+> `oes.json` row counts are ceilings. A short terminal trims live activity last, then Files, then Delegates and OMO. The Tool Calls feed shows the latest `toolRows` and ends in a clickable `… +N more` that reveals another `toolRows` per click (up to `toolFetch`); a trimmed Files list ends in a `… +N more` that expands to every file.
 
 ## ⊘ Privacy first
 
@@ -93,24 +97,26 @@ The glyph says *what* is happening; the colour says *how fresh* it is. Both come
 | `↑`                             | waiting for the model                                         |
 | `↓`                             | tokens streaming in                                          |
 | `→`                             | a tool call in flight                                          |
-| `•`                             | idle — finished, queued or archived                             |
+| `•`                             | idle — finished or archived                                  |
+| `◷`                             | queued — waiting for a concurrency slot                       |
 | `▾`                             | group header (`▼` is the section fold)                       |
 | `×`                             | failed                                                        |
-| `✓` `○` `⏸` `⊘`                 | Works: done / pending / paused / abandoned                   |
+| `✓` `◷` `║` `⊘`                 | Works: done / waiting / paused / abandoned                   |
+| `?` `!`                         | My work: awaiting an answer / pending approval               |
 | `M` `A` `D` `R` `C` `U` `T` `?` | Files: git status — same letters as `git status --short`      |
 | `V`                             | Files: viewed (session read only)                             |
 | `∴`                             | Perf: thinking                                                 |
 | `█░`                            | Perf: share of the wall clock                                  |
 | `▁▂▃▄▅▆▇█`                      | Perf: sparkline over recent turns                               |
 
-Arrows blink about twice per second — only the glyph, not the text. They expire on their own (`↓` ~2 s, `↑` 15 s, `→` 30 s) unless the session is still busy. A failed or finished row shows `×` or `•`, never a direction.
+Arrows blink about twice per second — only the glyph, not the text. They expire on their own (`↓` ~2 s, `↑` 15 s, `→` 30 s) unless the session is still busy. A failed or finished row shows `×` or `•`, never a direction. A queued delegate shows `◷` in warning yellow — it is waiting for a slot, not done.
 
 **Colours**
 
 | Colour                 | Theme key                   | Meaning                                          |
 | ---------------------- | --------------------------- | ------------------------------------------------ |
 | green                  | `success`                   | receiving tokens, or active within the last 5 s  |
-| yellow                 | `warning`                   | waiting on the model, or last seen 5–10 s ago    |
+| yellow                 | `warning`                   | waiting on the model, queued work, or last seen 5–10 s ago |
 | accent                 | `primary`                   | tool in flight — also the current row            |
 | red                    | `error`                     | failed                                           |
 | muted                  | `textMuted`                 | idle, done or archived                           |
@@ -156,7 +162,8 @@ Later files win:
   "perfTurns": 120,
   "sessionRows": 4,
   "skipGitignore": false,
-  "toolRows": 8
+  "toolRows": 5,
+  "toolFetch": 20
 }
 ```
 
@@ -170,7 +177,8 @@ Later files win:
 | `perfTurns`     | `120`                            | recent turns Perf measures                            |
 | `sessionRows`   | `4`                              | sessions in the switcher                              |
 | `skipGitignore` | `false`                          | also honour the project's root `.gitignore` (`.oesignore` is always honoured) |
-| `toolRows`      | `8`                              | most tool rows shown                                  |
+| `toolRows`      | `5`                              | most tool-call rows shown; the `… +N more` control reveals another `toolRows` per click |
+| `toolFetch`     | `20`                             | tool-call history kept behind the `… +N more` revealer; distinct from `toolRows` |
 
 Row counts are ceilings: a short terminal trims below them. Changes apply on the next refresh — no restart.
 
@@ -198,7 +206,7 @@ The panel is a read-only view of data OpenCode already stores.
 
 | Source          | Path                                                          | Used for                         |
 | --------------- | ------------------------------------------------------------- | -------------------------------- |
-| OpenCode SQLite | `~/.local/share/opencode/opencode.db` (or `OPENCODE_DB_PATH`) | sessions, tools, files, timings  |
+| OpenCode SQLite | `~/.local/share/opencode/opencode.db` (or `OPENCODE_DB`) | sessions, tools, files, timings  |
 | OMO             | `<project>/.omo/`                                            | works, boulder, docs — optional |
 | `oes.json`      | plugin / user config / project                                 | display limits                    |
 | ignore files    | `<project>/.oesignore` (always) · `.gitignore` (with `skipGitignore`) | files hidden from the panel     |

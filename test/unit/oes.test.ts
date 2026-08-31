@@ -33,4 +33,15 @@ describe("pick", () => {
       OES_DEFAULTS.omoRows,
     )
   })
+
+  test("toolFetch is a separate history window, clamped to [toolRows, 80]", () => {
+    expect(OES_DEFAULTS.toolFetch).toBe(20)
+    expect(pick({ toolRows: 5, toolFetch: 3 }, OES_DEFAULTS).toolFetch).toBe(5)
+    expect(pick({ toolRows: 5, toolFetch: 999 }, OES_DEFAULTS).toolFetch).toBe(80)
+    expect(pick({ toolFetch: "nope" } as Record<string, unknown>, OES_DEFAULTS).toolFetch).toBe(
+      OES_DEFAULTS.toolFetch,
+    )
+    expect(pick({ toolRows: 20, toolFetch: 20 }, OES_DEFAULTS).toolFetch).toBe(20)
+    expect(pick({ toolRows: 20 }, OES_DEFAULTS).toolFetch).toBe(20)
+  })
 })

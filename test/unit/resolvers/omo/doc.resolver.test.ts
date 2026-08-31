@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import path from "node:path"
-import { groupDocs, readOmoDocs, resetDocsCache, type DocView } from "../../src/docs.js"
-import { createFixtureProject, type FixtureProject } from "../helpers/project.js"
-import { assertPrivacy } from "../helpers/privacy.js"
+import { groupDocs, readOmoDocs, resetDocsCache, type DocView } from "../../../../src/resolvers/omo/doc.resolver.js"
+import { createFixtureProject, type FixtureProject } from "../../../helpers/project.js"
+import { assertPrivacy } from "../../../helpers/privacy.js"
 
 const held: FixtureProject[] = []
 

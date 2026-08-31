@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { ROW_MIN, ROW_RANK, packSections, panelRows, sliceWithOverflow } from "../../src/layout.js"
+import { ROW_MIN, ROW_RANK, packSections, panelRows, sliceShown, sliceWithOverflow } from "../../src/layout.js"
 
 describe("panelRows", () => {
   test("subtracts host chrome and never returns less than the floor", () => {
@@ -97,6 +97,31 @@ describe("sliceWithOverflow", () => {
   test("the source array is not mutated", () => {
     const src = [1, 2, 3]
     sliceWithOverflow(src, 2)
+    expect(src).toEqual([1, 2, 3])
+  })
+})
+
+describe("sliceShown", () => {
+  const rows = [1, 2, 3, 4, 5]
+
+  test("shows the requested count and reports the rest", () => {
+    expect(sliceShown(rows, 2)).toEqual({ rows: [1, 2], hidden: 3 })
+    expect(sliceShown(rows, 5)).toEqual({ rows, hidden: 0 })
+    expect(sliceShown(rows, 99)).toEqual({ rows, hidden: 0 })
+  })
+
+  test("a zero or negative shown hides everything", () => {
+    expect(sliceShown(rows, 0)).toEqual({ rows: [], hidden: 5 })
+    expect(sliceShown(rows, -1)).toEqual({ rows: [], hidden: 5 })
+  })
+
+  test("an empty list never claims hidden rows", () => {
+    expect(sliceShown([], 4)).toEqual({ rows: [], hidden: 0 })
+  })
+
+  test("the source array is not mutated", () => {
+    const src = [1, 2, 3]
+    sliceShown(src, 1)
     expect(src).toEqual([1, 2, 3])
   })
 })

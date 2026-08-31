@@ -50,9 +50,16 @@ export function workStatusGlyph(status: string): string | null {
   if (s === "done") return "✓"
   if (s === "error") return "×"
   if (s === "running") return null
-  if (s === "paused") return "⏸"
+  // A plain clock, not the emoji hourglass — one cell, monochrome.
+  if (s === "pending") return "◷"
+  if (s === "paused") return "║"
   if (s === "abandoned") return "⊘"
   return "○"
+}
+
+/** Queued / waiting work — boulder writes no `status` while a task waits for a slot. */
+export function isPendingWork(status: string | null | undefined): boolean {
+  return normalizeStatus(status) === "pending"
 }
 
 /** Paused and abandoned are deliberate stops — they must not keep pulsing. */

@@ -65,7 +65,27 @@ describe("getOpenCodeDbPath", () => {
     fs.rmSync(tmp, { recursive: true, force: true })
   })
 
-  test("OPENCODE_DB_PATH env var wins over everything", () => {
+  test("OPENCODE_DB (absolute) wins over everything, like opencode itself", () => {
+    const explicit = path.join(tmp, "agentize.db")
+    const result = getOpenCodeDbPath({ OPENCODE_DB: explicit }, "/home/x", tmp)
+    expect(result).toBe(path.resolve(explicit))
+  })
+
+  test("relative OPENCODE_DB is joined onto the data dir", () => {
+    const h = "/home/testuser"
+    const result = getOpenCodeDbPath({ OPENCODE_DB: "custom.db" }, h, null)
+    expect(result).toBe(path.join(h, ".local", "share", "opencode", "custom.db"))
+  })
+
+  test("OPENCODE_DB :memory: falls through to file heuristics", () => {
+    // opencode uses an in-memory DB — the plugin needs a file, so it degrades
+    // to the global path instead of returning a non-file value.
+    const h = "/home/testuser"
+    const result = getOpenCodeDbPath({ OPENCODE_DB: ":memory:" }, h, null)
+    expect(result).toBe(path.join(h, ".local", "share", "opencode", "opencode.db"))
+  })
+
+  test("OPENCODE_DB_PATH is a legacy alias, used when OPENCODE_DB is absent", () => {
     const explicit = path.join(tmp, "custom.db")
     const result = getOpenCodeDbPath({ OPENCODE_DB_PATH: explicit }, "/home/x", tmp)
     expect(result).toBe(path.resolve(explicit))

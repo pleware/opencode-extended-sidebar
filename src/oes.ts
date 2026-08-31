@@ -22,6 +22,8 @@ export type OesOptions = {
   /** Hide Files that match the project's root .gitignore. Off by default. */
   skipGitignore: boolean
   toolRows: number
+  /** Tool-call history kept for the feed's `… +N more` revealer. Distinct from `toolRows`. */
+  toolFetch: number
 }
 
 export const OES_DEFAULTS: OesOptions = {
@@ -33,7 +35,8 @@ export const OES_DEFAULTS: OesOptions = {
   perfTurns: 120,
   sessionRows: 4,
   skipGitignore: false,
-  toolRows: 8,
+  toolRows: 5,
+  toolFetch: 20,
 }
 
 function pluginOesPath(): string {
@@ -48,6 +51,7 @@ function clamp(n: unknown, min: number, max: number, fallback: number): number {
 /** Merge one oes.json object onto a base. Exported for tests. */
 export function pick(raw: Record<string, unknown> | null, base: OesOptions): OesOptions {
   if (!raw) return base
+  const toolRows = clamp(raw.toolRows, 3, 20, base.toolRows)
   return {
     fileRows: clamp(raw.fileRows, 3, 20, base.fileRows),
     lineMax: clamp(raw.lineMax, 20, 64, base.lineMax),
@@ -57,7 +61,8 @@ export function pick(raw: Record<string, unknown> | null, base: OesOptions): Oes
     perfTurns: clamp(raw.perfTurns, 20, 500, base.perfTurns),
     sessionRows: clamp(raw.sessionRows, 2, 12, base.sessionRows),
     skipGitignore: typeof raw.skipGitignore === "boolean" ? raw.skipGitignore : base.skipGitignore,
-    toolRows: clamp(raw.toolRows, 3, 20, base.toolRows),
+    toolRows,
+    toolFetch: clamp(raw.toolFetch, toolRows, 80, base.toolFetch),
   }
 }
 

@@ -47,18 +47,28 @@ export function localAgentizeDbPath(projectRoot: string): string | null {
 }
 
 /**
- * Resolve the opencode.db path.
+ * Resolve the opencode.db path — mirrors opencode's own resolution
+ * (`packages/opencode/src/storage/db.ts`): `OPENCODE_DB` first, then the
+ * XDG / home-based global path. agentize pins the exact DB with
+ * `OPENCODE_DB` (an absolute path), so it must win over the heuristics.
  *
  * Priority:
- *   1. OPENCODE_DB_PATH env var
- *   2. .agentize/opencode/opencode.db under projectRoot (when supplied)
- *   3. XDG / home-based global path
+ *   1. OPENCODE_DB env var (absolute → verbatim; relative → under the data dir)
+ *   2. OPENCODE_DB_PATH env var (legacy alias)
+ *   3. .agentize/opencode/opencode.db under projectRoot (when supplied)
+ *   4. XDG / home-based global path
  */
 export function getOpenCodeDbPath(
   env: Env = process.env,
   homedir = os.homedir(),
   projectRoot?: string | null,
 ): string {
+  const db = env.OPENCODE_DB
+  if (db && db !== ":memory:") {
+    return path.isAbsolute(db)
+      ? path.resolve(db)
+      : path.join(getOpenCodeRoot(env, homedir), db)
+  }
   if (env.OPENCODE_DB_PATH) return path.resolve(env.OPENCODE_DB_PATH)
   if (projectRoot) {
     const local = localAgentizeDbPath(projectRoot)
@@ -95,6 +105,12 @@ export function basenameOf(p: string): string {
 /** Positive finite number, else 0. */
 export function finiteNum(v: unknown): number {
   return typeof v === "number" && Number.isFinite(v) && v > 0 ? v : 0
+}
+
+/** Trimmed non-empty string, else null. */
+export function str(v: unknown): string | null {
+  if (typeof v === "string" && v.trim()) return v.trim()
+  return null
 }
 
 export function canonicalizePath(p: string): string {

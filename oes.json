@@ -7,5 +7,6 @@
   "perfTurns": 120,
   "sessionRows": 4,
   "skipGitignore": false,
-  "toolRows": 8
+  "toolRows": 5,
+  "toolFetch": 20
 }

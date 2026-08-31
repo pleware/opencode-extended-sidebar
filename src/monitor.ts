@@ -3,8 +3,8 @@
  */
 import fs from "node:fs"
 import path from "node:path"
-import { findBoulder } from "./omo.js"
-import { computeFingerprint, readLiveSnapshot, type LiveSnapshot } from "./live.js"
+import { findBoulder } from "./resolvers/omo/index.js"
+import { computeFingerprint, readLiveSnapshot, type LiveSnapshot } from "./resolvers/live/index.js"
 import { getOpenCodeDbPath } from "./paths.js"
 import { dbg } from "./debug.js"
 

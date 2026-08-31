@@ -6,8 +6,8 @@
  * B — queries: tools/files LIMIT 80, Perf 120 turns without History.
  */
 import { afterAll, describe, expect, test } from "bun:test"
-import { listSessionFiles, listToolEvents, readProjectFeed, sessionScanStamp } from "../../src/db.js"
-import { computeFingerprint, readLiveSnapshot, resetLiveCache } from "../../src/live.js"
+import { listSessionFiles, listToolEvents, readProjectFeed, sessionScanStamp } from "../../src/resolvers/opencode/index.js"
+import { computeFingerprint, readLiveSnapshot, resetLiveCache } from "../../src/resolvers/live/index.js"
 import { readPerfSnapshot } from "../../src/perf.js"
 import { openReadonlyDb, resetReadonlyDb } from "../../src/sqlite.js"
 import { createFixtureDb, largeSessionSeed } from "../helpers/sqlite.js"

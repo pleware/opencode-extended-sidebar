@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { listSessionFiles, listToolEvents } from "../../src/db.js"
-import { delegatesForSession, readLiveSnapshot, resetLiveCache } from "../../src/live.js"
-import { readOmo } from "../../src/omo.js"
+import { listOpenQuestions, listSessionFiles, listToolEvents } from "../../src/resolvers/opencode/index.js"
+import { delegatesForSession, readLiveSnapshot, resetLiveCache } from "../../src/resolvers/live/index.js"
+import { readOmo } from "../../src/resolvers/omo/index.js"
+import { listPendingApprovals } from "../../src/resolvers/omo/index.js"
 import { openReadonlyDb, resetReadonlyDb } from "../../src/sqlite.js"
 import { boulderWithTask, createFixtureProject } from "../helpers/project.js"
 import { assertPrivacy } from "../helpers/privacy.js"
@@ -297,5 +298,72 @@ describe("tools and files views", () => {
       expect(f.name.includes("\\")).toBe(false)
     }
     assertPrivacy({ tools, files: files.map(({ name, additions, deletions, touch, letter }) => ({ name, additions, deletions, touch, letter })) })
+  })
+})
+
+describe("My work queue", () => {
+  test("open question + awaiting-approval draft surface without leaking content", () => {
+    projFix = createFixtureProject({
+      files: {
+        ".omo/drafts/oes-v2-hardening.md":
+          "---\nstatus: awaiting-approval\npending-action: write .omo/plans/oes-v2-hardening.md\n---",
+      },
+    })
+    dbFix = createFixtureDb({
+      sessions: [
+        { id: "ses_main", project_id: "proj_a", title: "main", parent_id: null, time_updated: NOW },
+        { id: "ses_old", project_id: "proj_a", title: "earlier", parent_id: null, time_updated: NOW - 60_000 },
+      ],
+      parts: [
+        {
+          id: "prt_q",
+          session_id: "ses_main",
+          time_created: NOW - 1_000,
+          data: {
+            type: "tool",
+            tool: "question",
+            callID: "call_q",
+            state: {
+              status: "running",
+              time: { start: NOW - 1_000 },
+              input: { question: "do you approve the plan?", options: ["yes", "no"] },
+            },
+          },
+        },
+      ],
+    })
+
+    const questions = listOpenQuestions({ dbPath: dbFix.dbPath, sessionIds: ["ses_main", "ses_old"] })
+    expect(questions.map((q) => q.sessionId)).toEqual(["ses_main"])
+    expect(questions[0]?.startedAt).toBe(NOW - 1_000)
+    // The question text and options live in state.input — never read, never shown.
+    assertPrivacy({ questions })
+
+    const approvals = listPendingApprovals(projFix.root)
+    expect(approvals.map((a) => a.name)).toEqual(["oes-v2-hardening"])
+    expect(approvals[0]?.pendingAction).toBe("write .omo/plans/oes-v2-hardening.md")
+    assertPrivacy({ approvals })
+  })
+
+  test("omo-absent project yields no approvals, only questions", () => {
+    projFix = createFixtureProject({})
+    dbFix = createFixtureDb({
+      sessions: [{ id: "ses_main", project_id: "proj_a", title: "main", time_updated: NOW }],
+      parts: [
+        {
+          id: "prt_q",
+          session_id: "ses_main",
+          time_created: NOW,
+          data: {
+            type: "tool",
+            tool: "question",
+            callID: "call_q",
+            state: { status: "running", time: { start: NOW } },
+          },
+        },
+      ],
+    })
+    expect(listPendingApprovals(projFix.root)).toEqual([])
+    expect(listOpenQuestions({ dbPath: dbFix.dbPath, sessionIds: ["ses_main"] })).toHaveLength(1)
   })
 })

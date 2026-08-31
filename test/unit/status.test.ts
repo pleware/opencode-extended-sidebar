@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import {
+  isPendingWork,
   isRunningLifecycle,
   normalizeStatus,
   taskRank,
@@ -60,10 +61,21 @@ describe("mappers", () => {
     expect(workStatusGlyph("completed")).toBe("✓")
     expect(workStatusGlyph("failed")).toBe("×")
     expect(workStatusGlyph("in_progress")).toBeNull()
+    expect(workStatusGlyph("pending")).toBe("◷")
+    expect(workStatusGlyph("queued")).toBe("◷")
     expect(workIsTerminal("paused")).toBe(true)
     expect(workIsTerminal("active")).toBe(false)
     expect(isRunningLifecycle("in_progress")).toBe(true)
     expect(isRunningLifecycle("done")).toBe(false)
+  })
+  test("isPendingWork flags queued, never finished or unknown", () => {
+    expect(isPendingWork("pending")).toBe(true)
+    expect(isPendingWork("queued")).toBe(true)
+    expect(isPendingWork("in_progress")).toBe(false)
+    expect(isPendingWork("completed")).toBe(false)
+    expect(isPendingWork("cancelled")).toBe(false)
+    expect(isPendingWork(null)).toBe(false)
+    expect(isPendingWork(undefined)).toBe(false)
   })
   test("taskRank order", () => {
     expect(taskRank("running")).toBeLessThan(taskRank("queued"))

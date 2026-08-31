@@ -5,9 +5,10 @@ import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { resetOesCache } from "../../src/oes.js"
-import { resetLiveCache } from "../../src/live.js"
-import { resetDocsCache } from "../../src/docs.js"
+import { resetLiveCache } from "../../src/resolvers/live/index.js"
+import { resetDocsCache } from "../../src/resolvers/omo/doc.resolver.js"
 import { resetPerfCache } from "../../src/perf.js"
+import { resetApprovalsCache } from "../../src/resolvers/omo/approval.resolver.js"
 
 export type BoulderTask = {
   task_key?: string
@@ -74,6 +75,7 @@ export function createFixtureProject(opts?: {
       resetLiveCache()
       resetDocsCache()
       resetPerfCache()
+      resetApprovalsCache()
       try {
         fs.rmSync(root, { recursive: true, force: true })
       } catch {
