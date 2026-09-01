@@ -7,6 +7,12 @@
  */
 export * from "./pware.oc.omo.resolver.boulder.js"
 export * from "./pware.oc.omo.resolver.plan.js"
+export * from "./pware.oc.omo.resolver.planFile.js"
+export * from "./pware.oc.omo.resolver.draftFile.js"
+export * from "./pware.oc.omo.resolver.notepadsFile.js"
+export * from "./pware.oc.omo.resolver.proofFile.js"
+export * from "./pware.oc.omo.resolver.rulesFile.js"
+export * from "./pware.oc.omo.resolver.runContinuationFile.js"
 export * from "./pware.oc.omo.resolver.approval.js"
 export * from "./pware.oc.omo.resolver.approvalState.js"
 export * from "./pware.oc.omo.resolver.doc.js"

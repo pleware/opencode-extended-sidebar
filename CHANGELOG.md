@@ -1,5 +1,6 @@
 # Changelog
 
+- **0.2.28** (2026-09-01) Move the plan-to-writer-session index from the opencode resolver into the omo layer as a shared per-document-kind file engine (plan, draft, notepads, evidence, .
 - **0.2.27** (2026-09-01) Make My work an action-based queue — Ready to review / Ready to start / Finished / Drafting groups with a planner-session row suffix backed by an in-memory plan.
 - **0.2.26** (2026-08-31) Make every panel list end in a clickable "+N more" revealer via a shared RowList with useReveal and MoreReveal (replacing sliceWithOverflow so no content row is.
 - **0.2.25** (2026-08-31) Extract shared sidebar primitives into a new pware.oc.ui.sections module (useFold over the legacy folded kv contract, FoldSection, budget-sliced GroupSection, a.

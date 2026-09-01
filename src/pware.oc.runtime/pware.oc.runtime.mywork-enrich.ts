@@ -11,10 +11,10 @@
  */
 import fs from "node:fs"
 import {
-  planSessionIndex,
   sessionActivityState,
   type SessionActivityState,
 } from "../pware.oc.opencode/resolver/pware.oc.opencode.resolver.session.js"
+import { planSessionIndex } from "../pware.oc.omo/resolver/index.js"
 import { openReadonlyDb, withDbRead } from "../pware.oc.core/pware.oc.core.sqlite.js"
 import { profile } from "../pware.oc.core/pware.oc.core.debug.js"
 import { basenameOf } from "../pware.oc.core/pware.oc.core.paths.js"

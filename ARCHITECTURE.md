@@ -74,6 +74,12 @@ src/
 │       ├── index.ts
 │       ├── pware.oc.omo.resolver.boulder.ts
 │       ├── pware.oc.omo.resolver.plan.ts
+│       ├── pware.oc.omo.resolver.planFile.ts
+│       ├── pware.oc.omo.resolver.draftFile.ts
+│       ├── pware.oc.omo.resolver.notepadsFile.ts
+│       ├── pware.oc.omo.resolver.proofFile.ts
+│       ├── pware.oc.omo.resolver.rulesFile.ts
+│       ├── pware.oc.omo.resolver.runContinuationFile.ts
 │       ├── pware.oc.omo.resolver.approval.ts
 │       ├── pware.oc.omo.resolver.approvalGroup.ts
 │       ├── pware.oc.omo.resolver.approvalState.ts
@@ -109,7 +115,7 @@ src/
 | `pware.oc.perf` | timing reader + view | core |
 | `pware.oc.runtime` | snapshot composition, monitor, my-work queue | opencode, omo, core |
 | `pware.oc.opencode` | OpenCode data source | core |
-| `pware.oc.omo` | OMO data source | core |
+| `pware.oc.omo` | OMO data source | opencode, core |
 | `pware.oc.core` | shared infra, pure helpers, git | **nothing** |
 
 Rules:
@@ -117,10 +123,14 @@ Rules:
 - A module imports only from its own layer or below. **`core` never imports a
   domain or the UI.**
 - A domain = one data source. `opencode` reads SQLite + host events; `omo`
-  reads `.omo/` / `.sisyphus/` files. Neither reads the other's data.
-- `runtime` is the only place that composes the two domains into one snapshot.
-  `monitor.ts` lives here because it watches boulder (omo) and drives
-  `readRuntimeSnapshot` (runtime).
+  reads `.omo/` / `.sisyphus/` files.
+- The dependency lock is **one-way**: `omo` may read `opencode` data — OMO is a
+  plugin that runs on top of OpenCode, and this sidebar is omo-optional (it
+  works without omo and shows the OMO group only when `.omo/` is present). The
+  reverse is forbidden: `opencode` never reads `omo` data.
+- `runtime` is where the panel snapshot is composed from both domains. `omo`
+  may reach into `opencode` data for its own resolutions (e.g. the plan → session
+  index reads the OpenCode DB); `opencode` stays blind to `.omo/`.
 - The panel renders; it does not re-decide. View rules (glyphs, labels, row
   budgets, folds) live in `core` or `ui` as exported helpers the JSX calls.
 - No `core` module imports a `pware.oc.ui.*` module. Formatter data such as
@@ -178,7 +188,7 @@ Plugin registration: `id = "opencode-extended-sidebar"`, load toast,
 | Module | Responsibility | Key exports |
 |---|---|---|
 | `files.ts` | `FileView`: basename + diff stats only | `FileView`, `FileLetter`, `filesFromEvent()`, `filesFromPatchJson()`, `fileHitFromExtracted()`, `decorateFiles()`, `mergeFiles()`, `sumDiff()`, `shortFileName()`, `formatDiffStat()` |
-| `resolver/session.ts` | session rows → `SessionView`, hierarchy queries | `toSessionView()`, `inferStatus()`, `sessionActivityState()`, `getSessionById()`, `listChildSessions()`, `listRecentMainSessions()`, `getSessionsByIds()`, `sessionScanStamp()`, `planSessionIndex()`, `sessionForPlanFile()` |
+| `resolver/session.ts` | session rows → `SessionView`, hierarchy queries | `toSessionView()`, `inferStatus()`, `sessionActivityState()`, `getSessionById()`, `listChildSessions()`, `listRecentMainSessions()`, `getSessionsByIds()`, `sessionScanStamp()` |
 | `resolver/tool.ts` | tool parts → `ToolView`, metadata only | `listToolEvents()`, `listRecentToolEvents()`, `mergeTools()`, `normalizeToolStatus` |
 | `resolver/file.ts` | file-touch parts → `FileView` | `listSessionFiles()`, `listRecentSessionFiles()` |
 | `resolver/question.ts` | open `question` queue | `listOpenQuestions()` |
@@ -199,6 +209,12 @@ Plugin registration: `id = "opencode-extended-sidebar"`, load toast,
 |---|---|---|
 | `resolver/boulder.ts` | `boulder.json` → works/tasks/delegates/plan | `readOmo()`, `emptyOmo()`, `findBoulder()`, `findOmoWatchDirs()`, `isOmoPresent()`, `omoStamp()`, `currentTask()`, `workRowView()`, `workStatusLabel` |
 | `resolver/plan.ts` | plan markdown frontmatter parsing | `parsePlanStatus()`, `parsePlanPendingAction()`, `parseReviewBlock()`, `approvalName()` |
+| `resolver/planFile.ts` | omo file → writer-session index (reads the OpenCode DB via `SqlDb`); one generic engine for every document kind | `planSessionIndex()`, `sessionForPlanFile()`, `PlanSessionIndex`, `omoFileIndex()`, `sessionForOmoFile()`, `OMO_FILE_KINDS`, `OmoFileKind`, `OmoFileIndex` |
+| `resolver/draftFile.ts` | draft-file → writer-session index (thin wrapper over `planFile.ts`) | `draftSessionIndex()`, `sessionForDraftFile()` |
+| `resolver/notepadsFile.ts` | notepad-file → writer-session index (thin wrapper over `planFile.ts`) | `notepadsSessionIndex()`, `sessionForNotepadFile()` |
+| `resolver/proofFile.ts` | evidence (proof) file → writer-session index (thin wrapper over `planFile.ts`) | `proofSessionIndex()`, `sessionForProofFile()` |
+| `resolver/rulesFile.ts` | rule-file → writer-session index (thin wrapper over `planFile.ts`) | `rulesSessionIndex()`, `sessionForRuleFile()` |
+| `resolver/runContinuationFile.ts` | run-continuation file → writer-session index (thin wrapper over `planFile.ts`) | `runContinuationSessionIndex()`, `sessionForRunContinuationFile()` |
 | `resolver/approval.ts` | the four "My work" approval buckets (ready-to-review / ready-to-start / finished / drafting; TTL, lazy) | `listApprovals()`, `resetApprovalsCache()` |
 | `resolver/approvalGroup.ts` | "My work" approval grouping from OMO plan status + draft path | `approvalGroup()`, `isDraftOf()` |
 | `resolver/approvalState.ts` | `.omo/run-continuation` background-task marker | `readRunContinuationState()`, `firstRunContinuationDir()` |
