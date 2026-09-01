@@ -1,5 +1,6 @@
 # Changelog
 
+- **0.2.35** (2026-09-01) Add asciichart, simple-statistics and @crafter/charts chart/stat dependencies.
 - **0.2.34** (2026-09-01) Close the omo layer's cross-domain edges by moving workStatusGlyph into core and the approval session-state enrichment type into runtime (EnrichedApproval), correct the perf layer rule so its TUI view may import ui, and version the .cursor rules in the repo
 - **0.2.33** (2026-09-01) Extract the host and OMO event wiring into a typed event bus (pware.oc.core.bus with PwareEvent and per-layer EV_* event-name constants), adapt host TUI events .
 - **0.2.32** (2026-09-01) Refresh a session's status together with its age on live-snapshot cache hits so the My work Running group no longer keeps sessions that went idle, list only run.
