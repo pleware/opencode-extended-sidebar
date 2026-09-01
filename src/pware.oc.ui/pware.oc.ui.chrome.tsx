@@ -120,6 +120,22 @@ export function DiffStat(props: {
   )
 }
 
+/** Header text for a fold row: title, optional `(N)` / `(live/N)` / `(countLabel)` parenthetical, optional suffix. */
+export function foldHeaderTitle(
+  title: string,
+  opts: { count?: number; live?: number; countLabel?: string; suffix?: string } = {},
+): string {
+  const { count, live = 0, countLabel, suffix } = opts
+  const stat = suffix ? ` ${suffix}` : ""
+  if (typeof count !== "number") return `${title}${stat}`
+  const extra = countLabel
+    ? ` (${countLabel})`
+    : live > 0
+      ? ` (${live}/${count})`
+      : ` (${count})`
+  return `${title}${extra}${stat}`
+}
+
 export function FoldHeader(props: {
   title: string
   open: boolean
@@ -133,25 +149,15 @@ export function FoldHeader(props: {
   onToggle: () => void
   /** Title click opens a detail (fold stays on the chevron). */
   onDetail?: () => void
-  /** Extra clickable label at the end of the row, e.g. a switch action. */
-  action?: { label: string; onPick: () => void }
+  /** Extra clickable labels at the end of the row, e.g. switch / new actions. */
+  actions?: ReadonlyArray<{ label: string; onPick: () => void }>
 }): JSX.Element {
-  const rest = () => {
-    const n = props.count
-    const stat = props.suffix ? ` ${props.suffix}` : ""
-    if (typeof n !== "number") return `${props.title}${stat}`
-    const live = props.live ?? 0
-    const extra = props.countLabel
-      ? ` (${props.countLabel})`
-      : live > 0
-        ? ` (${live}/${n})`
-        : ` (${n})`
-    return `${props.title}${extra}${stat}`
-  }
+  const rest = () => foldHeaderTitle(props.title, props)
   const hasDiff = () =>
     Boolean(props.diff && (props.diff.additions > 0 || props.diff.deletions > 0))
   const chevron = () => (props.open ? "▼" : "▶")
-  const split = Boolean(props.onDetail || props.action)
+  const actions = () => props.actions ?? []
+  const split = Boolean(props.onDetail || actions().length > 0)
   return (
     <box flexDirection="row" onMouseUp={split ? undefined : props.onToggle}>
       <ClickText
@@ -174,16 +180,20 @@ export function FoldHeader(props: {
           colors={props.colors}
         />
       </Show>
-      <Show when={props.action}>
-        <text> </text>
-        <ClickText
-          fg={props.colors.primary || props.colors.text}
-          underline
-          onMouseUp={props.action?.onPick}
-        >
-          {props.action?.label}
-        </ClickText>
-      </Show>
+      <For each={actions()}>
+        {(action) => (
+          <>
+            <text> </text>
+            <ClickText
+              fg={props.colors.primary || props.colors.text}
+              underline
+              onMouseUp={action.onPick}
+            >
+              {action.label}
+            </ClickText>
+          </>
+        )}
+      </For>
     </box>
   )
 }
@@ -207,15 +217,19 @@ export function BrandTabs(props: {
     props.active === tab ? props.colors.primary || props.colors.text : props.colors.textMuted
   return (
     <box flexDirection="row" gap={1}>
-      <box flexDirection="row" onMouseUp={props.onBrand}>
-        <ClickText fg={brand()} bold underline={Boolean(props.onBrand)}>
-          {props.brand}
-        </ClickText>
-      </box>
+      <Show when={props.brand}>
+        <box flexDirection="row" onMouseUp={props.onBrand}>
+          <ClickText fg={brand()} bold underline={Boolean(props.onBrand)}>
+            {props.brand}
+          </ClickText>
+        </box>
+      </Show>
       <For each={props.tabs}>
-        {(tab: string) => (
+        {(tab: string, i) => (
           <box flexDirection="row" gap={1} onMouseUp={() => props.onPick(tab)}>
-            <text fg={props.colors.textMuted}>|</text>
+            <Show when={Boolean(props.brand) || i() > 0}>
+              <text fg={props.colors.textMuted}>|</text>
+            </Show>
             <ClickText fg={tabFg(tab)} bold={props.active === tab} underline>
               {props.labels[tab] ?? tab}
             </ClickText>

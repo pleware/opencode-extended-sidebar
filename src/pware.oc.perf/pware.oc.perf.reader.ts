@@ -6,16 +6,26 @@
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
-import { dbg } from "../pware.oc.core/pware.oc.core.debug.js"
+import { dbg, profile } from "../pware.oc.core/pware.oc.core.debug.js"
 import { createStampCache } from "../pware.oc.core/pware.oc.core.cache.js"
 import { finiteNum } from "../pware.oc.core/pware.oc.core.paths.js"
 import { formatDuration, formatWhen, shortToolLabel, toEpochMs } from "../pware.oc.core/pware.oc.core.pulse.js"
 import { openReadonlyDb, withDbRead, type SqlDb } from "../pware.oc.core/pware.oc.core.sqlite.js"
 import { PART_TYPE_REASONING, PART_TYPE_TEXT, PART_TYPE_TOOL } from "../pware.oc.core/constants/pware.oc.core.constants.partType.js"
 import { TOOL_QUESTION } from "../pware.oc.core/constants/pware.oc.core.constants.toolName.js"
+import {
+  PERF_LOG_KIND_MODELS,
+  PERF_LOG_KIND_TIME,
+  PERF_PHASE_IDLE,
+  PERF_PHASE_RECV,
+  PERF_PHASE_THINK,
+  PERF_PHASE_TOOL,
+  PERF_PHASE_WAIT,
+  type PerfLogKind,
+  type PerfPhase,
+} from "../pware.oc.core/constants/pware.oc.core.constants.phase.js"
 
-/** Where the session's wall clock goes. `idle` is whatever the phases do not claim. */
-export type PerfPhase = "wait" | "think" | "recv" | "tool" | "idle"
+export type { PerfLogKind, PerfPhase }
 
 export type PhaseSplit = Record<PerfPhase, number>
 
@@ -296,8 +306,6 @@ export function formatColumns(headers: string[], rows: string[][]): string {
   return [line(headers), ...rows.map((r) => line(headers.map((_, i) => r[i] ?? "")))].join("\n")
 }
 
-export type PerfLogKind = PerfPhase | "models" | "time"
-
 export type PerfLogRow = {
   at: number | null
   end?: number | null
@@ -334,7 +342,7 @@ export function toolLogCall(part: PartRow): { tool: string; call: string } {
 }
 
 export function perfLogKindLabel(kind: PerfLogKind): string {
-  return kind === "tool" ? "tools" : kind
+  return kind === PERF_PHASE_TOOL ? "tools" : kind
 }
 
 export function perfLogFileName(kind: PerfLogKind, generatedAt: number, toolFilter?: string): string {
@@ -386,16 +394,16 @@ export function collectPerfLogRows(
       tin: num(row.tin),
       tout: num(row.tout),
     })
-    if (kind === "wait" || kind === "time") {
-      rows.push({ at: start, end, phase: "wait", name: model, status, ms: waitMs })
+    if (kind === PERF_PHASE_WAIT || kind === PERF_LOG_KIND_TIME) {
+      rows.push({ at: start, end, phase: PERF_PHASE_WAIT, name: model, status, ms: waitMs })
     }
-    if ((kind === "think" || kind === "time") && b.thinkMs > 0) {
-      rows.push({ at: start, end, phase: "think", name: model, status, ms: b.thinkMs })
+    if ((kind === PERF_PHASE_THINK || kind === PERF_LOG_KIND_TIME) && b.thinkMs > 0) {
+      rows.push({ at: start, end, phase: PERF_PHASE_THINK, name: model, status, ms: b.thinkMs })
     }
-    if (kind === "recv" || kind === "time") {
-      rows.push({ at: start, end, phase: "recv", name: model, status, ms: recvMs })
+    if (kind === PERF_PHASE_RECV || kind === PERF_LOG_KIND_TIME) {
+      rows.push({ at: start, end, phase: PERF_PHASE_RECV, name: model, status, ms: recvMs })
     }
-    if (kind === "models") {
+    if (kind === PERF_LOG_KIND_MODELS) {
       rows.push({
         at: start,
         end,
@@ -408,9 +416,9 @@ export function collectPerfLogRows(
     }
   }
 
-  if (kind === "tool" || kind === "time") {
+  if (kind === PERF_PHASE_TOOL || kind === PERF_LOG_KIND_TIME) {
     for (const part of parts) {
-      if ((part.kind || "") !== "tool") continue
+      if ((part.kind || "") !== PERF_PHASE_TOOL) continue
       if (!countsAsTool(part.tool)) continue
       const start = toEpochMs(part.tstart)
       const end = toEpochMs(part.tend)
@@ -420,7 +428,7 @@ export function collectPerfLogRows(
       rows.push({
         at: start,
         end,
-        phase: "tool",
+        phase: PERF_PHASE_TOOL,
         tool,
         name: call,
         status: failed ? "error" : hintStr(part.status) || "ok",
@@ -429,7 +437,7 @@ export function collectPerfLogRows(
     }
   }
 
-  if (kind === "idle" || kind === "time") {
+  if (kind === PERF_PHASE_IDLE || kind === PERF_LOG_KIND_TIME) {
     const ordered = [...assistant].sort((a, b) => (a.start ?? 0) - (b.start ?? 0))
     for (let i = 0; i < ordered.length - 1; i += 1) {
       const cur = ordered[i]
@@ -438,7 +446,7 @@ export function collectPerfLogRows(
       const from = cur.end ?? cur.start
       const gap = span(from, next.start)
       if (gap > 0) {
-        rows.push({ at: from, end: next.start, phase: "idle", name: "gap", status: "ok", ms: gap })
+        rows.push({ at: from, end: next.start, phase: PERF_PHASE_IDLE, name: "gap", status: "ok", ms: gap })
       }
     }
   }
@@ -457,7 +465,7 @@ export type PerfLogDoc = {
 function toolSummary(rows: PerfLogRow[]): { headers: string[]; rows: string[][] } {
   const by = new Map<string, { tool: string; call: string; count: number; errors: number; totalMs: number }>()
   for (const row of rows) {
-    if (row.phase !== "tool") continue
+    if (row.phase !== PERF_PHASE_TOOL) continue
     const tool = row.tool || row.name
     const call = row.tool ? row.name : "—"
     const key = `${tool}\t${call}`
@@ -493,7 +501,7 @@ export function formatPerfLog(
     "",
   ]
   const parts = [...head]
-  if (kind === "tool" || kind === "time") {
+  if (kind === PERF_PHASE_TOOL || kind === PERF_LOG_KIND_TIME) {
     const sum = toolSummary(rows)
     if (sum.rows.length > 0) {
       parts.push(formatColumns(sum.headers, sum.rows), "")
@@ -503,7 +511,7 @@ export function formatPerfLog(
     parts.push("(no rows)")
     return `${parts.join("\n")}\n`
   }
-  if (kind === "models") {
+  if (kind === PERF_LOG_KIND_MODELS) {
     const headers = ["when", "model", "wait", "think", "recv", "tools", "in", "out", "status"]
     const body = rows.map((r) => {
       const extra = (r.extra ?? "").split("\t")
@@ -520,7 +528,7 @@ export function formatPerfLog(
       ]
     })
     parts.push(formatColumns(headers, body))
-  } else if (kind === "tool") {
+  } else if (kind === PERF_PHASE_TOOL) {
     parts.push(
       formatColumns(
         ["when", "ended", "tool", "call", "status", "duration"],
@@ -534,7 +542,7 @@ export function formatPerfLog(
         ]),
       ),
     )
-  } else if (kind === "time") {
+  } else if (kind === PERF_LOG_KIND_TIME) {
     parts.push(
       formatColumns(
         ["when", "ended", "phase", "tool", "call", "status", "duration"],
@@ -908,8 +916,10 @@ export function readPerfSnapshot(opts: PerfOptions): PerfSnapshot {
   }
 
   const run = () =>
-    withDbRead(load, (e) =>
-      emptyPerf(opts.sessionId, e instanceof Error ? e.message : "perf read failed"),
+    profile("perf.read", () =>
+      withDbRead(load, (e) =>
+        emptyPerf(opts.sessionId, e instanceof Error ? e.message : "perf read failed"),
+      ),
     )
   if (!key) return run()
   return perfCache.get(key, run)

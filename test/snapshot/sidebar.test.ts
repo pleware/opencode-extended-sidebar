@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { listOpenQuestions, listSessionFiles, listToolEvents } from "../../src/pware.oc.opencode/resolver/index.js"
+import path from "node:path"
+import { listOpenQuestions, listSessionFiles, listToolEvents, planSessionIndex } from "../../src/pware.oc.opencode/resolver/index.js"
 import { delegatesForSession, readRuntimeSnapshot, resetRuntimeCache } from "../../src/pware.oc.runtime/resolver/index.js"
 import { readOmo } from "../../src/pware.oc.omo/resolver/index.js"
-import { listPendingApprovals } from "../../src/pware.oc.omo/resolver/index.js"
+import { approvalName, listApprovals } from "../../src/pware.oc.omo/resolver/index.js"
 import { openReadonlyDb, resetReadonlyDb } from "../../src/pware.oc.core/pware.oc.core.sqlite.js"
 import { boulderWithTask, createFixtureProject } from "../helpers/project.js"
 import { assertPrivacy } from "../helpers/privacy.js"
@@ -336,7 +337,7 @@ describe("My work queue", () => {
     // The question text and options live in state.input — never read, never shown.
     assertPrivacy({ questions })
 
-    const approvals = listPendingApprovals(projFix.root)
+    const approvals = listApprovals(projFix.root).readyReview
     expect(approvals.map((a) => a.name)).toEqual(["oes-v2-hardening"])
     expect(approvals[0]?.pendingAction).toBe("write .omo/plans/oes-v2-hardening.md")
     expect(approvals[0]?.sessionState).toBeNull()
@@ -361,7 +362,55 @@ describe("My work queue", () => {
         },
       ],
     })
-    expect(listPendingApprovals(projFix.root)).toEqual([])
+    expect(listApprovals(projFix.root)).toEqual({ drafting: [], readyReview: [], readyStart: [], finished: [] })
     expect(listOpenQuestions({ dbPath: dbFix.dbPath, projectId: "proj_a" })).toHaveLength(1)
+  })
+
+  test("awaiting-approval draft, approved plan, done plan split into three groups", () => {
+    projFix = createFixtureProject({
+      files: {
+        ".omo/drafts/awaiting-review.md": "---\nstatus: awaiting-approval\n---",
+        ".omo/plans/approved-plan.md": "---\nstatus: approved\n---",
+        ".omo/plans/shipped-plan.md": "---\nstatus: done\n---",
+      },
+    })
+    const approvals = listApprovals(projFix.root)
+    expect(approvals.readyReview.map((a) => a.name)).toEqual(["awaiting-review"])
+    expect(approvals.readyStart.map((a) => a.name)).toEqual(["approved-plan"])
+    expect(approvals.finished.map((a) => a.name)).toEqual(["shipped-plan"])
+    expect(approvals.drafting).toEqual([])
+    assertPrivacy({ approvals })
+  })
+
+  test("last plan slug is basename-only; finished rows leak no paths", () => {
+    projFix = createFixtureProject({
+      files: { ".omo/plans/oauth-migration.md": "---\nstatus: done\n---" },
+    })
+    dbFix = createFixtureDb({
+      sessions: [{ id: "ses_main", project_id: "proj_lastplan", title: "main", time_updated: NOW }],
+      parts: [
+        {
+          id: "prt_write_plan",
+          session_id: "ses_main",
+          time_created: NOW - 1_000,
+          data: toolPartData({
+            tool: "write",
+            filePath: path.join(projFix.root, ".omo", "plans", "oauth-migration.md"),
+            pad: false,
+          }),
+        },
+      ],
+    })
+    const db = openReadonlyDb(dbFix.dbPath)
+    expect(db).toBeTruthy()
+    const index = planSessionIndex(db!, "proj_lastplan", projFix.root)
+    const plan = index.sessionPlan.get("ses_main")
+    expect(plan?.isPlan).toBe(true)
+    expect(plan?.rel).toBe(".omo/plans/oauth-migration.md")
+    expect(approvalName(plan!.rel)).toBe("oauth-migration")
+
+    const finished = listApprovals(projFix.root).finished
+    expect(finished.map((a) => a.name)).toEqual(["oauth-migration"])
+    assertPrivacy({ rels: [...index.sessionPlan.values()].map((p) => p.rel), finished })
   })
 })

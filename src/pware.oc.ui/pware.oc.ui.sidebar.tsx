@@ -3,11 +3,11 @@ import { createEffect, createMemo, createSignal, For, on, Show, onCleanup, type 
 import { useTerminalDimensions } from "@opentui/solid"
 import type { TuiKeymap, TuiPluginApi, TuiTheme } from "@opencode-ai/plugin/tui"
 import {
+  approvalName,
   currentTask,
   emptyOmo,
   groupDocs,
-  listDraftingApprovals,
-  listPendingApprovals,
+  listApprovals,
   readOmoDocs,
   workRowView,
   workStatusLabel,
@@ -34,6 +34,7 @@ import {
   emptyProjectFeed,
   listOpenQuestions,
   mergeTools,
+  planSessionIndex,
   readProjectFeed,
   sessionForPlanFile,
   type ProjectFeed,
@@ -44,15 +45,58 @@ import {
   type DocView,
 } from "../pware.oc.omo/resolver/pware.oc.omo.resolver.doc.js"
 import type { DelegateView } from "../pware.oc.runtime/resolver/pware.oc.runtime.resolver.delegate.js"
-import { enrichApprovalSessionStates, planSessionStateLabel } from "../pware.oc.omo/resolver/pware.oc.omo.resolver.approvalState.js"
+import { enrichApprovalSessionStates, planSessionStateLabel } from "../pware.oc.runtime/pware.oc.runtime.mywork-enrich.js"
 import {
   ROW_MIN,
   ROW_RANK,
   SESSION_MORE_STEP,
   packSections,
   panelRows,
+  rowsForPlan,
 } from "../pware.oc.core/pware.oc.core.layout.js"
 import { openReadonlyDb } from "../pware.oc.core/pware.oc.core.sqlite.js"
+import {
+  FLOW_TOOL,
+  MARK_QUEUED,
+  MARK_READY,
+  PULSE_IDLE,
+  PULSE_LIVE,
+  PULSE_STALE,
+} from "../pware.oc.core/constants/pware.oc.core.constants.pulse.js"
+import {
+  STATUS_ARCHIVED,
+  STATUS_ERROR,
+  TOOL_STATUS_RUNNING,
+} from "../pware.oc.core/constants/pware.oc.core.constants.status.js"
+import {
+  SESSION_STATUS_ARCHIVED,
+} from "../pware.oc.opencode/constants/pware.oc.opencode.constants.sessionStatus.js"
+import {
+  ROW_KIND_AGENT,
+  ROW_KIND_DELEGATE,
+  ROW_KIND_FILE,
+  ROW_KIND_GROUP,
+  ROW_KIND_TOOL,
+} from "../pware.oc.core/constants/pware.oc.core.constants.rowKind.js"
+import {
+  QUESTION_KIND_ERROR,
+} from "../pware.oc.opencode/constants/pware.oc.opencode.constants.questionKind.js"
+import {
+  MY_WORK_GROUP_DRAFTING,
+  MY_WORK_GROUP_FINISHED,
+  MY_WORK_GROUP_READY_REVIEW,
+  MY_WORK_GROUP_READY_START,
+} from "../pware.oc.core/constants/pware.oc.core.constants.myWork.js"
+import {
+  DOC_KIND_DRAFT,
+  DOC_KIND_NOTEPAD,
+  DOC_KIND_PLAN,
+  DOC_KIND_PROOF,
+} from "../pware.oc.omo/constants/pware.oc.omo.constants.docKind.js"
+import {
+  START_WORK_MAKE_PR,
+  START_WORK_SHIP,
+} from "../pware.oc.omo/constants/pware.oc.omo.constants.startWork.js"
 import {
   GROUP_GLYPH,
   fileLetterMark,
@@ -71,6 +115,7 @@ import {
   clip,
   useFold,
   useReveal,
+  type RevealState,
   type RowData,
 } from "./pware.oc.ui.sections.js"
 import { emptyPerf, readPerfSnapshot } from "../pware.oc.perf/pware.oc.perf.reader.js"
@@ -90,7 +135,7 @@ import { isPendingWork } from "../pware.oc.core/pware.oc.core.status.js"
 import { startMonitor } from "../pware.oc.runtime/pware.oc.runtime.monitor.js"
 import { openApprovalDialog, openDocDetail, openFileDetail, openToolDetail, openWorkDetail } from "./pware.oc.ui.menudialogs.js"
 import { eventType, shouldRefreshDb } from "../pware.oc.core/pware.oc.core.events.js"
-import { dbg } from "../pware.oc.core/pware.oc.core.debug.js"
+import { dbg, debugActive, debugActiveDir, profile, profileActive, profileActiveDir, profileAsync, writeProfileSummary } from "../pware.oc.core/pware.oc.core.debug.js"
 import { getOpenCodeDbPath } from "../pware.oc.core/pware.oc.core.paths.js"
 import {
   EVENT_SCAN_DEBOUNCE_MS,
@@ -160,7 +205,7 @@ function selectSession(api: TuiPluginApi, sessionId: string | null | undefined):
       // host without session switch
     }
   }
-  void go()
+  void profileAsync("rpc.selectSession", go)
 }
 
 /** Open the host session switcher — the same dialog the `/sessions` command opens. */
@@ -182,6 +227,23 @@ function openSessionSwitcher(api: TuiPluginApi): void {
   }
 }
 
+/** Create a brand-new session in the current project and jump to it. */
+function newSession(api: TuiPluginApi, directory: string | null | undefined): void {
+  const go = async () => {
+    try {
+      const created = await api.client.session.create({
+        directory: directory ?? undefined,
+      })
+      const res = created as { data?: { id?: string }; id?: string } | null | undefined
+      const id = res?.data?.id ?? res?.id
+      if (id) selectSession(api, id)
+    } catch {
+      // host without session creation
+    }
+  }
+  void profileAsync("rpc.newSession", go)
+}
+
 const KV_FOLD_AGENTS = "oes.fold.agents"
 const KV_FOLD_DELEGATES = "oes.fold.delegates"
 const KV_FOLD_SESSIONS = "oes.fold.sessions"
@@ -192,19 +254,19 @@ const KV_TAB = "oes.tab"
 const KV_OMO_TAB = "oes.omoTab"
 
 /** Docs groups are a fixed enum — the fold keys are stable. */
-const DOC_KIND_ORDER: readonly DocKind[] = ["plan", "draft", "notepad", "proof"]
+  const DOC_KIND_ORDER: readonly DocKind[] = [DOC_KIND_PLAN, DOC_KIND_DRAFT, DOC_KIND_NOTEPAD, DOC_KIND_PROOF]
 
 /** Two independent groups: OES is the core, OMO is an optional add-on below it. */
-const OES_TABS = ["mywork", "sessions", "current", "perf"] as const
+const OES_TABS = ["current", "mywork", "sessions", "perf"] as const
 const OMO_TABS = ["works", "boulder", "docs"] as const
 type OesTab = (typeof OES_TABS)[number]
 type OmoTab = (typeof OMO_TABS)[number]
 
 const TAB_LABELS: Record<string, string> = {
   mywork: "My work",
-  sessions: "Project",
+  sessions: "Summary",
   current: "Session",
-  perf: "Perf",
+  perf: "Stats",
   works: "Works",
   boulder: "Boulder",
   docs: "Docs",
@@ -230,7 +292,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   const [seen, setSeen] = createSignal<Record<string, number>>({})
   const [busy, setBusy] = createSignal<Record<string, boolean>>({})
   const [flow, setFlow] = createSignal<Record<string, FlowEntry>>({})
-  const [tab, setTab] = createSignal<OesTab>(kvReadOne(props.api, KV_TAB, "sessions", OES_TABS))
+  const [tab, setTab] = createSignal<OesTab>(kvReadOne(props.api, KV_TAB, "current", OES_TABS))
   const [omoTab, setOmoTab] = createSignal<OmoTab>(
     kvReadOne(props.api, KV_OMO_TAB, "works", OMO_TABS),
   )
@@ -243,7 +305,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
 
   const requestRender = () => {
     try {
-      props.api.renderer.requestRender()
+      profile("requestRender", () => props.api.renderer.requestRender())
     } catch {
       // teardown
     }
@@ -273,7 +335,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     onChange: apply,
   })
 
-  const refresh = () => selfTime("scan", () => monitor.refresh())
+  const refresh = () => profile("scan", () => selfTime("scan", () => monitor.refresh()))
 
   const ingestFiles = (hits: FileView[]) => {
     if (!hits.length) return
@@ -284,86 +346,96 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     })
   }
 
-  const hydrateDiff = () => {
-    try {
-      const fn = props.api.client?.session?.diff
-      if (typeof fn !== "function") return
-      const take = (res: unknown) => {
-        const o = res && typeof res === "object" ? (res as Record<string, unknown>) : null
-        const rows = o && (Array.isArray(o.data) ? o.data : Array.isArray(o.diff) ? o.diff : null)
-        const list = rows ?? (Array.isArray(res) ? res : null)
-        if (!list) return
-        ingestFiles(
-          filesFromEvent(
-            { type: "session.diff", properties: { sessionID: props.sessionId, diff: list } },
-            props.sessionId,
-            fileFilter(projectDir()),
-          ),
+  const hydrateDiff = () =>
+    profile("hydrate", () => {
+      try {
+        const fn = props.api.client?.session?.diff
+        if (typeof fn !== "function") return
+        const take = (res: unknown) => {
+          const o = res && typeof res === "object" ? (res as Record<string, unknown>) : null
+          const rows = o && (Array.isArray(o.data) ? o.data : Array.isArray(o.diff) ? o.diff : null)
+          const list = rows ?? (Array.isArray(res) ? res : null)
+          if (!list) return
+          ingestFiles(
+            filesFromEvent(
+              { type: "session.diff", properties: { sessionID: props.sessionId, diff: list } },
+              props.sessionId,
+              fileFilter(projectDir()),
+            ),
+          )
+        }
+        void profileAsync("rpc.diff", () =>
+          Promise.resolve()
+            .then(() => fn({ sessionID: props.sessionId }))
+            .then(take)
+            .catch(() => {}),
         )
+      } catch {
+        // host client without session.diff
       }
-      void Promise.resolve()
-        .then(() => fn({ sessionID: props.sessionId }))
-        .then(take)
-        .catch(() => {})
-    } catch {
-      // host client without session.diff
-    }
-  }
+    })
 
   /** Rebind to the session the props point at. A stale select event only nudges a refresh. */
-  const remount = () => {
-    const id = props.sessionId
-    if (id === watchedId) {
-      refresh()
-      return
-    }
-    resetSelfStats()
-    watchedId = id
-    setLiveTools({})
-    setLiveFiles({})
-    monitor.stop()
-    monitor = startMonitor({
-      sessionId: id,
-      projectRoot: projectDir(),
-      onChange: apply,
+  const remount = () =>
+    profile("remount", () => {
+      const id = props.sessionId
+      if (id === watchedId) {
+        refresh()
+        return
+      }
+      resetSelfStats()
+      watchedId = id
+      setLiveTools({})
+      setLiveFiles({})
+      monitor.stop()
+      monitor = startMonitor({
+        sessionId: id,
+        projectRoot: projectDir(),
+        onChange: apply,
+      })
+      queueMicrotask(hydrateDiff)
     })
-    queueMicrotask(hydrateDiff)
-  }
 
   createEffect(on(() => props.sessionId, remount, { defer: true }))
 
   queueMicrotask(hydrateDiff)
 
   let debounce: ReturnType<typeof setTimeout> | null = null
-  const onEvent = (...args: unknown[]) => selfTime("event", () => {
-    const evt = args[0]
-    const id = sessionIdFromEvent(evt) ?? props.sessionId
-    const flag = sessionBusyFromEvent(evt)
-    if (flag.busy !== false) bumpSeen(id)
-    if (flag.id && flag.busy != null) {
-      setBusy((prev) => ({ ...prev, [flag.id!]: flag.busy! }))
-    } else if (flag.busy != null) {
-      setBusy((prev) => ({ ...prev, [id]: flag.busy! }))
-    }
-    const hint = flowFromEvent(evt)
-    const flowId = hint.id ?? id
-    if (flowId && hint.dir) {
-      const at = Date.now()
-      setFlow((prev) => applyFlow(prev, flowId, hint.dir!, at))
-    }
-    const hit = toolHitFromEvent(evt)
-    if (hit && (!hit.sessionId || hit.sessionId === props.sessionId)) {
-      setLiveTools((prev) => ({ ...prev, [hit.id]: hit }))
-    }
-    ingestFiles(filesFromEvent(evt, props.sessionId, fileFilter(projectDir())))
-    queueMicrotask(requestRender)
-    if (!shouldRefreshDb(eventType(evt))) return
-    if (debounce) clearTimeout(debounce)
-    debounce = setTimeout(() => {
-      debounce = null
-      refresh()
-    }, EVENT_SCAN_DEBOUNCE_MS)
-  })
+  const onEvent = (...args: unknown[]) =>
+    profile(
+      "event",
+      () =>
+        selfTime("event", () => {
+          const evt = args[0]
+          const id = sessionIdFromEvent(evt) ?? props.sessionId
+          const flag = sessionBusyFromEvent(evt)
+          if (flag.busy !== false) bumpSeen(id)
+          if (flag.id && flag.busy != null) {
+            setBusy((prev) => ({ ...prev, [flag.id!]: flag.busy! }))
+          } else if (flag.busy != null) {
+            setBusy((prev) => ({ ...prev, [id]: flag.busy! }))
+          }
+          const hint = flowFromEvent(evt)
+          const flowId = hint.id ?? id
+          if (flowId && hint.dir) {
+            const at = Date.now()
+            setFlow((prev) => applyFlow(prev, flowId, hint.dir!, at))
+          }
+          const hit = toolHitFromEvent(evt)
+          if (hit && (!hit.sessionId || hit.sessionId === props.sessionId)) {
+            setLiveTools((prev) => ({ ...prev, [hit.id]: hit }))
+          }
+          ingestFiles(filesFromEvent(evt, props.sessionId, fileFilter(projectDir())))
+          queueMicrotask(requestRender)
+          if (!shouldRefreshDb(eventType(evt))) return
+          if (debounce) clearTimeout(debounce)
+          debounce = setTimeout(() => {
+            debounce = null
+            refresh()
+          }, EVENT_SCAN_DEBOUNCE_MS)
+        }),
+      { type: eventType(args[0]) || undefined },
+    )
 
   const listen = (type: string, fn: (...args: unknown[]) => void): (() => void) => {
     try {
@@ -413,34 +485,40 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
 
   let tickCount = 0
   const tick = setInterval(() => {
-    selfTime("tick", () => {
-      // Coarse: ages/marks recompute at most once a second; the spinner phase
-      // (`frame`) still animates every tick. Returning `prev` skips the cascade.
-      setNow((prev) => {
-        const n = Date.now()
-        return n - prev >= NOW_MS ? n : prev
+    profile("tick", () => {
+      selfTime("tick", () => {
+        // Coarse: ages/marks recompute at most once a second; the spinner phase
+        // (`frame`) still animates every tick. Returning `prev` skips the cascade.
+        setNow((prev) => {
+          const n = Date.now()
+          return n - prev >= NOW_MS ? n : prev
+        })
+        setFrame((n) => n + 1)
       })
-      setFrame((n) => n + 1)
+      tickCount += 1
+      if (tickCount % FPS_READ_EVERY_TICKS === 0) {
+        const r = readRendererFps(props.api.renderer)
+        setSelfFps(r.fps, r.frameMs)
+      }
     })
-    tickCount += 1
-    if (tickCount % FPS_READ_EVERY_TICKS === 0) {
-      const r = readRendererFps(props.api.renderer)
-      setSelfFps(r.fps, r.frameMs)
-    }
   }, TICK_MS)
 
   const offGit = onGitMarksChange(() => {
-    setGitTick((n) => n + 1)
-    queueMicrotask(requestRender)
+    profile("git", () => {
+      setGitTick((n) => n + 1)
+      queueMicrotask(requestRender)
+    })
   })
 
   createEffect(() => {
-    frame()
-    now()
-    flow()
-    liveTools()
-    liveFiles()
-    queueMicrotask(requestRender)
+    profile("render", () => {
+      frame()
+      now()
+      flow()
+      liveTools()
+      liveFiles()
+      queueMicrotask(requestRender)
+    })
   })
 
   onCleanup(() => {
@@ -449,6 +527,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     monitor.stop()
     offGit()
     for (const off of offs) off()
+    writeProfileSummary()
   })
 
   const rowMark = (
@@ -466,10 +545,10 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
 
   const mainMark = createMemo(() => {
     const m = snap().db.main
-    if (!m) return "queued" as AgentMark
+    if (!m) return MARK_QUEUED
     return rowMark(
-      m.status === "archived" ? "archived" : null,
-      m.status === "archived",
+      m.status === SESSION_STATUS_ARCHIVED ? STATUS_ARCHIVED : null,
+      m.status === SESSION_STATUS_ARCHIVED,
       Boolean(busy()[m.id]),
       m.timeUpdated,
       seen()[m.id],
@@ -488,10 +567,10 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
 
   const currentMark = createMemo(() => {
     const c = currentRow()
-    if (!c) return "queued" as AgentMark
+    if (!c) return MARK_QUEUED
     return rowMark(
-      c.status === "archived" ? "archived" : null,
-      c.status === "archived",
+      c.status === SESSION_STATUS_ARCHIVED ? STATUS_ARCHIVED : null,
+      c.status === SESSION_STATUS_ARCHIVED,
       Boolean(busy()[c.id]),
       c.timeUpdated,
       seen()[c.id],
@@ -524,7 +603,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     let n = 0
     for (const d of snap().delegates) {
       const m = delegateMark(d)
-      if (m === "live" || m === "stale") n += 1
+      if (m === PULSE_LIVE || m === PULSE_STALE) n += 1
     }
     return n
   })
@@ -538,12 +617,30 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
 
   const myWorkFold = {} as Record<MyWorkKind, ReturnType<typeof useFold>>
   for (const kind of MY_WORK_ORDER) {
-    myWorkFold[kind] = useFold(props.api, `oes.fold.mywork.${kind}`, { after: requestRender })
+    // The Errors group is noise until you want it — start collapsed.
+    myWorkFold[kind] = useFold(props.api, `oes.fold.mywork.${kind}`, {
+      after: requestRender,
+      defaultOpen: kind !== QUESTION_KIND_ERROR,
+    })
+  }
+
+  // Reveal state is hoisted, not owned by GroupSection: the My work and Docs
+  // memos read the `now()` clock, so <For> reconciles them to fresh objects
+  // every second — a reveal signal created inside the component would be
+  // thrown away with it and the "… +N more" click would collapse on its own.
+  const myWorkReveal = {} as Record<MyWorkKind, RevealState>
+  for (const kind of MY_WORK_ORDER) {
+    myWorkReveal[kind] = useReveal(2)
   }
 
   const docFold = {} as Record<DocKind, ReturnType<typeof useFold>>
   for (const kind of DOC_KIND_ORDER) {
     docFold[kind] = useFold(props.api, `oes.fold.docs.${kind}`, { after: requestRender })
+  }
+
+  const docReveal = {} as Record<DocKind, RevealState>
+  for (const kind of DOC_KIND_ORDER) {
+    docReveal[kind] = useReveal(2)
   }
 
   const oes = () => getOes(projectDir())
@@ -595,6 +692,31 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
 
   const omoPresent = createMemo(() => snap().omo.present)
 
+  /**
+   * Plan-file index for the "last plan" suffix. Built once per part change
+   * (stamp-cached inside `planSessionIndex`); the memo only guards the DB
+   * open + query on the render path. `sessionPlan` maps a session to its
+   * latest `.omo/` plan/draft file.
+   */
+  const planIndex = createMemo(() => {
+    const db = snap().db.present ? openReadonlyDb(snap().db.dbPath) : null
+    if (!db) return null
+    try {
+      return planSessionIndex(db, snap().db.projectId, projectDir())
+    } catch {
+      return null
+    }
+  })
+
+  /** `last plan: <slug>` for a session that wrote a plan; undefined otherwise. */
+  const lastPlanSuffix = (sessionId: string | null | undefined): string | undefined => {
+    const idx = planIndex()
+    if (!idx || !sessionId) return undefined
+    const plan = idx.sessionPlan.get(sessionId)
+    if (!plan) return undefined
+    return `last plan: ${approvalName(plan.rel)}`
+  }
+
   /** Open `question` tools anywhere in this project — the "answer me" queue. */
   const myWorkQuestions = createMemo<MyWorkItem[]>(() => {
     if (tab() !== "mywork") return []
@@ -607,15 +729,21 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     }
   })
 
-  /** OMO drafts/plans awaiting approval, plus drafts still being written. */
+  /** OMO drafts/plans across all four states, enriched with planner-session state. */
   const myWorkApprovals = createMemo<MyWorkItem[]>(() => {
     if (tab() !== "mywork" || !omoPresent()) return []
     now() // re-scan while open; the plans cache TTL gates the filesystem read
     const dir = projectDir()
     try {
+      const buckets = listApprovals(dir)
       return toApprovalItems(
         enrichApprovalSessionStates(
-          [...listPendingApprovals(dir), ...listDraftingApprovals(dir)],
+          [
+            ...buckets.readyReview,
+            ...buckets.readyStart,
+            ...buckets.finished,
+            ...buckets.drafting,
+          ],
           {
             dbPath: snap().db.dbPath,
             projectRoot: dir,
@@ -639,7 +767,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   const runStartWork = (mode: StartWorkMode, planName: string): void => {
     const client = props.api.client
     const text = startWorkCommand(mode, planName)
-    const flag = mode === "make-pr" ? "--make-pr" : mode === "ship" ? "--ship" : ""
+    const flag = mode === START_WORK_MAKE_PR ? "--make-pr" : mode === START_WORK_SHIP ? "--ship" : ""
     const args = [planName, flag].map((s) => s.trim()).filter(Boolean).join(" ") || ""
     const go = async () => {
       try {
@@ -661,7 +789,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
         // host without message send
       }
     }
-    void go()
+    void profileAsync("rpc.startWork", go)
   }
 
   /** OMO plan approve — answer the writer session with the `ok` the planner waits for. */
@@ -677,7 +805,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
         // host without message send
       }
     }
-    void go()
+    void profileAsync("rpc.approve", go)
   }
 
   /**
@@ -687,70 +815,73 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
    * summary line when even its minimum no longer fits.
    */
   const rowPlan = createMemo(() => {
-    const o = oes()
-    const t = tab()
-    const omo = omoPresent()
-    const sections: { key: string; want: number; min: number; rank: number }[] = []
-    let fixed = 3 // self status line + OES brand line + panel top padding
-    let blocks = 0
+    try {
+      const o = oes()
+      const t = tab()
+      const omo = omoPresent()
+      const sections: { key: string; want: number; min: number; rank: number }[] = []
+      let fixed = 3 // self status line + OES brand line + panel top padding
+      if (modeLine()) fixed += 1 // debug/profile flag row
+      if (modeDirLine()) fixed += 1
+      let blocks = 0
 
-    const header = () => {
-      blocks += 1
-      fixed += 1
-    }
-    const section = (folded: boolean, key: string, want: number, min: number, rank: number) => {
-      header()
-      if (!folded) sections.push({ key, want, min, rank })
-    }
+      const header = () => {
+        blocks += 1
+        fixed += 1
+      }
+      const section = (folded: boolean, key: string, want: number, min: number, rank: number) => {
+        header()
+        if (!folded) sections.push({ key, want, min, rank })
+      }
 
-    if (t === "sessions") {
-      header()
-      fixed += foldAgents.open() ? 1 : 0
-      section(!foldSessions.open(), "sessions", o.sessionRows, ROW_MIN.sessions, ROW_RANK.sessions)
-      const feed = projectFeed()
-      if (feed.tools.length > 0) section(!foldTools.open(), "tools", o.toolRows, ROW_MIN.tools, ROW_RANK.tools)
-      if (feed.files.length > 0) section(!foldFiles.open(), "files", o.fileRows, ROW_MIN.files, ROW_RANK.files)
-      if (omo) section(!foldDelegates.open(), "delegates", 6, ROW_MIN.delegates, ROW_RANK.delegates)
-    } else if (t === "current") {
-      header()
-      fixed += foldAgents.open() ? 1 : 0
-      section(!foldDelegates.open(), "delegates", 6, ROW_MIN.delegates, ROW_RANK.delegates)
-      section(!foldTools.open(), "tools", o.toolRows, ROW_MIN.tools, ROW_RANK.tools)
-      section(!foldFiles.open(), "files", o.fileRows, ROW_MIN.files, ROW_RANK.files)
-    } else if (t === "mywork") {
-      header()
-      try {
+      if (t === "sessions") {
+        header()
+        fixed += foldAgents.open() ? 1 : 0
+        section(!foldSessions.open(), "sessions", o.sessionRows, ROW_MIN.sessions, ROW_RANK.sessions)
+        const feed = projectFeed()
+        if (feed.tools.length > 0) section(!foldTools.open(), "tools", o.toolRows, ROW_MIN.tools, ROW_RANK.tools)
+        if (feed.files.length > 0) section(!foldFiles.open(), "files", o.fileRows, ROW_MIN.files, ROW_RANK.files)
+        if (omo) section(!foldDelegates.open(), "delegates", 6, ROW_MIN.delegates, ROW_RANK.delegates)
+      } else if (t === "current") {
+        header()
+        fixed += foldAgents.open() ? 1 : 0
+        section(!foldDelegates.open(), "delegates", 6, ROW_MIN.delegates, ROW_RANK.delegates)
+        section(!foldTools.open(), "tools", o.toolRows, ROW_MIN.tools, ROW_RANK.tools)
+        section(!foldFiles.open(), "files", o.fileRows, ROW_MIN.files, ROW_RANK.files)
+      } else if (t === "mywork") {
+        header()
         for (const g of myWorkGroups()) {
-          section(
-            myWorkFold[g.kind].open(),
-            `mywork.${g.kind}`,
-            g.items.length,
-            ROW_MIN.mywork,
-            ROW_RANK.mywork,
-          )
+          const fold = myWorkFold[g.kind]
+          if (!fold) continue
+          section(!fold.open(), `mywork.${g.kind}`, g.items.length, ROW_MIN.mywork, ROW_RANK.mywork)
         }
-      } catch (e) {
-        dbg("rowplan.mywork", "error", String(e))
+      } else {
+        // Perf lays out its own sections and already caps itself with perfRows.
+        fixed += 18
       }
-    } else {
-      // Perf lays out its own sections and already caps itself with perfRows.
-      fixed += 18
-    }
-    fixed += Math.max(0, blocks - 1) // one blank row between OES sections
+      fixed += Math.max(0, blocks - 1) // one blank row between OES sections
 
-    if (omo) {
-      fixed += 2 // blank row above the group + its brand line
-      if (foldOmo.open() && o.omoRows > 0) {
-        sections.push({ key: "omo", want: o.omoRows, min: ROW_MIN.omo, rank: ROW_RANK.omo })
+      if (omo) {
+        fixed += 2 // blank row above the group + its brand line
+        if (foldOmo.open() && o.omoRows > 0) {
+          sections.push({ key: "omo", want: o.omoRows, min: ROW_MIN.omo, rank: ROW_RANK.omo })
+        }
       }
-    }
 
-    return packSections(panelRows(dimensions().height), fixed, sections)
-  })
+      const height = dimensions()?.height
+      return packSections(panelRows(typeof height === "number" ? height : 24), fixed, sections)
+    } catch (e) {
+      dbg("rowplan", "error", String(e))
+      return {}
+    }
+  }, {})
 
   const rowsFor = (key: string, fallback: number): number => {
-    const v = rowPlan()[key]
-    return typeof v === "number" ? v : fallback
+    try {
+      return rowsForPlan(rowPlan(), key, fallback)
+    } catch {
+      return fallback
+    }
   }
 
   const sessionsReveal = useReveal(SESSION_MORE_STEP)
@@ -759,6 +890,8 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   const worksReveal = useReveal(4)
   const boulderReveal = useReveal(4)
   const projectFilesReveal = useReveal(4)
+  const delegateReveal = useReveal(4)
+  const currentDelegatesReveal = useReveal(4)
 
   const omoRows = createMemo(() => (omoPresent() ? rowsFor("omo", 0) : 0))
   const omoOpen = createMemo(() => foldOmo.open() && omoRows() > 0)
@@ -768,7 +901,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     works().map((w) => {
       const row = workRowView(w, now())
       return {
-        kind: "agent" as const,
+        kind: ROW_KIND_AGENT,
         mark: row.mark,
         glyph: row.glyph ?? undefined,
         name: w.name,
@@ -807,19 +940,23 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   const docGroups = createMemo(() => groupDocs(docs()))
 
   const docBudgets = createMemo(() => {
-    const open = docGroups().filter((g) => docFold[g.kind].open())
-    if (open.length === 0) return {} as Record<DocKind, number>
-    return packSections(
-      omoRows(),
-      0,
-      open.map((g) => ({ key: g.kind, want: g.items.length + 1, min: 1, rank: ROW_RANK.omo })),
-    )
-  })
+    try {
+      const open = docGroups().filter((g) => docFold[g.kind].open())
+      if (open.length === 0) return {} as Record<DocKind, number>
+      return packSections(
+        omoRows(),
+        0,
+        open.map((g) => ({ key: g.kind, want: g.items.length + 1, min: 1, rank: ROW_RANK.omo })),
+      )
+    } catch {
+      return {} as Record<DocKind, number>
+    }
+  }, {} as Record<DocKind, number>)
 
   const docRow = (d: DocView): RowData => {
     const age = pulseAgeMs(now(), d.updatedAt)
     return {
-      kind: "file",
+      kind: ROW_KIND_FILE,
       mark: composeMark({ ageMs: age }),
       glyph: "•",
       name: d.name,
@@ -829,23 +966,27 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   }
 
   const myWorkRow = (item: MyWorkItem): RowData => {
-    if (item.kind === "question") {
+    if ("sessionId" in item) {
       const age = pulseAgeMs(now(), item.startedAt)
+      const reason = item.reason ? ` · ${item.reason}` : ""
       return {
-        kind: "agent",
-        mark: "ready",
-        glyph: myWorkGlyph("question"),
+        kind: ROW_KIND_AGENT,
+        mark: item.kind === QUESTION_KIND_ERROR ? STATUS_ERROR : MARK_READY,
+        glyph: myWorkGlyph(item.kind),
         name: item.title,
-        suffix: formatAge(age),
-        waiting: true,
+        suffix: `${formatAge(age)}${reason}`,
+        waiting: item.kind !== QUESTION_KIND_ERROR,
         onSelect: () => selectSession(props.api, item.sessionId),
       }
     }
     const sessionLabel = planSessionStateLabel(item.sessionState)
     const reviewLabel = reviewStateSuffix(item.review)
-    const drafting = item.kind === "drafting"
+    const drafting = item.kind === MY_WORK_GROUP_DRAFTING
+    const showApprove = item.kind === MY_WORK_GROUP_READY_REVIEW
+    const showStartWork =
+      item.kind === MY_WORK_GROUP_READY_REVIEW || item.kind === MY_WORK_GROUP_READY_START
     const doc: DocView = {
-      kind: "draft",
+      kind: DOC_KIND_DRAFT,
       name: item.name,
       rel: item.rel,
       updatedAt: item.updatedAt,
@@ -853,8 +994,8 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
       previewable: true,
     }
     return {
-      kind: "file",
-      mark: "ready",
+      kind: ROW_KIND_FILE,
+      mark: MARK_READY,
       glyph: myWorkGlyph(item.kind),
       name: item.name,
       suffix: [sessionLabel, reviewLabel].filter(Boolean).join(" ") || undefined,
@@ -874,6 +1015,8 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
           onApprove: approvePlan,
           onStartWork: (mode) => runStartWork(mode, item.name),
           onDocs: () => openDocDetail(props.api, doc, projectRoots(), colors()),
+          showApprove,
+          showStartWork,
         })
       },
     }
@@ -885,10 +1028,10 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     if (!b.name && b.counts.total === 0 && b.sessions.length === 0) return []
     const header = b.status
       ? workRowView({ status: b.status, updatedAt: b.updatedAt }, now())
-      : { mark: "idle" as const, glyph: undefined, suffix: formatAge(pulseAgeMs(now(), b.updatedAt)) }
+      : { mark: PULSE_IDLE as AgentMark, glyph: undefined, suffix: formatAge(pulseAgeMs(now(), b.updatedAt)) }
     const out: RowData[] = [
       {
-        kind: "agent",
+        kind: ROW_KIND_AGENT,
         mark: header.mark,
         glyph: header.glyph ?? undefined,
         name: b.name || "work",
@@ -900,33 +1043,33 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     const meta = [b.agent, b.status ? workStatusLabel(b.status) : null]
       .filter((s): s is string => Boolean(s))
       .join(" · ")
-    if (meta) out.push({ kind: "group", mark: "ready", glyph: " ", name: meta })
+    if (meta) out.push({ kind: ROW_KIND_GROUP, mark: MARK_READY, glyph: " ", name: meta })
 
     const task = currentTask(b)
     if (task) {
       out.push({
-        kind: "tool",
-        mark: "live",
+        kind: ROW_KIND_TOOL,
+        mark: PULSE_LIVE,
         name: task.label || task.title,
         suffix:
           task.startedAt != null ? formatDuration(Math.max(0, now() - task.startedAt)) : undefined,
-        flow: "tool",
+        flow: FLOW_TOOL,
       })
     }
 
     if (b.counts.total > 0) {
       const bits = [`${b.counts.running} run`, `${b.counts.done} done`]
       if (b.counts.other > 0) bits.push(`${b.counts.other} other`)
-      out.push({ kind: "group", mark: "ready", glyph: " ", name: bits.join(" · ") })
+      out.push({ kind: ROW_KIND_GROUP, mark: MARK_READY, glyph: " ", name: bits.join(" · ") })
     }
 
     for (const s of b.sessions) {
       const sess = snap().db.byId[s.id]
-      const archived = sess?.status === "archived"
+      const archived = sess?.status === SESSION_STATUS_ARCHIVED
       out.push({
-        kind: "delegate",
+        kind: ROW_KIND_DELEGATE,
         mark: rowMark(
-          archived ? "archived" : null,
+          archived ? STATUS_ARCHIVED : null,
           archived,
           Boolean(busy()[s.id]),
           sess?.timeUpdated,
@@ -983,7 +1126,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     for (const item of groupDelegates(list)) {
       if (item.kind === "header") {
         out.push({
-          kind: "group",
+          kind: ROW_KIND_GROUP,
           mark: hottestMark(item.members.map(delegateMark)),
           glyph: GROUP_GLYPH,
           name: `${agentDisplayName(item.agent)} (${item.count})`,
@@ -996,7 +1139,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
       const mark = delegateMark(d)
       const dir = rowFlow(d.sessionId, isBusy)
       out.push({
-        kind: item.grouped ? "delegate" : "agent",
+        kind: item.grouped ? ROW_KIND_DELEGATE : ROW_KIND_AGENT,
         mark,
         glyph2: waiting ? (workStatusGlyph(d.status) ?? undefined) : undefined,
         waiting,
@@ -1011,19 +1154,20 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     return out
   }
 
-  /** A delegate list with its own "… +N more" revealer. */
-  const DelegateList = (props: { list: DelegateView[]; budget: number }): JSX.Element => {
-    const reveal = useReveal(4)
-    return (
-      <RowList
-        items={delegateLines(props.list)}
-        budget={props.budget + reveal.more()}
-        colors={colors()}
-        renderItem={(r) => <Row {...r} />}
-        more={{ onReveal: reveal.reveal }}
-      />
-    )
-  }
+  /** A delegate list with its own "… +N more" revealer (state hoisted by the caller). */
+  const DelegateList = (props: {
+    list: DelegateView[]
+    budget: number
+    reveal: RevealState
+  }): JSX.Element => (
+    <RowList
+      items={delegateLines(props.list)}
+      budget={props.budget + props.reveal.more()}
+      colors={colors()}
+      renderItem={(r) => <Row {...r} />}
+      more={{ onReveal: props.reveal.reveal }}
+    />
+  )
 
   /** Live self-cost line — reads the tick clock so the Solid insert re-evaluates every tick. */
   const selfLine = createMemo(() => {
@@ -1031,11 +1175,32 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     return formatSelfLine(readSelfStats())
   })
 
+  /** "debug mode" / "profile" flags — visible only while the logger is actually active. */
+  const modeLine = () => {
+    const modes: string[] = []
+    if (debugActive()) modes.push("debug mode")
+    if (profileActive()) modes.push("profile")
+    return modes.join("  ")
+  }
+
+  const modeDirLine = () => {
+    const dirs = [debugActiveDir(), profileActiveDir()].filter((p): p is string => Boolean(p))
+    if (dirs.length === 0) return ""
+    const uniq = Array.from(new Set(dirs))
+    return `logs ${clip(uniq.join(" | "), 78)}`
+  }
+
   return (
     <box flexDirection="column" gap={1} paddingTop={1}>
+      <Show when={modeLine()}>
+        <text fg={colors().warning || colors().text}>{modeLine()}</text>
+      </Show>
+      <Show when={modeDirLine()}>
+        <text fg={colors().textMuted}>{modeDirLine()}</text>
+      </Show>
       <text fg={colors().textMuted}>{selfLine()}</text>
       <TabColumn
-        brand="OES"
+        brand=""
         tabs={OES_TABS}
         labels={TAB_LABELS}
         active={tab()}
@@ -1058,6 +1223,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
                         colors={colors()}
                         items={g.items}
                         budget={rowsFor(`mywork.${g.kind}`, 2)}
+                        reveal={myWorkReveal[g.kind]}
                         renderItem={(item) => <Row {...myWorkRow(item)} />}
                       />
                     )}
@@ -1074,11 +1240,12 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
               <FoldSection title="Agents" open={foldAgents.open()} colors={colors()} onToggle={foldAgents.toggle}>
                 {snap().db.main ? (
                   <Row
-                    kind="agent"
+                    kind={ROW_KIND_AGENT}
                     mark={mainMark()}
                     name={snap().db.main!.agent}
                     tokens={snap().db.main!.tokensTotal}
                     cost={snap().db.main!.cost}
+                    suffix={lastPlanSuffix(snap().db.main?.id)}
                     current={snap().db.main!.id === props.sessionId}
                     flow={mainFlow()}
                     onSelect={() => selectSession(props.api, snap().db.main?.id)}
@@ -1095,9 +1262,10 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
           <FoldSection
             title="Sessions"
             open={foldSessions.open()}
-            count={snap().db.recent.length}
-            countLabel={`last ${snap().db.recent.length}`}
-            action={{ label: "switch", onPick: () => openSessionSwitcher(props.api) }}
+            actions={[
+              { label: "switch", onPick: () => openSessionSwitcher(props.api) },
+              { label: "new", onPick: () => newSession(props.api, projectDir()) },
+            ]}
             colors={colors()}
             onToggle={foldSessions.toggle}
           >
@@ -1108,8 +1276,8 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
               renderItem={(s) => {
                 const isBusy = Boolean(busy()[s.id])
                 const mark = rowMark(
-                  s.status === "archived" ? "archived" : null,
-                  s.status === "archived",
+                  s.status === SESSION_STATUS_ARCHIVED ? STATUS_ARCHIVED : null,
+                  s.status === SESSION_STATUS_ARCHIVED,
                   isBusy,
                   s.timeUpdated,
                   seen()[s.id],
@@ -1117,10 +1285,14 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
                 const dir = rowFlow(s.id, isBusy)
                 return (
                   <Row
-                    kind="agent"
+                    kind={ROW_KIND_AGENT}
                     mark={mark}
                     name={s.title}
-                    suffix={formatAge(pulseAgeMs(now(), s.timeUpdated, seen()[s.id]))}
+                    suffix={
+                      [formatAge(pulseAgeMs(now(), s.timeUpdated, seen()[s.id])), lastPlanSuffix(s.id)]
+                        .filter(Boolean)
+                        .join(" · ") || undefined
+                    }
                     current={s.id === props.sessionId}
                     flow={dir}
                     onSelect={() => selectSession(props.api, s.id)}
@@ -1142,12 +1314,12 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
                 const mark = toolMark(t.status)
                 const dir = toolFlow(t.status)
                 const dur =
-                  t.status === "running" && t.startedAt != null
+                  t.status === TOOL_STATUS_RUNNING && t.startedAt != null
                     ? formatDuration(Math.max(0, now() - t.startedAt))
                     : formatDuration(t.durationMs)
                 return (
                   <Row
-                    kind="tool"
+                    kind={ROW_KIND_TOOL}
                     mark={mark}
                     name={t.name}
                     suffix={dur}
@@ -1176,7 +1348,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
               colors={colors()}
               renderItem={(f) => (
                 <Row
-                  kind="file"
+                  kind={ROW_KIND_FILE}
                   mark={fileLetterMark(f.letter)}
                   glyph={f.letter ?? "•"}
                   name={f.name}
@@ -1201,7 +1373,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
             {snap().delegates.length === 0 ? (
               <text fg={colors().textMuted}>• none</text>
             ) : (
-              <DelegateList list={snap().delegates} budget={rowsFor("delegates", 6)} />
+              <DelegateList list={snap().delegates} budget={rowsFor("delegates", 6)} reveal={delegateReveal} />
             )}
           </FoldSection>
         </Show>
@@ -1212,11 +1384,12 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
               <FoldSection title="Agents" open={foldAgents.open()} colors={colors()} onToggle={foldAgents.toggle}>
                 {currentRow() ? (
                   <Row
-                    kind="agent"
+                    kind={ROW_KIND_AGENT}
                     mark={currentMark()}
                     name={currentRow()!.agent}
                     tokens={currentRow()!.tokensTotal}
                     cost={currentRow()!.cost}
+                    suffix={lastPlanSuffix(currentRow()?.id)}
                     current
                     flow={currentFlow()}
                     onSelect={() => selectSession(props.api, currentRow()?.id)}
@@ -1235,7 +1408,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
             count={sessionDelegates().length}
             live={sessionDelegates().filter((d) => {
               const m = delegateMark(d)
-              return m === "live" || m === "stale"
+              return m === PULSE_LIVE || m === PULSE_STALE
             }).length}
             colors={colors()}
             onToggle={foldDelegates.toggle}
@@ -1243,7 +1416,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
             {sessionDelegates().length === 0 ? (
               <text fg={colors().textMuted}>• none</text>
             ) : (
-              <DelegateList list={sessionDelegates()} budget={rowsFor("delegates", 6)} />
+              <DelegateList list={sessionDelegates()} budget={rowsFor("delegates", 6)} reveal={currentDelegatesReveal} />
             )}
           </FoldSection>
         </Show>
@@ -1260,12 +1433,12 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
                   const mark = toolMark(t.status)
                   const dir = toolFlow(t.status)
                   const dur =
-                    t.status === "running" && t.startedAt != null
+                    t.status === TOOL_STATUS_RUNNING && t.startedAt != null
                       ? formatDuration(Math.max(0, now() - t.startedAt))
                       : formatDuration(t.durationMs)
                   return (
                     <Row
-                      kind="tool"
+                      kind={ROW_KIND_TOOL}
                       mark={mark}
                       name={t.name}
                       suffix={dur}
@@ -1300,7 +1473,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
                 colors={colors()}
                 renderItem={(f) => (
                   <Row
-                    kind="file"
+                    kind={ROW_KIND_FILE}
                     mark={fileLetterMark(f.letter)}
                     glyph={f.letter ?? "•"}
                     name={f.name}
@@ -1310,7 +1483,6 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
                 )}
                 more={{
                   onReveal: () => setFilesExpanded(true),
-                  toggle: true,
                   expanded: filesExpanded(),
                   onToggle: () => setFilesExpanded(false),
                 }}
@@ -1389,7 +1561,8 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
                         onToggle={docFold[g.kind].toggle}
                         colors={colors()}
                         items={g.items}
-                        budget={docBudgets()[g.kind] ?? 0}
+                        budget={rowsForPlan(docBudgets(), g.kind, 0)}
+                        reveal={docReveal[g.kind]}
                         renderItem={(d) => <Row {...docRow(d)} />}
                       />
                     )}

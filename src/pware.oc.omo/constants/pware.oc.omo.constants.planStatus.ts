@@ -3,7 +3,8 @@
  *
  * OMO plan/draft markdown frontmatter `status:` values that mean "waiting for
  * user sign-off" (the PENDING_STATUS set currently private in the approval
- * resolver).
+ * resolver), plus the terminal states of the plan lifecycle
+ * `drafting → awaiting-approval → approved → done`.
  */
 
 /** Plan status: awaiting the user's approval. */
@@ -17,6 +18,15 @@ export const PLAN_STATUS_PENDING_APPROVAL_UNDERSCORE = "pending_approval"
 
 /** Plan status: pending (bare spelling). */
 export const PLAN_STATUS_PENDING = "pending"
+
+/** Plan status: draft still being written — not yet awaiting approval. */
+export const PLAN_STATUS_DRAFTING = "drafting"
+
+/** Plan status: the user approved the plan. */
+export const PLAN_STATUS_APPROVED = "approved"
+
+/** Plan status: the plan finished execution. */
+export const PLAN_STATUS_DONE = "done"
 
 /** Plan `status:` values that mean the plan is waiting for user sign-off. */
 export const PLAN_PENDING_STATUSES = [

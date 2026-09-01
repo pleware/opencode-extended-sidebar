@@ -4,7 +4,7 @@ import path from "node:path"
 import {
   enrichApprovalSessionStates,
   planSessionStateLabel,
-} from "../../../../src/pware.oc.omo/resolver/pware.oc.omo.resolver.approvalState.js"
+} from "../../../../src/pware.oc.runtime/pware.oc.runtime.mywork-enrich.js"
 import type { ApprovalItem } from "../../../../src/pware.oc.omo/resolver/pware.oc.omo.resolver.plan.js"
 import { createFixtureProject, type FixtureProject } from "../../../helpers/project.js"
 import { createFixtureDb, toolPartData, type FixtureDb } from "../../../helpers/sqlite.js"

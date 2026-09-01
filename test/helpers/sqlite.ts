@@ -6,7 +6,7 @@ import { Database } from "bun:sqlite"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
-import { resetReadonlyDb } from "../../src/pware.oc.core/pware.oc.core.sqlite.js"
+import { resetReadonlyDb, type SqlDb, type SqlRow } from "../../src/pware.oc.core/pware.oc.core.sqlite.js"
 
 export type SessionSeed = {
   id: string
@@ -142,6 +142,22 @@ export function createFixtureDb(opts: {
         // Windows may keep the handle briefly
       }
     },
+  }
+}
+
+/** Wraps a real SqlDb and records every `all` query, so tests can assert the
+ *  two-stage feed fast path (2 queries) vs the saturated fallback (3 queries). */
+export function recordingDb(inner: SqlDb): SqlDb & { queries: string[] } {
+  const queries: string[] = []
+  return {
+    all: <T extends SqlRow = SqlRow>(sql: string, ...params: unknown[]): T[] => {
+      queries.push(sql)
+      return inner.all<T>(sql, ...params)
+    },
+    get: <T extends SqlRow = SqlRow>(sql: string, ...params: unknown[]): T | null =>
+      inner.get<T>(sql, ...params),
+    close: () => inner.close(),
+    queries,
   }
 }
 

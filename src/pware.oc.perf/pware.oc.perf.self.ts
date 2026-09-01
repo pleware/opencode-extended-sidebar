@@ -1,27 +1,33 @@
 /**
  * Plugin self-cost: event/scan/tick latency + renderer FPS. Pure accumulators, safe on any host.
  */
+import {
+  SELF_PHASE_EVENT,
+  SELF_PHASE_SCAN,
+  SELF_PHASE_TICK,
+  type SelfPhase,
+} from "../pware.oc.core/constants/pware.oc.core.constants.phase.js"
 
-export type SelfPhase = "event" | "scan" | "tick"
+export type { SelfPhase }
 
 export type SelfBucket = { n: number; sum: number; max: number }
 
 export type SelfStats = {
-  event: SelfBucket
-  scan: SelfBucket
-  tick: SelfBucket
+  [SELF_PHASE_EVENT]: SelfBucket
+  [SELF_PHASE_SCAN]: SelfBucket
+  [SELF_PHASE_TICK]: SelfBucket
   /** Last known renderer FPS, null until first read. */
   fps: number | null
   /** Last known average frame time in ms, null until first read. */
   frameMs: number | null
 }
 
-const PHASES: SelfPhase[] = ["event", "scan", "tick"]
+const PHASES: SelfPhase[] = [SELF_PHASE_EVENT, SELF_PHASE_SCAN, SELF_PHASE_TICK]
 
 const buckets: Record<SelfPhase, SelfBucket> = {
-  event: { n: 0, sum: 0, max: 0 },
-  scan: { n: 0, sum: 0, max: 0 },
-  tick: { n: 0, sum: 0, max: 0 },
+  [SELF_PHASE_EVENT]: { n: 0, sum: 0, max: 0 },
+  [SELF_PHASE_SCAN]: { n: 0, sum: 0, max: 0 },
+  [SELF_PHASE_TICK]: { n: 0, sum: 0, max: 0 },
 }
 
 let fps: number | null = null

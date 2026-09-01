@@ -8,12 +8,26 @@ import { openPerfLog } from "../pware.oc.ui/pware.oc.ui.menudialogs.js"
 import type { PerfLogKind } from "./pware.oc.perf.reader.js"
 import {
   type ModelPerf,
-  type PerfPhase,
   type PerfSnapshot,
   type SessionPerf,
   type ToolPerf,
 } from "./pware.oc.perf.reader.js"
 import { THINK_GLYPH, flowGlyph, spinnerFrame } from "../pware.oc.ui/pware.oc.ui.glyphs.js"
+import {
+  PERF_LOG_KIND_MODELS,
+  PERF_LOG_KIND_TIME,
+  PERF_PHASE_IDLE,
+  PERF_PHASE_RECV,
+  PERF_PHASE_THINK,
+  PERF_PHASE_TOOL,
+  PERF_PHASE_WAIT,
+  type PerfPhase,
+} from "../pware.oc.core/constants/pware.oc.core.constants.phase.js"
+import {
+  FLOW_RECV,
+  FLOW_TOOL,
+  FLOW_WAIT,
+} from "../pware.oc.core/constants/pware.oc.core.constants.pulse.js"
 import {
   barGlyphs,
   flowColor,
@@ -38,16 +52,16 @@ const KV_FOLD_TREND = "oes.fold.perf.trend"
 const KV_FOLD_HISTORY = "oes.fold.perf.history"
 
 const PHASES: Array<{ key: PerfPhase; glyph: string; label: string }> = [
-  { key: "wait", glyph: flowGlyph("wait"), label: "wait" },
-  { key: "think", glyph: THINK_GLYPH, label: "think" },
-  { key: "recv", glyph: flowGlyph("recv"), label: "recv" },
-  { key: "tool", glyph: flowGlyph("tool"), label: "tools" },
-  { key: "idle", glyph: "·", label: "idle" },
+  { key: PERF_PHASE_WAIT, glyph: flowGlyph(FLOW_WAIT), label: "wait" },
+  { key: PERF_PHASE_THINK, glyph: THINK_GLYPH, label: "think" },
+  { key: PERF_PHASE_RECV, glyph: flowGlyph(FLOW_RECV), label: "recv" },
+  { key: PERF_PHASE_TOOL, glyph: flowGlyph(FLOW_TOOL), label: "tools" },
+  { key: PERF_PHASE_IDLE, glyph: "·", label: "idle" },
 ]
 
 function phaseFg(phase: PerfPhase, colors: ThemeColors): string {
-  if (phase === "wait" || phase === "recv" || phase === "tool") return flowColor(phase, colors)
-  if (phase === "think") return colors.primary || colors.text
+  if (phase === PERF_PHASE_WAIT || phase === PERF_PHASE_RECV || phase === PERF_PHASE_TOOL) return flowColor(phase, colors)
+  if (phase === PERF_PHASE_THINK) return colors.primary || colors.text
   return colors.textMuted
 }
 
@@ -137,9 +151,9 @@ function ModelRow(props: {
   const name = () => stacked().name
   const chips = () => stacked().chips
   const chipFg = (chip: Chip): string => {
-    if (chip.text.startsWith("↑")) return flowColor("wait", props.colors)
+    if (chip.text.startsWith("↑")) return flowColor(FLOW_WAIT, props.colors)
     if (chip.text.startsWith(THINK_GLYPH)) return props.colors.primary || props.colors.text
-    if (chip.text.startsWith("↓")) return flowColor("recv", props.colors)
+    if (chip.text.startsWith("↓")) return flowColor(FLOW_RECV, props.colors)
     return props.colors.textMuted
   }
   return (
@@ -211,7 +225,7 @@ function HistoryRow(props: {
     { text: r().toolShare != null ? `→${formatPercent(r().toolShare)}` : "", rank: 1 },
   ]
   const chipFg = (chip: Chip): string =>
-    chip.text.startsWith("↑") ? flowColor("wait", props.colors) : props.colors.textMuted
+    chip.text.startsWith("↑") ? flowColor(FLOW_WAIT, props.colors) : props.colors.textMuted
   return (
     <MetricRow
       glyph="•"
@@ -272,7 +286,7 @@ export function PerfPanel(props: PerfPanelProps): JSX.Element {
   const wall = () => Math.max(1, totals().wallMs)
   const phases = () =>
     PHASES.map((p) => ({ ...p, ms: totals().phases[p.key] })).filter(
-      (p) => p.ms > 0 || p.key === "wait" || p.key === "tool",
+      (p) => p.ms > 0 || p.key === PERF_PHASE_WAIT || p.key === PERF_PHASE_TOOL,
     )
   const modelsReveal = useReveal(props.rows)
   const toolsReveal = useReveal(props.rows)
@@ -296,7 +310,7 @@ export function PerfPanel(props: PerfPanelProps): JSX.Element {
   const liveLabel = () => {
     const dir = props.livePhase
     if (!dir) return null
-    const label = dir === "wait" ? "wait" : dir === "recv" ? "recv" : "tool"
+    const label = dir === FLOW_WAIT ? "wait" : dir === FLOW_RECV ? "recv" : "tool"
     const fg = flowColor(dir, props.colors)
     return { label, fg, ms: props.livePhaseMs }
   }
@@ -330,7 +344,7 @@ export function PerfPanel(props: PerfPanelProps): JSX.Element {
             suffix={tokenSummary(totals())}
             colors={props.colors}
             onToggle={foldModels.toggle}
-            onDetail={() => openLog("models")}
+            onDetail={() => openLog(PERF_LOG_KIND_MODELS)}
           >
             <RowList
               items={props.perf.models}
@@ -355,7 +369,7 @@ export function PerfPanel(props: PerfPanelProps): JSX.Element {
             suffix={timeSummary(totals())}
             colors={props.colors}
             onToggle={foldTime.toggle}
-            onDetail={() => openLog("time")}
+            onDetail={() => openLog(PERF_LOG_KIND_TIME)}
           >
             <For each={phases()}>
               {(p) => (
@@ -381,7 +395,7 @@ export function PerfPanel(props: PerfPanelProps): JSX.Element {
                 suffix={formatSpan(toolTotal())}
                 colors={props.colors}
                 onToggle={foldTools.toggle}
-                onDetail={() => openLog("tool")}
+                onDetail={() => openLog(PERF_PHASE_TOOL)}
               >
                 <RowList
                   items={props.perf.tools}
@@ -393,7 +407,7 @@ export function PerfPanel(props: PerfPanelProps): JSX.Element {
                       share={toolTotal() > 0 ? t.totalMs / toolTotal() : null}
                       colors={props.colors}
                       lineMax={props.lineMax}
-                      onSelect={() => openLog("tool", t.name)}
+                      onSelect={() => openLog(PERF_PHASE_TOOL, t.name)}
                     />
                   )}
                   more={{ onReveal: toolsReveal.reveal }}
@@ -410,7 +424,7 @@ export function PerfPanel(props: PerfPanelProps): JSX.Element {
                 onToggle={foldTrend.toggle}
               >
                 <SparkRow
-                  label="wait"
+                  label={PERF_PHASE_WAIT}
                   values={trendWait()}
                   fg={props.colors.warning || props.colors.text}
                   colors={props.colors}

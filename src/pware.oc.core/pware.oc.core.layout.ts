@@ -99,6 +99,21 @@ export function packSections<K extends string>(
 }
 
 /**
+ * Look up a packed section. A missing plan (Solid memo still computing,
+ * previous compute threw, owner disposed) or a missing / non-finite key
+ * returns `fallback` — the sidebar slot must not die on `plan[key]`.
+ */
+export function rowsForPlan(
+  plan: Readonly<Record<string, number>> | null | undefined,
+  key: string,
+  fallback: number,
+): number {
+  if (!plan || typeof plan !== "object") return fallback
+  const v = plan[key]
+  return typeof v === "number" && Number.isFinite(v) ? v : fallback
+}
+
+/**
  * Show `shown` rows and report how many a "more" control can still reveal.
  * The expander is a separate clickable line (`RowList`) the caller renders
  * below the list — no row is spent on the note.
@@ -110,4 +125,13 @@ export function sliceShown<T>(
   const s = Math.max(0, Math.round(shown))
   const kept = rows.slice(0, s)
   return { rows: kept, hidden: Math.max(0, rows.length - kept.length) }
+}
+
+/**
+ * Whether the "… +N more" / "… less" line is drawn at all. The expanded toggle
+ * keeps its "… less" line even when nothing is hidden; otherwise the line
+ * vanishes the moment there is nothing left to reveal.
+ */
+export function moreRevealVisible(hidden: number, expanded?: boolean): boolean {
+  return expanded === true || hidden > 0
 }

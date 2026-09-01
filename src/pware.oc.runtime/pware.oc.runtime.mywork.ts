@@ -8,11 +8,40 @@
 import type { OpenQuestion } from "../pware.oc.opencode/resolver/pware.oc.opencode.resolver.question.js"
 import type { SessionActivityState } from "../pware.oc.opencode/resolver/pware.oc.opencode.resolver.session.js"
 import type { ApprovalItem, ReviewState } from "../pware.oc.omo/resolver/pware.oc.omo.resolver.plan.js"
+import {
+  MY_WORK_GROUP_DRAFTING,
+  MY_WORK_GROUP_FINISHED,
+  MY_WORK_GROUP_READY_REVIEW,
+  MY_WORK_GROUP_READY_START,
+  type ApprovalGroupKind,
+} from "../pware.oc.core/constants/pware.oc.core.constants.myWork.js"
+import { approvalGroup, isDraftOf } from "../pware.oc.omo/resolver/pware.oc.omo.resolver.approvalGroup.js"
+import {
+  QUESTION_KIND_ERROR,
+  QUESTION_KIND_INTERRUPTED,
+  QUESTION_KIND_QUESTION,
+  type OpenQuestionKind,
+} from "../pware.oc.opencode/constants/pware.oc.opencode.constants.questionKind.js"
+import {
+  START_WORK_MAKE_PR,
+  START_WORK_PLAIN,
+  START_WORK_SHIP,
+  type StartWorkMode,
+} from "../pware.oc.omo/constants/pware.oc.omo.constants.startWork.js"
+
+export type { ApprovalGroupKind, OpenQuestionKind, StartWorkMode }
 
 export type MyWorkItem =
-  | { kind: "question"; sessionId: string; title: string; startedAt: number | null }
   | {
-      kind: "pending" | "working" | "drafting" | "idle"
+      kind: OpenQuestionKind
+      sessionId: string
+      title: string
+      startedAt: number | null
+      /** `state.error` text for interrupted/error rows; null for an open question. */
+      reason: string | null
+    }
+  | {
+      kind: ApprovalGroupKind
       name: string
       rel: string
       pendingAction: string | null
@@ -24,41 +53,27 @@ export type MyWorkItem =
 export type MyWorkKind = MyWorkItem["kind"]
 
 export const MY_WORK_ORDER: readonly MyWorkKind[] = [
-  "question",
-  "pending",
-  "drafting",
-  "working",
-  "idle",
+  QUESTION_KIND_QUESTION,
+  QUESTION_KIND_INTERRUPTED,
+  QUESTION_KIND_ERROR,
+  MY_WORK_GROUP_READY_REVIEW,
+  MY_WORK_GROUP_READY_START,
+  MY_WORK_GROUP_FINISHED,
+  MY_WORK_GROUP_DRAFTING,
 ]
 
 const MY_WORK_LABELS: Record<MyWorkKind, string> = {
-  question: "Awaiting answer",
-  pending: "Pending approval",
-  drafting: "Drafting",
-  working: "Working",
-  idle: "Idle",
+  [QUESTION_KIND_QUESTION]: "Awaiting answer",
+  [QUESTION_KIND_INTERRUPTED]: "Interrupted",
+  [QUESTION_KIND_ERROR]: "Errors",
+  [MY_WORK_GROUP_READY_REVIEW]: "Ready to review",
+  [MY_WORK_GROUP_READY_START]: "Ready to start",
+  [MY_WORK_GROUP_FINISHED]: "Finished",
+  [MY_WORK_GROUP_DRAFTING]: "Drafting",
 }
 
 export function myWorkLabel(kind: MyWorkKind): string {
   return MY_WORK_LABELS[kind]
-}
-
-/**
- * Which approval group a plan belongs to: `drafting` while its draft is still
- * being written, otherwise from its planner session state — `working` while the
- * session streams or awaits a background task, `idle` when the session is idle
- * or archived, `pending` when no session state is known — the plan is
- * genuinely just waiting for the user's sign-off.
- */
-export function approvalGroup(
-  status: string | null | undefined,
-  state: SessionActivityState | null | undefined,
-): "pending" | "working" | "drafting" | "idle" {
-  if ((status || "").toLowerCase() === "drafting") return "drafting"
-  if (!state) return "pending"
-  if (state.state === "streaming" || state.state === "awaiting-background") return "working"
-  if (state.state === "idle" || state.state === "archived") return "idle"
-  return "pending"
 }
 
 /**
@@ -74,15 +89,12 @@ export function approvalContinueHint(
   return dbAvailable ? "No session wrote this plan" : "Database unavailable"
 }
 
-/** Delivery mode for the OMO `start work` command (no slash, `--make-pr`/`--ship`). */
-export type StartWorkMode = "plain" | "make-pr" | "ship"
-
 /** The exact "start work" command text for a delivery mode and optional plan name. */
 export function startWorkCommand(mode: StartWorkMode, planName?: string | null): string {
   const name = typeof planName === "string" ? planName.trim() : ""
   const base = name ? `start work ${name}` : "start work"
-  if (mode === "make-pr") return `${base} --make-pr`
-  if (mode === "ship") return `${base} --ship`
+  if (mode === START_WORK_MAKE_PR) return `${base} --make-pr`
+  if (mode === START_WORK_SHIP) return `${base} --ship`
   return base
 }
 
@@ -100,22 +112,29 @@ export function groupMyWork(
 /** Build the question items from an open-question read (title comes from the row). */
 export function toQuestionItems(questions: readonly OpenQuestion[]): MyWorkItem[] {
   return questions.map((q) => ({
-    kind: "question",
+    kind: q.kind,
     sessionId: q.sessionId,
     title: q.title,
     startedAt: q.startedAt,
+    reason: q.reason,
   }))
 }
 
-/** Build the approval items from a pending-approval read. */
+/** Build the approval items from a pending-approval read, dropping superseded plans. */
 export function toApprovalItems(approvals: readonly ApprovalItem[]): MyWorkItem[] {
-  return approvals.map((a) => ({
-    kind: approvalGroup(a.status, a.sessionState),
-    name: a.name,
-    rel: a.rel,
-    pendingAction: a.pendingAction,
-    updatedAt: a.updatedAt,
-    sessionState: a.sessionState,
-    review: a.review,
-  }))
+  const out: MyWorkItem[] = []
+  for (const a of approvals) {
+    const kind = approvalGroup(a.status, isDraftOf(a.rel))
+    if (!kind) continue
+    out.push({
+      kind,
+      name: a.name,
+      rel: a.rel,
+      pendingAction: a.pendingAction,
+      updatedAt: a.updatedAt,
+      sessionState: a.sessionState,
+      review: a.review,
+    })
+  }
+  return out
 }

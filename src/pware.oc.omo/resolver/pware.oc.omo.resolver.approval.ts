@@ -9,8 +9,15 @@
 import fs from "node:fs"
 import path from "node:path"
 import { createStampCache } from "../../pware.oc.core/pware.oc.core.cache.js"
+import { profile } from "../../pware.oc.core/pware.oc.core.debug.js"
 import { canonicalizePath } from "../../pware.oc.core/pware.oc.core.paths.js"
-import { PLAN_PENDING_STATUSES } from "../constants/pware.oc.omo.constants.planStatus.js"
+import {
+  MY_WORK_GROUP_DRAFTING,
+  MY_WORK_GROUP_FINISHED,
+  MY_WORK_GROUP_READY_REVIEW,
+  MY_WORK_GROUP_READY_START,
+} from "../../pware.oc.core/constants/pware.oc.core.constants.myWork.js"
+import { approvalGroup } from "./pware.oc.omo.resolver.approvalGroup.js"
 import { findOmoWatchDirs } from "./pware.oc.omo.resolver.boulder.js"
 import {
   approvalName,
@@ -20,9 +27,6 @@ import {
   type ApprovalItem,
 } from "./pware.oc.omo.resolver.plan.js"
 
-const PENDING_STATUS = new Set<string>(PLAN_PENDING_STATUSES)
-/** Draft still being written — shown in its own My work group, not pending approval. */
-const DRAFTING_STATUS = "drafting"
 const MAX_ITEMS = 40
 const TTL_MS = 2_000
 
@@ -53,7 +57,17 @@ function listMdFiles(base: string): string[] {
   return out
 }
 
-type ScanResult = { pending: ApprovalItem[]; drafting: ApprovalItem[] }
+/** The four "My work" approval buckets, keyed by group, in scan order. */
+export type ScanResult = {
+  drafting: ApprovalItem[]
+  readyReview: ApprovalItem[]
+  readyStart: ApprovalItem[]
+  finished: ApprovalItem[]
+}
+
+function emptyScan(): ScanResult {
+  return { drafting: [], readyReview: [], readyStart: [], finished: [] }
+}
 
 function sortApprovals(items: ApprovalItem[]): ApprovalItem[] {
   items.sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0) || a.name.localeCompare(b.name))
@@ -61,11 +75,14 @@ function sortApprovals(items: ApprovalItem[]): ApprovalItem[] {
 }
 
 function scan(root: string): ScanResult {
-  const pending: ApprovalItem[] = []
   const drafting: ApprovalItem[] = []
+  const readyReview: ApprovalItem[] = []
+  const readyStart: ApprovalItem[] = []
+  const finished: ApprovalItem[] = []
   const seen = new Set<string>()
   for (const omoDir of findOmoWatchDirs(root)) {
     for (const sub of ["drafts", "plans"]) {
+      const isDraft = sub === "drafts"
       for (const abs of listMdFiles(path.join(omoDir, sub))) {
         const rel = path.relative(root, abs).replace(/\\/g, "/")
         if (!rel || rel.startsWith("..") || seen.has(rel)) continue
@@ -77,8 +94,8 @@ function scan(root: string): ScanResult {
         }
         const status = parsePlanStatus(text)
         if (!status) continue
-        const lower = status.toLowerCase()
-        if (!PENDING_STATUS.has(lower) && lower !== DRAFTING_STATUS) continue
+        const group = approvalGroup(status, isDraft)
+        if (!group) continue
         seen.add(rel)
         const item: ApprovalItem = {
           rel,
@@ -89,12 +106,29 @@ function scan(root: string): ScanResult {
           sessionState: null,
           review: parseReviewBlock(text),
         }
-        if (PENDING_STATUS.has(lower)) pending.push(item)
-        else drafting.push(item)
+        switch (group) {
+          case MY_WORK_GROUP_DRAFTING:
+            drafting.push(item)
+            break
+          case MY_WORK_GROUP_READY_REVIEW:
+            readyReview.push(item)
+            break
+          case MY_WORK_GROUP_READY_START:
+            readyStart.push(item)
+            break
+          case MY_WORK_GROUP_FINISHED:
+            finished.push(item)
+            break
+        }
       }
     }
   }
-  return { pending: sortApprovals(pending), drafting: sortApprovals(drafting) }
+  return {
+    drafting: sortApprovals(drafting),
+    readyReview: sortApprovals(readyReview),
+    readyStart: sortApprovals(readyStart),
+    finished: sortApprovals(finished),
+  }
 }
 
 const approvalsCache = createStampCache<ScanResult>({ ttlMs: TTL_MS })
@@ -104,16 +138,9 @@ export function resetApprovalsCache(): void {
   approvalsCache.reset()
 }
 
-/** Drafts/plans whose `status` says they are waiting for the user's sign-off. */
-export function listPendingApprovals(projectRoot: string | null | undefined): ApprovalItem[] {
-  if (!projectRoot) return []
+/** Drafts/plans split into the four "My work" buckets by status + file type. */
+export function listApprovals(projectRoot: string | null | undefined): ScanResult {
+  if (!projectRoot) return emptyScan()
   const root = canonicalizePath(projectRoot)
-  return approvalsCache.get(root, () => scan(root)).pending
-}
-
-/** Drafts still being written (`status: drafting`) — visible, but not awaiting approval. */
-export function listDraftingApprovals(projectRoot: string | null | undefined): ApprovalItem[] {
-  if (!projectRoot) return []
-  const root = canonicalizePath(projectRoot)
-  return approvalsCache.get(root, () => scan(root)).drafting
+  return profile("omo.approvals", () => approvalsCache.get(root, () => scan(root)))
 }

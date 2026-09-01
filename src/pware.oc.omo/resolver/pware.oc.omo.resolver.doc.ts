@@ -8,11 +8,19 @@
 import fs from "node:fs"
 import path from "node:path"
 import { createStampCache } from "../../pware.oc.core/pware.oc.core.cache.js"
+import { profile } from "../../pware.oc.core/pware.oc.core.debug.js"
 import { canonicalizePath } from "../../pware.oc.core/pware.oc.core.paths.js"
 import { canPreviewPath } from "../../pware.oc.core/pware.oc.core.preview.js"
+import {
+  DOC_KIND_DRAFT,
+  DOC_KIND_NOTEPAD,
+  DOC_KIND_PLAN,
+  DOC_KIND_PROOF,
+  type DocKind,
+} from "../constants/pware.oc.omo.constants.docKind.js"
 import { findOmoWatchDirs } from "./pware.oc.omo.resolver.boulder.js"
 
-export type DocKind = "plan" | "draft" | "notepad" | "proof"
+export type { DocKind }
 
 export type DocView = {
   kind: DocKind
@@ -27,17 +35,17 @@ export type DocView = {
 
 /** Display order, and the `.omo/` directory each kind lives in. */
 const SOURCES: readonly { kind: DocKind; dir: string; depth: number }[] = [
-  { kind: "draft", dir: "drafts", depth: 1 },
-  { kind: "notepad", dir: "notepads", depth: 1 },
+  { kind: DOC_KIND_DRAFT, dir: "drafts", depth: 1 },
+  { kind: DOC_KIND_NOTEPAD, dir: "notepads", depth: 1 },
   // Evidence is one folder per change, files inside.
-  { kind: "proof", dir: "evidence", depth: 2 },
+  { kind: DOC_KIND_PROOF, dir: "evidence", depth: 2 },
 ]
 
 export const DOC_KIND_LABEL: Record<DocKind, string> = {
-  plan: "plan",
-  draft: "drafts",
-  notepad: "notepads",
-  proof: "proof",
+  [DOC_KIND_PLAN]: "plan",
+  [DOC_KIND_DRAFT]: "drafts",
+  [DOC_KIND_NOTEPAD]: "notepads",
+  [DOC_KIND_PROOF]: "proof",
 }
 
 const MAX_PER_KIND = 20
@@ -115,7 +123,7 @@ function scan(projectRoot: string, planPaths: readonly string[]): DocView[] {
 
   // The plan lives wherever boulder points; the works already resolved that.
   const out = collect(
-    "plan",
+    DOC_KIND_PLAN,
     planPaths
       .filter(Boolean)
       .map((rel) => ({ name: path.basename(rel), abs: path.join(root, rel) })),
@@ -157,18 +165,20 @@ export function readOmoDocs(
 ): DocView[] {
   if (!projectRoot) return []
   const key = `${projectRoot}::${planPaths.join("|")}`
-  return docsCache.get(key, () => {
-    try {
-      return scan(projectRoot, planPaths)
-    } catch {
-      return []
-    }
-  })
+  return profile("omo.docs", () =>
+    docsCache.get(key, () => {
+      try {
+        return scan(projectRoot, planPaths)
+      } catch {
+        return []
+      }
+    }),
+  )
 }
 
 /** Counts per kind, in display order. Empty kinds are dropped. */
 export function groupDocs(docs: readonly DocView[]): { kind: DocKind; items: DocView[] }[] {
-  const order: DocKind[] = ["plan", "draft", "notepad", "proof"]
+  const order: DocKind[] = [DOC_KIND_PLAN, DOC_KIND_DRAFT, DOC_KIND_NOTEPAD, DOC_KIND_PROOF]
   const out: { kind: DocKind; items: DocView[] }[] = []
   for (const kind of order) {
     const items = docs.filter((d) => d.kind === kind)

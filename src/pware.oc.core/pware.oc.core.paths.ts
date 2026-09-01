@@ -11,7 +11,7 @@ export type Env = Record<string, string | undefined>
 
 /** Absolute path to the plugin's root directory (one level above `src/`). */
 export function pluginRoot(): string {
-  return path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
+  return path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..")
 }
 
 export function getDataDir(env: Env = process.env, homedir = os.homedir()): string {

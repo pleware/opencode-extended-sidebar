@@ -59,6 +59,37 @@ describe("listOpenQuestions", () => {
         },
       },
       {
+        id: "prt_interrupted",
+        session_id: "ses_q1",
+        time_created: t0 + 450,
+        data: {
+          type: "tool",
+          tool: "question",
+          callID: "call_interrupted",
+          state: {
+            status: "error",
+            error: "Tool execution aborted",
+            metadata: { interrupted: true },
+            time: { start: t0 + 450, end: t0 + 550 },
+          },
+        },
+      },
+      {
+        id: "prt_failed",
+        session_id: "ses_q2",
+        time_created: t0 + 600,
+        data: {
+          type: "tool",
+          tool: "question",
+          callID: "call_failed",
+          state: {
+            status: "error",
+            error: "Invalid question payload",
+            time: { start: t0 + 600, end: t0 + 650 },
+          },
+        },
+      },
+      {
         id: "prt_archived_open",
         session_id: "ses_archived",
         time_created: t0 + 500,
@@ -76,9 +107,25 @@ describe("listOpenQuestions", () => {
 
   test("returns open question parts of this project, with title and start", () => {
     const out = listOpenQuestions({ dbPath: fix.dbPath, projectId: "proj_1" })
-    expect(out.map((q) => q.sessionId)).toEqual(["ses_q1"])
-    expect(out[0]?.title).toBe("Q1")
-    expect(out[0]?.startedAt).toBe(t0 + 100)
+    expect(out.filter((q) => q.kind === "question").map((q) => q.sessionId)).toEqual(["ses_q1"])
+    const q = out.find((x) => x.kind === "question")
+    expect(q?.title).toBe("Q1")
+    expect(q?.startedAt).toBe(t0 + 100)
+    expect(q?.reason).toBeNull()
+  })
+
+  test("an interrupted question stays in the queue with its reason", () => {
+    const out = listOpenQuestions({ dbPath: fix.dbPath, projectId: "proj_1" })
+    const q = out.find((x) => x.kind === "interrupted")
+    expect(q?.sessionId).toBe("ses_q1")
+    expect(q?.reason).toBe("Tool execution aborted")
+  })
+
+  test("a genuinely failed question is its own error kind with the error text", () => {
+    const out = listOpenQuestions({ dbPath: fix.dbPath, projectId: "proj_1" })
+    const q = out.find((x) => x.kind === "error")
+    expect(q?.sessionId).toBe("ses_q2")
+    expect(q?.reason).toBe("Invalid question payload")
   })
 
   test("a question in another project stays out of this queue", () => {

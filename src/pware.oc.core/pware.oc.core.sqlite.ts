@@ -4,6 +4,7 @@
  */
 import { createRequire } from "node:module"
 import fs from "node:fs"
+import { profile } from "./pware.oc.core.debug.js"
 
 export type SqlRow = Record<string, unknown>
 
@@ -14,6 +15,11 @@ export type SqlDb = {
 }
 
 const require = createRequire(import.meta.url)
+
+/** One-line query label for the profile log; computed lazily (profiling off = free). */
+function sqlLabel(sql: string): string {
+  return sql.replace(/\s+/g, " ").trim().slice(0, 80)
+}
 
 function wrapBun(db: {
   query: (sql: string) => { all: (...p: unknown[]) => SqlRow[]; get: (...p: unknown[]) => SqlRow | null }
@@ -28,9 +34,9 @@ function wrapBun(db: {
   }
   return {
     all: <T extends SqlRow>(sql: string, ...params: unknown[]) =>
-      db.query(sql).all(...params) as T[],
+      profile("sql", () => db.query(sql).all(...params) as T[], () => ({ q: sqlLabel(sql) })),
     get: <T extends SqlRow>(sql: string, ...params: unknown[]) =>
-      (db.query(sql).get(...params) as T | null) ?? null,
+      profile("sql", () => (db.query(sql).get(...params) as T | null) ?? null, () => ({ q: sqlLabel(sql) })),
     close: () => {
       try {
         db.close()
@@ -57,9 +63,9 @@ function wrapNodeSync(db: {
   }
   return {
     all: <T extends SqlRow>(sql: string, ...params: unknown[]) =>
-      db.prepare(sql).all(...params) as T[],
+      profile("sql", () => db.prepare(sql).all(...params) as T[], () => ({ q: sqlLabel(sql) })),
     get: <T extends SqlRow>(sql: string, ...params: unknown[]) =>
-      (db.prepare(sql).get(...params) as T | undefined) ?? null,
+      profile("sql", () => (db.prepare(sql).get(...params) as T | undefined) ?? null, () => ({ q: sqlLabel(sql) })),
     close: () => {
       try {
         db.close()

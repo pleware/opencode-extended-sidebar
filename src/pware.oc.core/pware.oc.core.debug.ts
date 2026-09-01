@@ -1,31 +1,33 @@
 /**
- * Optional file-based debug logger.
+ * Optional file-based debug + profile loggers.
  *
- * Activated by setting OES_DEBUG_OPENCODE in the environment:
- *   OES_DEBUG_OPENCODE=1          → writes to <plugin>/logs/
- *   OES_DEBUG_OPENCODE=/some/dir  → writes to that directory
+ * Debug:   OES_DEBUG_OPENCODE=1          → writes to <plugin>/logs/
+ * Profile: OES_DEBUG_PROFILE=1           → writes to <plugin>/logs/
+ * Either  OES_DEBUG_*=/some/dir          → writes to that directory
  *
- * Each session appends a single oes-debug-<date>.log file.
- * Lines are newline-delimited JSON: { ts, tag, msg, data? }.
+ * Each session appends a single oes-debug-<date>.log / oes-profile-<date>.log
+ * file. Lines are newline-delimited JSON:
+ *   debug   → { ts, tag, msg, data? }
+ *   profile → { ts, tag, ms, data? }
  * All writes are silent on error — the plugin never crashes because of logging.
  */
 import fs from "node:fs"
-import os from "node:os"
 import path from "node:path"
 import { pluginRoot } from "./pware.oc.core.paths.js"
 
-const ENV_KEY = "OES_DEBUG_OPENCODE"
+const DEBUG_ENV_KEY = "OES_DEBUG_OPENCODE"
+const PROFILE_ENV_KEY = "OES_DEBUG_PROFILE"
 
 function pluginLogsDir(): string {
   return path.join(pluginRoot(), "logs")
 }
 
-/** Returns the log directory, or null when debug is off. Exported for tests. */
-export function debugLogDir(
-  env: Record<string, string | undefined> = process.env,
+function resolveLogDir(
+  envKey: string,
+  env: Record<string, string | undefined>,
   defaultDir?: string,
 ): string | null {
-  const val = env[ENV_KEY]
+  const val = env[envKey]
   if (!val) return null
   const trimmed = val.trim()
   if (!trimmed) return null
@@ -36,13 +38,48 @@ export function debugLogDir(
   return trimmed
 }
 
-function logFileName(): string {
+/** Returns the debug log directory, or null when debug is off. Exported for tests. */
+export function debugLogDir(
+  env: Record<string, string | undefined> = process.env,
+  defaultDir?: string,
+): string | null {
+  return resolveLogDir(DEBUG_ENV_KEY, env, defaultDir)
+}
+
+/** Returns the profile log directory, or null when profiling is off. Exported for tests. */
+export function profileLogDir(
+  env: Record<string, string | undefined> = process.env,
+  defaultDir?: string,
+): string | null {
+  return resolveLogDir(PROFILE_ENV_KEY, env, defaultDir)
+}
+
+/** True when the debug logger is active — env on AND its log dir resolved/writable. */
+export function debugActive(): boolean {
+  return resolvedDir() !== null
+}
+
+export function debugActiveDir(): string | null {
+  return resolvedDir()
+}
+
+/** True when the profile logger is active — env on AND its log dir resolved/writable. */
+export function profileActive(): boolean {
+  return profileResolvedDir() !== null
+}
+
+export function profileActiveDir(): string | null {
+  return profileResolvedDir()
+}
+
+function datedLogFile(prefix: string): string {
   const d = new Date()
   const pad = (n: number) => String(n).padStart(2, "0")
-  return `oes-debug-${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}.log`
+  return `oes-${prefix}-${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}.log`
 }
 
 let _dir: string | null | undefined = undefined // undefined = not resolved yet
+let _pdir: string | null | undefined = undefined
 
 function resolvedDir(): string | null {
   if (_dir !== undefined) return _dir
@@ -57,9 +94,33 @@ function resolvedDir(): string | null {
   return _dir
 }
 
+function profileResolvedDir(): string | null {
+  if (_pdir !== undefined) return _pdir
+  _pdir = profileLogDir()
+  if (_pdir) {
+    try {
+      fs.mkdirSync(_pdir, { recursive: true })
+    } catch {
+      _pdir = null
+    }
+  }
+  return _pdir
+}
+
 /** Reset cached state (test helper). */
 export function resetDebug(): void {
   _dir = undefined
+  _pdir = undefined
+  profileStats = {}
+}
+
+function appendLine(dir: string, file: string, line: Record<string, unknown>): void {
+  try {
+    const entry = { ts: new Date().toISOString(), ...line }
+    fs.appendFileSync(path.join(dir, file), JSON.stringify(entry) + "\n", "utf8")
+  } catch {
+    // silent — logging must never crash the plugin
+  }
 }
 
 /**
@@ -69,11 +130,105 @@ export function resetDebug(): void {
 export function dbg(tag: string, msg: string, data?: unknown): void {
   const dir = resolvedDir()
   if (!dir) return
+  appendLine(dir, datedLogFile("debug"), {
+    tag,
+    msg,
+    ...(data !== undefined ? { data } : {}),
+  })
+}
+
+export type ProfileStats = { n: number; sum: number; max: number }
+
+/** In-memory per-tag totals, updated only while OES_DEBUG_PROFILE is on. */
+let profileStats: Record<string, ProfileStats> = {}
+
+/** Lazily-computed or plain profile data — a factory keeps the call site free when off. */
+type ProfileData = Record<string, unknown> | (() => Record<string, unknown>)
+
+function resolveData(data: ProfileData | undefined): Record<string, unknown> | undefined {
+  const d = typeof data === "function" ? data() : data
+  return d && Object.keys(d).length > 0 ? d : undefined
+}
+
+function recordProfile(tag: string, ms: number, data?: ProfileData): void {
+  const dir = profileResolvedDir()
+  if (!dir) return
+  const s = (profileStats[tag] ??= { n: 0, sum: 0, max: 0 })
+  s.n += 1
+  s.sum += ms
+  if (ms > s.max) s.max = ms
+  const d = resolveData(data)
+  appendLine(dir, datedLogFile("profile"), {
+    tag,
+    ms,
+    ...(d !== undefined ? { data: d } : {}),
+  })
+}
+
+/**
+ * Measure fn with performance.now() and append one { tag, ms, data? } line to
+ * the profile log. No-op when OES_DEBUG_PROFILE is not set or falsy. Returns
+ * fn's result; throws propagate.
+ */
+export function profile<T>(tag: string, fn: () => T, data?: ProfileData): T {
+  if (!profileResolvedDir()) return fn()
+  const t0 = performance.now()
   try {
-    const line =
-      JSON.stringify({ ts: new Date().toISOString(), tag, msg, ...(data !== undefined ? { data } : {}) }) + "\n"
-    fs.appendFileSync(path.join(dir, logFileName()), line, "utf8")
-  } catch {
-    // silent — logging must never crash the plugin
+    return fn()
+  } finally {
+    recordProfile(tag, performance.now() - t0, data)
   }
+}
+
+/**
+ * Same as profile(), but for an async fn — measures until the returned promise
+ * settles. The fn is invoked immediately (the promise is what is timed).
+ */
+export function profileAsync<T>(
+  tag: string,
+  fn: () => Promise<T>,
+  data?: ProfileData,
+): Promise<T> {
+  if (!profileResolvedDir()) return fn()
+  const t0 = performance.now()
+  return fn().then(
+    (value) => {
+      recordProfile(tag, performance.now() - t0, data)
+      return value
+    },
+    (err) => {
+      recordProfile(tag, performance.now() - t0, data)
+      throw err
+    },
+  )
+}
+
+/** Shallow copy of the per-tag profile totals. Empty when profiling is off. */
+export function readProfileStats(): Record<string, ProfileStats> {
+  const out: Record<string, ProfileStats> = {}
+  for (const [tag, s] of Object.entries(profileStats)) out[tag] = { ...s }
+  return out
+}
+
+/**
+ * Append one `summary` line with the per-tag totals (n, total ms, avg, max) to
+ * the profile log. No-op when profiling is off or nothing was measured.
+ */
+export function writeProfileSummary(): void {
+  const dir = profileResolvedDir()
+  if (!dir) return
+  const stats = readProfileStats()
+  const tags = Object.keys(stats)
+  if (tags.length === 0) return
+  const summary: Record<string, { n: number; total: number; avg: number; max: number }> = {}
+  for (const tag of tags) {
+    const s = stats[tag]
+    summary[tag] = {
+      n: s.n,
+      total: Math.round(s.sum * 10) / 10,
+      avg: Math.round((s.sum / s.n) * 10) / 10,
+      max: Math.round(s.max * 10) / 10,
+    }
+  }
+  appendLine(dir, datedLogFile("profile"), { tag: "summary", data: summary })
 }

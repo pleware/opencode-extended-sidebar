@@ -15,12 +15,30 @@ import { toEpochMs } from "../../pware.oc.core/pware.oc.core.pulse.js"
 import { openReadonlyDb, withDbRead } from "../../pware.oc.core/pware.oc.core.sqlite.js"
 import { toToolStatus } from "../../pware.oc.core/pware.oc.core.status.js"
 import { PART_TYPE_TOOL } from "../../pware.oc.core/constants/pware.oc.core.constants.partType.js"
+import {
+  TOOL_STATUS_COMPLETED,
+  TOOL_STATUS_ERROR,
+  TOOL_STATUS_PENDING,
+  TOOL_STATUS_RUNNING,
+} from "../../pware.oc.core/constants/pware.oc.core.constants.status.js"
+import { TOOL_QUESTION } from "../../pware.oc.core/constants/pware.oc.core.constants.toolName.js"
+import {
+  QUESTION_KIND_ERROR,
+  QUESTION_KIND_INTERRUPTED,
+  QUESTION_KIND_QUESTION,
+  type OpenQuestionKind,
+} from "../constants/pware.oc.opencode.constants.questionKind.js"
+
+export type { OpenQuestionKind }
 
 export type OpenQuestion = {
   sessionId: string
   /** The session's own title — the question's session may sit outside the recent window. */
   title: string
   startedAt: number | null
+  kind: OpenQuestionKind
+  /** `state.error` text for interrupted/error parts; null for an open question. */
+  reason: string | null
 }
 
 type OpenQuestionRow = {
@@ -30,6 +48,8 @@ type OpenQuestionRow = {
   status: string | null
   tstart: number | null
   tend: number | null
+  error: string | null
+  interrupted: number | null
 }
 
 export function listOpenQuestions(opts: {
@@ -48,11 +68,13 @@ export function listOpenQuestions(opts: {
                 p.time_created,
                 json_extract(p.data,'$.state.status') AS status,
                 json_extract(p.data,'$.state.time.start') AS tstart,
-                json_extract(p.data,'$.state.time.end') AS tend
+                json_extract(p.data,'$.state.time.end') AS tend,
+                json_extract(p.data,'$.state.error') AS error,
+                json_extract(p.data,'$.state.metadata.interrupted') AS interrupted
          FROM part p
          JOIN session s ON s.id = p.session_id
          WHERE json_extract(p.data,'$.type') = '${PART_TYPE_TOOL}'
-           AND json_extract(p.data,'$.tool') = 'question'
+           AND json_extract(p.data,'$.tool') = '${TOOL_QUESTION}'
            AND (s.time_archived IS NULL OR s.time_archived = 0)
            AND s.project_id = ?
          ORDER BY p.time_created DESC
@@ -67,13 +89,23 @@ export function listOpenQuestions(opts: {
       const start = toEpochMs(row.tstart)
       const end = toEpochMs(row.tend)
       const status = toToolStatus(
-        str(row.status) || (end != null ? "completed" : start != null ? "running" : null),
+        str(row.status) || (end != null ? TOOL_STATUS_COMPLETED : start != null ? TOOL_STATUS_RUNNING : null),
       )
-      if (status !== "running" && status !== "pending") continue
+      if (status !== TOOL_STATUS_RUNNING && status !== TOOL_STATUS_PENDING && status !== TOOL_STATUS_ERROR) continue
+      const interrupted = row.interrupted === 1
+      const reason = str(row.error) || null
+      const kind: OpenQuestionKind =
+        status === TOOL_STATUS_ERROR
+          ? interrupted
+            ? QUESTION_KIND_INTERRUPTED
+            : QUESTION_KIND_ERROR
+          : QUESTION_KIND_QUESTION
       out.push({
         sessionId: row.session_id,
         title: str(row.title) || "untitled",
         startedAt: start ?? toEpochMs(row.time_created),
+        kind,
+        reason: kind === QUESTION_KIND_QUESTION ? null : reason,
       })
     }
     return out

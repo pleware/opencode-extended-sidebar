@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, test } from "bun:test"
-import { listRecentSessionFiles } from "../../../../src/pware.oc.opencode/resolver/pware.oc.opencode.resolver.file.js"
+import { listRecentSessionFiles, listSessionFiles } from "../../../../src/pware.oc.opencode/resolver/pware.oc.opencode.resolver.file.js"
 import { openReadonlyDb } from "../../../../src/pware.oc.core/pware.oc.core.sqlite.js"
-import { createFixtureDb, patchPartData, toolPartData } from "../../../helpers/sqlite.js"
+import { createFixtureDb, patchPartData, recordingDb, textPartData, toolPartData } from "../../../helpers/sqlite.js"
 
 describe("recent sessions file feed", () => {
   const t0 = 1_700_000_000_000
@@ -61,5 +61,71 @@ describe("recent sessions file feed", () => {
     expect(a?.deletions).toBe(1)
     expect(p).toBeTruthy()
     expect(out.some((f) => f.id.startsWith("b_"))).toBe(false)
+  })
+})
+
+describe("listSessionFiles two-stage fast path", () => {
+  const t0 = 1_700_000_000_000
+  const fix = createFixtureDb({
+    sessions: [
+      { id: "ses_sat", project_id: "proj_1", title: "sat", time_created: t0, time_updated: t0 + 1000 },
+    ],
+    parts: [
+      ...Array.from({ length: 20 }, (_, i) => ({
+        id: `txt_${String(i).padStart(3, "0")}`,
+        session_id: "ses_sat",
+        time_created: t0 + i,
+        data: textPartData({}),
+      })),
+      ...Array.from({ length: 80 }, (_, i) => ({
+        id: `patch_${String(i).padStart(3, "0")}`,
+        session_id: "ses_sat",
+        time_created: t0 + 100 + i,
+        data: patchPartData([`src/f_${String(i).padStart(3, "0")}.ts`]),
+      })),
+    ],
+  })
+
+  afterAll(() => fix.dispose())
+
+  test("saturated window full of matches stays on the bounded fast path", () => {
+    const db = recordingDb(openReadonlyDb(fix.dbPath)!)
+    const out = listSessionFiles(db, "ses_sat")
+    expect(db.queries.length).toBe(2)
+    expect(out).toHaveLength(80)
+    expect(out.every((f) => f.id.startsWith("src/f_"))).toBe(true)
+  })
+})
+
+describe("listSessionFiles sparse fallback", () => {
+  const t0 = 1_700_000_000_000
+  const fix = createFixtureDb({
+    sessions: [
+      { id: "ses_sparse", project_id: "proj_1", title: "sparse", time_created: t0, time_updated: t0 + 2000 },
+    ],
+    parts: [
+      ...Array.from({ length: 20 }, (_, i) => ({
+        id: `patch_${String(i).padStart(3, "0")}`,
+        session_id: "ses_sparse",
+        time_created: t0 + i,
+        data: patchPartData([`src/f_${String(i).padStart(3, "0")}.ts`]),
+      })),
+      ...Array.from({ length: 80 }, (_, i) => ({
+        id: `txt_${String(i).padStart(3, "0")}`,
+        session_id: "ses_sparse",
+        time_created: t0 + 100 + i,
+        data: textPartData({}),
+      })),
+    ],
+  })
+
+  afterAll(() => fix.dispose())
+
+  test("sparse file-touch parts in a saturated window fall back to find older rows", () => {
+    const db = recordingDb(openReadonlyDb(fix.dbPath)!)
+    const out = listSessionFiles(db, "ses_sparse")
+    expect(db.queries.length).toBe(3)
+    expect(out).toHaveLength(20)
+    expect(out.every((f) => f.id.startsWith("src/f_"))).toBe(true)
   })
 })

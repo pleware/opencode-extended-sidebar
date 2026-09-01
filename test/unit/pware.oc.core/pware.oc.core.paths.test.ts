@@ -6,6 +6,7 @@ import {
   getDataDir,
   getOpenCodeDbPath,
   localAgentizeDbPath,
+  pluginRoot,
 } from "../../../src/pware.oc.core/pware.oc.core.paths.js"
 
 // ── getDataDir ──────────────────────────────────────────────────────────────
@@ -23,6 +24,13 @@ describe("getDataDir", () => {
 
   test("uses XDG_DATA_HOME verbatim when no ~ prefix", () => {
     expect(getDataDir({ XDG_DATA_HOME: "/custom/data" }, "/home/user")).toBe("/custom/data")
+  })
+})
+
+describe("pluginRoot", () => {
+  test("resolves to the repo root, not src", () => {
+    const base = path.basename(pluginRoot()).toLowerCase()
+    expect(base).toBe("opencode-extended-sidebar")
   })
 })
 

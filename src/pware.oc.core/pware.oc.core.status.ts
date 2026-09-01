@@ -1,70 +1,73 @@
 /**
  * Canonical lifecycle / tool / work status. OpenCode and OMO use different
- * synonyms; every mapper in the panel goes through this file.
+ * synonyms; every mapper in the panel goes through this file. The raw status
+ * strings live in `constants/pware.oc.core.constants.status.js`.
  */
+import {
+  STATUS_ABANDONED,
+  STATUS_ARCHIVED,
+  STATUS_COMPLETED,
+  STATUS_ERROR,
+  STATUS_IDLE,
+  STATUS_PAUSED,
+  STATUS_PENDING,
+  STATUS_RUNNING,
+  STATUS_UNKNOWN,
+  type CanonicalStatus,
+  type ToolStatus,
+} from "./constants/pware.oc.core.constants.status.js"
 
-export type CanonicalStatus =
-  | "running"
-  | "pending"
-  | "completed"
-  | "error"
-  | "paused"
-  | "abandoned"
-  | "archived"
-  | "idle"
-  | "unknown"
-
-export type ToolStatus = "running" | "completed" | "error" | "pending"
+export type { CanonicalStatus, ToolStatus }
 
 export function normalizeStatus(raw: string | null | undefined): CanonicalStatus {
   const s = (raw || "").toLowerCase()
-  if (s === "running" || s === "in_progress" || s === "active") return "running"
-  if (s === "completed" || s === "done" || s === "success") return "completed"
-  if (s === "error" || s === "failed") return "error"
-  if (s === "pending" || s === "queued") return "pending"
-  if (s === "paused") return "paused"
-  if (s === "abandoned") return "abandoned"
-  if (s === "archived") return "archived"
-  if (s === "idle") return "idle"
-  return "unknown"
+  if (s === "running" || s === "in_progress" || s === "active") return STATUS_RUNNING
+  if (s === "completed" || s === "done" || s === "success") return STATUS_COMPLETED
+  if (s === "error" || s === "failed") return STATUS_ERROR
+  if (s === "pending" || s === "queued") return STATUS_PENDING
+  if (s === "paused") return STATUS_PAUSED
+  if (s === "abandoned") return STATUS_ABANDONED
+  if (s === "archived") return STATUS_ARCHIVED
+  if (s === "idle") return STATUS_IDLE
+  return STATUS_UNKNOWN
 }
 
 export function toToolStatus(raw: string | null | undefined): ToolStatus {
   const c = normalizeStatus(raw)
-  if (c === "running") return "running"
-  if (c === "completed") return "completed"
-  if (c === "error") return "error"
-  return "pending"
+  if (c === STATUS_RUNNING) return STATUS_RUNNING
+  if (c === STATUS_COMPLETED) return STATUS_COMPLETED
+  if (c === STATUS_ERROR) return STATUS_ERROR
+  return STATUS_PENDING
 }
 
 /** Short work status for the panel — no full paths, no checklist text. */
 export function toWorkLabel(raw: string | null | undefined): string {
   const c = normalizeStatus(raw)
-  if (c === "completed") return "done"
-  if (c === "unknown") return (raw || "").toLowerCase() || "unknown"
+  if (c === STATUS_COMPLETED) return "done"
+  if (c === STATUS_UNKNOWN) return (raw || "").toLowerCase() || "unknown"
   return c
 }
 
 /** Queued / waiting work — boulder writes no `status` while a task waits for a slot. */
 export function isPendingWork(status: string | null | undefined): boolean {
-  return normalizeStatus(status) === "pending"
+  return normalizeStatus(status) === STATUS_PENDING
 }
 
 /** Paused and abandoned are deliberate stops — they must not keep pulsing. */
 export function workIsTerminal(status: string): boolean {
   const s = toWorkLabel(status)
-  return s === "done" || s === "error" || s === "paused" || s === "abandoned"
+  return s === "done" || s === STATUS_ERROR || s === STATUS_PAUSED || s === STATUS_ABANDONED
 }
 
 export function isRunningLifecycle(raw: string | null | undefined): boolean {
-  return normalizeStatus(raw) === "running"
+  return normalizeStatus(raw) === STATUS_RUNNING
 }
 
 export function taskRank(status: string): number {
   const c = normalizeStatus(status)
-  if (c === "running") return 0
-  if (c === "pending") return 1
-  if (c === "error" || (status || "").toLowerCase() === "cancelled") return 2
-  if (c === "completed") return 3
+  if (c === STATUS_RUNNING) return 0
+  if (c === STATUS_PENDING) return 1
+  if (c === STATUS_ERROR || (status || "").toLowerCase() === "cancelled") return 2
+  if (c === STATUS_COMPLETED) return 3
   return 4
 }

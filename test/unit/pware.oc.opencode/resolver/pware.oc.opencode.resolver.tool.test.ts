@@ -1,10 +1,11 @@
 import { afterAll, describe, expect, test } from "bun:test"
 import {
   listRecentToolEvents,
+  listToolEvents,
   mergeTools,
 } from "../../../../src/pware.oc.opencode/resolver/pware.oc.opencode.resolver.tool.js"
 import { openReadonlyDb } from "../../../../src/pware.oc.core/pware.oc.core.sqlite.js"
-import { createFixtureDb, patchPartData, toolPartData } from "../../../helpers/sqlite.js"
+import { createFixtureDb, patchPartData, recordingDb, textPartData, toolPartData } from "../../../helpers/sqlite.js"
 
 describe("mergeTools", () => {
   test("live running wins over db pending; completed is not clobbered", () => {
@@ -225,5 +226,79 @@ describe("recent sessions feed queries", () => {
     expect(listRecentToolEvents(db, ["ses_a1"], 1)).toHaveLength(1)
     expect(listRecentToolEvents(db, [])).toEqual([])
     expect(listRecentToolEvents(db, ["", "ses_a1", "ses_a1"])).toHaveLength(2)
+  })
+})
+
+describe("listToolEvents two-stage fast path", () => {
+  const t0 = 1_700_000_000_000
+  const fix = createFixtureDb({
+    sessions: [
+      { id: "ses_sat", project_id: "proj_1", title: "sat", time_created: t0, time_updated: t0 + 1000 },
+    ],
+    parts: Array.from({ length: 100 }, (_, i) => ({
+      id: `prt_${String(i).padStart(3, "0")}`,
+      session_id: "ses_sat",
+      time_created: t0 + i,
+      data: toolPartData({ tool: "bash", command: `c${i}`, callID: `call_${i}` }),
+    })),
+  })
+
+  afterAll(() => fix.dispose())
+
+  test("saturated window with enough tool rows stays on the bounded fast path", () => {
+    const db = recordingDb(openReadonlyDb(fix.dbPath)!)
+    const out = listToolEvents(db, "ses_sat", 8)
+    expect(db.queries.length).toBe(2)
+    expect(out.map((t) => t.id)).toEqual([
+      "prt_099",
+      "prt_098",
+      "prt_097",
+      "prt_096",
+      "prt_095",
+      "prt_094",
+      "prt_093",
+      "prt_092",
+    ])
+  })
+})
+
+describe("listToolEvents sparse fallback", () => {
+  const t0 = 1_700_000_000_000
+  const fix = createFixtureDb({
+    sessions: [
+      { id: "ses_sparse", project_id: "proj_1", title: "sparse", time_created: t0, time_updated: t0 + 2000 },
+    ],
+    parts: [
+      ...Array.from({ length: 20 }, (_, i) => ({
+        id: `tool_${String(i).padStart(3, "0")}`,
+        session_id: "ses_sparse",
+        time_created: t0 + i,
+        data: toolPartData({ tool: "bash", command: `c${i}`, callID: `call_${i}` }),
+      })),
+      ...Array.from({ length: 80 }, (_, i) => ({
+        id: `txt_${String(i).padStart(3, "0")}`,
+        session_id: "ses_sparse",
+        time_created: t0 + 100 + i,
+        data: textPartData({}),
+      })),
+    ],
+  })
+
+  afterAll(() => fix.dispose())
+
+  test("sparse tool rows in a saturated window fall back to find older tools", () => {
+    const db = recordingDb(openReadonlyDb(fix.dbPath)!)
+    const out = listToolEvents(db, "ses_sparse", 8)
+    expect(db.queries.length).toBe(3)
+    expect(out.map((t) => t.id)).toEqual([
+      "tool_019",
+      "tool_018",
+      "tool_017",
+      "tool_016",
+      "tool_015",
+      "tool_014",
+      "tool_013",
+      "tool_012",
+    ])
   })
 })

@@ -75,12 +75,12 @@ describe("markGlyph", () => {
 })
 
 describe("myWorkGlyph", () => {
-  test("questions use ?, drafting the ellipsis, approvals ! — plain ASCII", () => {
+  test("questions use ?, approvals the review/start/finished/draft glyphs — plain ASCII", () => {
     expect(myWorkGlyph("question")).toBe("?")
     expect(myWorkGlyph("drafting")).toBe("…")
-    expect(myWorkGlyph("pending")).toBe("!")
-    expect(myWorkGlyph("working")).toBe("!")
-    expect(myWorkGlyph("idle")).toBe("!")
+    expect(myWorkGlyph("ready-to-review")).toBe("!")
+    expect(myWorkGlyph("ready-to-start")).toBe("▶")
+    expect(myWorkGlyph("finished")).toBe("✓")
   })
 })
 

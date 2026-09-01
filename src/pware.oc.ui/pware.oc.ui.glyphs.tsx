@@ -18,6 +18,34 @@ import {
   ROUND_STATUS_ACTIVE,
 } from "../pware.oc.omo/constants/pware.oc.omo.constants.reviewStatus.js"
 import { toWorkLabel } from "../pware.oc.core/pware.oc.core.status.js"
+import {
+  FLOW_RECV,
+  FLOW_TOOL,
+  FLOW_WAIT,
+  MARK_QUEUED,
+  MARK_READY,
+  PULSE_LIVE,
+  PULSE_STALE,
+} from "../pware.oc.core/constants/pware.oc.core.constants.pulse.js"
+import {
+  STATUS_ABANDONED,
+  STATUS_ARCHIVED,
+  STATUS_ERROR,
+  STATUS_PAUSED,
+  STATUS_PENDING,
+  STATUS_RUNNING,
+} from "../pware.oc.core/constants/pware.oc.core.constants.status.js"
+import {
+  MY_WORK_GROUP_DRAFTING,
+  MY_WORK_GROUP_FINISHED,
+  MY_WORK_GROUP_READY_REVIEW,
+  MY_WORK_GROUP_READY_START,
+} from "../pware.oc.core/constants/pware.oc.core.constants.myWork.js"
+import {
+  QUESTION_KIND_ERROR,
+  QUESTION_KIND_INTERRUPTED,
+  QUESTION_KIND_QUESTION,
+} from "../pware.oc.opencode/constants/pware.oc.opencode.constants.questionKind.js"
 
 /** Same braille set as OpenCode TUI thinking spinner (`opentui-spinner`). */
 export const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"] as const
@@ -37,36 +65,41 @@ export function flowBlinkOn(frame: number): boolean {
 }
 
 export function flowGlyph(dir: FlowDir): string {
-  if (dir === "recv") return "↓"
-  if (dir === "wait") return "↑"
+  if (dir === FLOW_RECV) return "↓"
+  if (dir === FLOW_WAIT) return "↑"
   return "→"
 }
 
 export function markGlyph(mark: AgentMark, frame = 0, flow?: FlowDir | null): string {
-  if (mark === "error") return "×"
-  if (mark === "ready" || mark === "archived") return "•"
+  if (mark === STATUS_ERROR) return "×"
+  if (mark === MARK_READY || mark === STATUS_ARCHIVED) return "•"
   // Queued means waiting for a slot — the clock, not an idle dot.
-  if (mark === "queued") return "◷"
-  if (flow === "recv" || flow === "wait" || flow === "tool") return flowGlyph(flow)
-  if (mark === "live" || mark === "stale") return spinnerFrame(frame)
+  if (mark === MARK_QUEUED) return "◷"
+  if (flow === FLOW_RECV || flow === FLOW_WAIT || flow === FLOW_TOOL) return flowGlyph(flow)
+  if (mark === PULSE_LIVE || mark === PULSE_STALE) return spinnerFrame(frame)
   return "•"
 }
 
 export function workStatusGlyph(status: string): string | null {
   const s = toWorkLabel(status)
   if (s === "done") return "✓"
-  if (s === "error") return "×"
-  if (s === "running") return null
+  if (s === STATUS_ERROR) return "×"
+  if (s === STATUS_RUNNING) return null
   // A plain clock, not the emoji hourglass — one cell, monochrome.
-  if (s === "pending") return "◷"
-  if (s === "paused") return "║"
-  if (s === "abandoned") return "⊘"
+  if (s === STATUS_PENDING) return "◷"
+  if (s === STATUS_PAUSED) return "║"
+  if (s === STATUS_ABANDONED) return "⊘"
   return "○"
 }
 
 export function myWorkGlyph(kind: MyWorkKind): string {
-  if (kind === "question") return "?"
-  if (kind === "drafting") return "…"
+  if (kind === QUESTION_KIND_QUESTION) return "?"
+  if (kind === QUESTION_KIND_INTERRUPTED) return "◷"
+  if (kind === QUESTION_KIND_ERROR) return "×"
+  if (kind === MY_WORK_GROUP_READY_REVIEW) return "!"
+  if (kind === MY_WORK_GROUP_DRAFTING) return "…"
+  if (kind === MY_WORK_GROUP_READY_START) return "▶"
+  if (kind === MY_WORK_GROUP_FINISHED) return "✓"
   return "!"
 }
 
@@ -93,8 +126,8 @@ export function reviewStateSuffix(review: ReviewState | null | undefined): strin
 }
 
 export function fileLetterMark(letter: FileLetter | null | undefined): AgentMark {
-  if (letter === "D" || letter === "U") return "error"
-  if (letter === "M" || letter === "T" || letter === "R" || letter === "C") return "stale"
-  if (letter === "A") return "live"
-  return "ready"
+  if (letter === "D" || letter === "U") return STATUS_ERROR
+  if (letter === "M" || letter === "T" || letter === "R" || letter === "C") return PULSE_STALE
+  if (letter === "A") return PULSE_LIVE
+  return MARK_READY
 }

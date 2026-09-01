@@ -7,6 +7,18 @@
  */
 import type { Delegate, OmoSnapshot } from "../../pware.oc.omo/resolver/pware.oc.omo.resolver.boulder.js"
 import { normalizeStatus } from "../../pware.oc.core/pware.oc.core.status.js"
+import {
+  STATUS_ARCHIVED,
+  STATUS_COMPLETED,
+  STATUS_ERROR,
+  STATUS_RUNNING,
+  STATUS_UNKNOWN,
+} from "../../pware.oc.core/constants/pware.oc.core.constants.status.js"
+import {
+  SESSION_STATUS_ARCHIVED,
+  SESSION_STATUS_IDLE,
+  SESSION_STATUS_RUNNING,
+} from "../../pware.oc.opencode/constants/pware.oc.opencode.constants.sessionStatus.js"
 import type { DbSnapshot, SessionView } from "../../pware.oc.opencode/resolver/index.js"
 import type { RuntimeSnapshot } from "./index.js"
 
@@ -24,22 +36,22 @@ export function reconcileDelegateStatus(
   omoStatus: string,
   sess?: Pick<SessionView, "status"> | null,
 ): string {
-  const omo = (omoStatus || "unknown").toLowerCase()
+  const omo = (omoStatus || STATUS_UNKNOWN).toLowerCase()
   if (!sess) return omo
-  if (sess.status === "archived") return "completed"
+  if (sess.status === SESSION_STATUS_ARCHIVED) return STATUS_COMPLETED
   const c = normalizeStatus(omoStatus)
-  const omoError = c === "error"
-  const omoDone = c === "completed"
-  if (sess.status === "idle") {
+  const omoError = c === STATUS_ERROR
+  const omoDone = c === STATUS_COMPLETED
+  if (sess.status === SESSION_STATUS_IDLE) {
     if (omoError) return omo
     if (omoDone) return omo
-    return "completed"
+    return STATUS_COMPLETED
   }
   if (omoError || omoDone) return omo
   // A live SQLite session is authoritative — a queued boulder entry (no status
   // yet) must not show as waiting while its subagent is actually running.
-  if (sess.status === "running") return "running"
-  return omo === "unknown" ? "running" : omo
+  if (sess.status === SESSION_STATUS_RUNNING) return STATUS_RUNNING
+  return omo === STATUS_UNKNOWN ? STATUS_RUNNING : omo
 }
 
 export function enrichDelegates(omo: OmoSnapshot, db: DbSnapshot): DelegateView[] {
@@ -50,7 +62,7 @@ export function enrichDelegates(omo: OmoSnapshot, db: DbSnapshot): DelegateView[
       status: reconcileDelegateStatus(d.status, sess),
       tokensTotal: sess ? sess.tokensTotal : null,
       timeUpdated: sess?.timeUpdated ?? d.updatedAt,
-      archived: sess?.status === "archived",
+      archived: sess?.status === SESSION_STATUS_ARCHIVED,
     }
   })
 }
@@ -126,7 +138,7 @@ export function delegatesForSession(snap: RuntimeSnapshot, sessionId: string): D
       updatedAt: c.timeUpdated,
       tokensTotal: c.tokensTotal,
       timeUpdated: c.timeUpdated,
-      archived: c.status === "archived",
+      archived: c.status === SESSION_STATUS_ARCHIVED,
     })
   }
   return out

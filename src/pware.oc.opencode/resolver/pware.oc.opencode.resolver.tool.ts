@@ -8,6 +8,12 @@ import { preferToolLabel, shortToolLabel, toEpochMs, type ToolHit } from "../../
 import { str } from "../../pware.oc.core/pware.oc.core.paths.js"
 import { uniqueIds, type SqlDb } from "../../pware.oc.core/pware.oc.core.sqlite.js"
 import { toToolStatus, type ToolStatus } from "../../pware.oc.core/pware.oc.core.status.js"
+import {
+  TOOL_STATUS_COMPLETED,
+  TOOL_STATUS_ERROR,
+  TOOL_STATUS_PENDING,
+  TOOL_STATUS_RUNNING,
+} from "../../pware.oc.core/constants/pware.oc.core.constants.status.js"
 import { PART_TYPE_TOOL } from "../../pware.oc.core/constants/pware.oc.core.constants.partType.js"
 
 export type { ToolStatus }
@@ -84,12 +90,12 @@ function toolViewsFromRows(rows: readonly ToolEventRow[], limit: number): ToolVi
     const start = toEpochMs(row.tstart)
     const end = toEpochMs(row.tend)
     const status = toToolStatus(
-      str(row.status) || (end != null ? "completed" : start != null ? "running" : null),
+      str(row.status) || (end != null ? TOOL_STATUS_COMPLETED : start != null ? TOOL_STATUS_RUNNING : null),
     )
     const startedAt = start ?? toEpochMs(row.time_created)
     const endedAt =
       end ??
-      (status === "completed" || status === "error" ? toEpochMs(row.time_updated) : null)
+      (status === TOOL_STATUS_COMPLETED || status === TOOL_STATUS_ERROR ? toEpochMs(row.time_updated) : null)
     const durationMs =
       startedAt != null && endedAt != null && endedAt >= startedAt ? endedAt - startedAt : null
     out.push({
@@ -115,19 +121,49 @@ function toolViewsFromRows(rows: readonly ToolEventRow[], limit: number): ToolVi
   return out
 }
 
+function listToolRows(db: SqlDb, where: string, params: string[], limit: number): ToolEventRow[] {
+  const candidateRows = db.all<{ id: string }>(
+    `SELECT id
+     FROM part
+     WHERE ${where}
+     ORDER BY time_created DESC
+     LIMIT ${TOOL_SCAN}`,
+    ...params,
+  )
+  const ids = candidateRows.map((r) => String(r.id))
+  if (ids.length === 0) return []
+  const saturated = ids.length === TOOL_SCAN
+
+  const placeholders = ids.map(() => "?").join(",")
+  const rows = db.all<ToolEventRow>(
+    `SELECT ${toolColumns()}
+     FROM part
+     WHERE id IN (${placeholders})
+       AND json_extract(data,'$.type') = '${PART_TYPE_TOOL}'
+     ORDER BY time_created DESC
+     LIMIT ${limit}`,
+    ...ids,
+  )
+
+  if (saturated && rows.length < limit) {
+    return db.all<ToolEventRow>(
+      `SELECT ${toolColumns()}
+       FROM part
+       WHERE ${where}
+         AND json_extract(data,'$.type') = '${PART_TYPE_TOOL}'
+       ORDER BY time_created DESC
+       LIMIT ${TOOL_SCAN}`,
+      ...params,
+    )
+  }
+  return rows
+}
+
 /** Newest tool parts of one session — the Current tab feed. */
 export function listToolEvents(db: SqlDb, sessionId: string, limit = TOOL_ROWS): ToolView[] {
   let rows: ToolEventRow[] = []
   try {
-    rows = db.all<ToolEventRow>(
-      `SELECT ${toolColumns()}
-       FROM part
-       WHERE session_id = ?
-         AND json_extract(data,'$.type') = '${PART_TYPE_TOOL}'
-       ORDER BY time_created DESC
-       LIMIT ${TOOL_SCAN}`,
-      sessionId,
-    )
+    rows = listToolRows(db, "session_id = ?", [sessionId], limit)
   } catch {
     return []
   }
@@ -141,15 +177,7 @@ export function listRecentToolEvents(db: SqlDb, sessionIds: string[], limit = TO
   const placeholders = clean.map(() => "?").join(",")
   let rows: ToolEventRow[] = []
   try {
-    rows = db.all<ToolEventRow>(
-      `SELECT ${toolColumns()}
-       FROM part
-       WHERE session_id IN (${placeholders})
-         AND json_extract(data,'$.type') = '${PART_TYPE_TOOL}'
-       ORDER BY time_created DESC
-       LIMIT ${TOOL_SCAN}`,
-      ...clean,
-    )
+    rows = listToolRows(db, `session_id IN (${placeholders})`, clean, limit)
   } catch {
     return []
   }
@@ -178,7 +206,7 @@ export function mergeTools(
   for (const hit of Object.values(live)) {
     const key = byCall.get(hit.id) ?? hit.id
     const prev = byId.get(key)
-    if (prev && (prev.status === "completed" || prev.status === "error") && hit.status === "running") {
+    if (prev && (prev.status === TOOL_STATUS_COMPLETED || prev.status === TOOL_STATUS_ERROR) && hit.status === TOOL_STATUS_RUNNING) {
       continue
     }
     byId.set(key, {
@@ -188,17 +216,17 @@ export function mergeTools(
       tool: prev?.tool || "tool",
       status: hit.status,
       startedAt: prev?.startedAt ?? now,
-      endedAt: hit.status === "running" ? null : (prev?.endedAt ?? now),
+      endedAt: hit.status === TOOL_STATUS_RUNNING ? null : (prev?.endedAt ?? now),
       durationMs:
-        hit.status === "running"
+        hit.status === TOOL_STATUS_RUNNING
           ? null
           : prev?.durationMs ?? (prev?.startedAt != null ? Math.max(0, now - prev.startedAt) : null),
     })
   }
   return [...byId.values()]
     .sort((a, b) => {
-      const ar = a.status === "running" || a.status === "pending" ? 0 : 1
-      const br = b.status === "running" || b.status === "pending" ? 0 : 1
+      const ar = a.status === TOOL_STATUS_RUNNING || a.status === TOOL_STATUS_PENDING ? 0 : 1
+      const br = b.status === TOOL_STATUS_RUNNING || b.status === TOOL_STATUS_PENDING ? 0 : 1
       if (ar !== br) return ar - br
       const at = ar === 0 ? (a.startedAt ?? 0) : (a.endedAt ?? a.startedAt ?? 0)
       const bt = br === 0 ? (b.startedAt ?? 0) : (b.endedAt ?? b.startedAt ?? 0)

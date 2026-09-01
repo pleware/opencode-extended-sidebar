@@ -95,19 +95,48 @@ function fileViewsFromRows(rows: readonly SessionFileRow[], filter?: FileFilter)
   return [...byId.values()].sort((a, b) => b.at - a.at)
 }
 
+function listFileRows(db: SqlDb, where: string, params: string[]): SessionFileRow[] {
+  const candidateRows = db.all<{ id: string }>(
+    `SELECT id
+     FROM part
+     WHERE ${where}
+     ORDER BY time_updated DESC
+     LIMIT ${FILE_SCAN}`,
+    ...params,
+  )
+  const ids = candidateRows.map((r) => String(r.id))
+  if (ids.length === 0) return []
+  const saturated = ids.length === FILE_SCAN
+
+  const placeholders = ids.map(() => "?").join(",")
+  const rows = db.all<SessionFileRow>(
+    `SELECT ${fileColumns()}
+     FROM part
+     WHERE id IN (${placeholders})
+       AND ${fileWhere()}
+     ORDER BY time_updated DESC`,
+    ...ids,
+  )
+
+  if (saturated && rows.length < FILE_SCAN) {
+    return db.all<SessionFileRow>(
+      `SELECT ${fileColumns()}
+       FROM part
+       WHERE ${where}
+         AND ${fileWhere()}
+       ORDER BY time_updated DESC
+       LIMIT ${FILE_SCAN}`,
+      ...params,
+    )
+  }
+  return rows
+}
+
 /** Patch `files[]` + edit metadata +/- for one session. No bodies. */
 export function listSessionFiles(db: SqlDb, sessionId: string, filter?: FileFilter): FileView[] {
   let rows: SessionFileRow[] = []
   try {
-    rows = db.all<SessionFileRow>(
-      `SELECT ${fileColumns()}
-       FROM part
-       WHERE session_id = ?
-         AND ${fileWhere()}
-       ORDER BY time_updated DESC
-       LIMIT ${FILE_SCAN}`,
-      sessionId,
-    )
+    rows = listFileRows(db, "session_id = ?", [sessionId])
   } catch {
     return []
   }
@@ -125,15 +154,7 @@ export function listRecentSessionFiles(
   const placeholders = clean.map(() => "?").join(",")
   let rows: SessionFileRow[] = []
   try {
-    rows = db.all<SessionFileRow>(
-      `SELECT ${fileColumns()}
-       FROM part
-       WHERE session_id IN (${placeholders})
-         AND ${fileWhere()}
-       ORDER BY time_updated DESC
-       LIMIT ${FILE_SCAN}`,
-      ...clean,
-    )
+    rows = listFileRows(db, `session_id IN (${placeholders})`, clean)
   } catch {
     return []
   }

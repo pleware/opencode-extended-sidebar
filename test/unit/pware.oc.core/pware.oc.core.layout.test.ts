@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { ROW_MIN, ROW_RANK, packSections, panelRows, sliceShown } from "../../../src/pware.oc.core/pware.oc.core.layout.js"
+import { ROW_MIN, ROW_RANK, moreRevealVisible, packSections, panelRows, rowsForPlan, sliceShown } from "../../../src/pware.oc.core/pware.oc.core.layout.js"
 
 describe("panelRows", () => {
   test("subtracts host chrome and never returns less than the floor", () => {
@@ -66,6 +66,24 @@ describe("packSections", () => {
   })
 })
 
+describe("rowsForPlan", () => {
+  test("a packed key wins", () => {
+    expect(rowsForPlan({ sessions: 3 }, "sessions", 6)).toBe(3)
+  })
+
+  test("a missing plan uses the fallback — this is the TUI crash", () => {
+    expect(rowsForPlan(undefined, "sessions", 6)).toBe(6)
+    expect(rowsForPlan(null, "sessions", 6)).toBe(6)
+  })
+
+  test("a missing or non-finite key uses the fallback", () => {
+    expect(rowsForPlan({}, "sessions", 6)).toBe(6)
+    expect(rowsForPlan({ tools: 4 }, "sessions", 6)).toBe(6)
+    expect(rowsForPlan({ sessions: Number.NaN }, "sessions", 6)).toBe(6)
+    expect(rowsForPlan({ sessions: Number.POSITIVE_INFINITY }, "sessions", 6)).toBe(6)
+  })
+})
+
 describe("sliceShown", () => {
   const rows = [1, 2, 3, 4, 5]
 
@@ -88,5 +106,22 @@ describe("sliceShown", () => {
     const src = [1, 2, 3]
     sliceShown(src, 1)
     expect(src).toEqual([1, 2, 3])
+  })
+})
+
+describe("moreRevealVisible", () => {
+  test("hidden rows keep the revealer line", () => {
+    expect(moreRevealVisible(1)).toBe(true)
+    expect(moreRevealVisible(5)).toBe(true)
+  })
+
+  test("nothing hidden hides the line", () => {
+    expect(moreRevealVisible(0)).toBe(false)
+    expect(moreRevealVisible(0, false)).toBe(false)
+  })
+
+  test("an expanded toggle keeps its … less line even with nothing hidden", () => {
+    expect(moreRevealVisible(0, true)).toBe(true)
+    expect(moreRevealVisible(3, true)).toBe(true)
   })
 })

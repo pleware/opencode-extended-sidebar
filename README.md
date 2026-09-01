@@ -26,7 +26,7 @@ OpenCode gives you one conversation at a time. Real work looks different: an orc
 
 ## ⇄ Session switcher
 
-> Recent sessions, one click away. Title, age, and whether it is still alive. The header shows the window — `Sessions (last 6)` — plus a `switch` label that opens the host session switcher (the same `/sessions` command). When more sessions were fetched, a clickable `… +N more` reveals the next four per click. Below the list, tools and files rolled up from those same recent sessions.
+> Recent sessions, one click away. Title, age, and whether it is still alive. The header is `Sessions` — no count — with two labels: `switch` opens the host session switcher (the same `/sessions` command) and `new` starts a fresh session in the current project. When more sessions were fetched, a clickable `… +N more` reveals the next four per click. Below the list, tools and files rolled up from those same recent sessions.
 
 ## ⊚ Live activity pulse
 
@@ -48,7 +48,7 @@ OpenCode gives you one conversation at a time. Real work looks different: an orc
 
 ## ? My work — what is waiting on you
 
-> One queue of things that need **your** action, shown first in the core group. Open `question` tools anywhere in the project appear as `?` rows — click to jump to the session and answer. OMO plans and drafts appear in four foldable groups by state — click a group header to fold it to its count line, and a trimmed group ends in a clickable `… +N more`: `Pending approval` (plans genuinely waiting for your sign-off), `Drafting` (`…` rows — drafts still being written, click to preview), `Working` (the planner session is streaming or awaiting a background task) and `Idle` (session idle or archived). Click a pending row for a native, searchable picker: **Navigate to session** jumps to the session that wrote the plan (a muted reason is shown when no session is found), **Docs** opens the draft as a preview, and the **Plan options** group holds **Approve** — sending `ok` to that same session — plus **start work** rows (`start work`, `start work --make-pr`, `start work --ship`) that launch the OMO plan in the current session. Rows keep a fine-grained state suffix — `working` (streaming), `waiting` (awaiting a background task), `idle`, `archived` or `unknown` — and, for review-required plans, the ulw-plan review state: `R<round> <momus><independent>` with per-lane glyphs `✓` approved, `!` changes requested, `?` inconclusive, `…` review live, `·` waiting. When `.omo/` is absent the approval section is simply gone; the question queue works on OpenCode alone.
+> One queue of things that need **your** action, shown first in the core group. Open `question` tools anywhere in the project appear as rows — click to jump to the session and answer. Three states: `?` **Awaiting answer** (the agent is live and waiting), `◷` **Interrupted** (the question was aborted — answer never came, the reason shows on the row, still your call), and `×` **Errors** (the question tool genuinely failed — collapsed by default, expand for the error text). OMO plans and drafts appear in four foldable groups by the action they need from you. Click a group header to fold it to its count line, and a trimmed group ends in a clickable `… +N more`: `Ready to review` (`!`, plans genuinely waiting for your sign-off), `Ready to start` (`▶`, approved plans you can launch), `Finished` (`✓`, done plans) and `Drafting` (`…` rows, drafts still being written, click to preview). Click a plan row for a native, searchable picker: **Navigate to session** jumps to the session that wrote the plan (a muted reason is shown when no session is found), **Docs** opens the draft as a preview, and the **Plan options** group holds **Approve** — sending `ok` to that same session — plus **start work** rows (`start work`, `start work --make-pr`, `start work --ship`) that launch the OMO plan in the current session. Session activity is a row suffix, not a group: `working` (streaming), `waiting` (awaiting a background task), `idle`, `archived` or `unknown`. Review-required plans add the ulw-plan review state `R<round> <momus><independent>`, with per-lane glyphs `✓` approved, `!` changes requested, `?` inconclusive, `…` review live, `·` waiting. When `.omo/` is absent the approval section is simply gone; the question queue works on OpenCode alone.
 
 ## ▤ OMO works, boulder and docs
 
@@ -64,16 +64,16 @@ OpenCode gives you one conversation at a time. Real work looks different: an orc
 
 > **Perf** splits the wall clock into wait, think, stream and tools, then ranks models and slow calls. Click a phase, a section title, or a tool row for a dated column log. The scan runs only while this tab is open.
 >
-> A muted **self** line above the OES brand — `self 0.4ms/ev · 1.2ms/sc · 59fps` — shows what the plugin itself costs: average event-handler ms, average scan (fingerprint + snapshot) ms, and the TUI renderer's FPS. It measures the plugin's own runtime, not the model's. `OES_DEBUG_OPENCODE=1` additionally writes `self`-tagged JSON lines to the debug log.
+> A muted **self** line above the tab row — `self 0.4ms/ev · 1.2ms/sc · 59fps` — shows what the plugin itself costs: average event-handler ms, average scan (fingerprint + snapshot) ms, and the TUI renderer's FPS. It measures the plugin's own runtime, not the model's. `OES_DEBUG_OPENCODE=1` additionally writes `self`-tagged JSON lines to the debug log.
 
 ## ▣ Two groups, seven views
 
 > ```
-> OES | My work | Project | Session | Perf
+> Session | My work | Summary | Stats
 > OMO | Works | Boulder | Docs
 > ```
 >
-> **My work** is the queue of things waiting on you — open questions and pending plan approvals. **Project** is the project-wide view — recent sessions plus the tools and files every one of them touched. **Session** is this agent, its delegates, tools and files. **Perf** is timing. Tabs and folds are remembered. Clickable labels underline on hover.
+> **Session** is this agent, its delegates, tools and files. **My work** is the queue of things waiting on you — open questions and OMO plan approvals grouped by the action they need. **Summary** is the project-wide view — recent sessions (Chat history) plus the tools and files every one of them touched. **Stats** is timing. Tabs and folds are remembered. Clickable labels underline on hover.
 
 ## ⇕ Rows that fit the window
 
@@ -104,7 +104,7 @@ The glyph says *what* is happening; the colour says *how fresh* it is. Both come
 | `▾`                             | group header (`▼` is the section fold)                       |
 | `×`                             | failed                                                        |
 | `✓` `◷` `║` `⊘` `○`             | Works: done / waiting / paused / abandoned / unknown        |
-| `?` `!` `…`                     | My work: awaiting an answer / pending approval / drafting     |
+| `?` `◷` `×` `!` `…` `▶` `✓` | My work: awaiting an answer / interrupted / errors / ready to review / drafting / ready to start / finished |
 | `✓` `!` `?` `·`                 | Review lanes: approved / changes requested / inconclusive / waiting |
 | `M` `A` `D` `R` `C` `U` `T` `?` | Files: git status — same letters as `git status --short`      |
 | `V`                             | Files: viewed (session read only)                             |
@@ -191,7 +191,7 @@ Ignored files come from `.oesignore` and, when enabled, `.gitignore` — both at
 
 ## Debug
 
-Set `OES_DEBUG_OPENCODE` in the environment **before** starting OpenCode, then restart the TUI.
+Set `OES_DEBUG_OPENCODE` in the environment **before** starting OpenCode, then restart the TUI. While either logger is active the sidebar shows a flag row above the `self` line — `debug mode` and/or `profile`, one next to the other (yellow). A second muted row prints the **resolved log directory** (`logs <path>`) so you can see exactly where files are being written.
 
 ```bash
 # writes to <plugin>/logs/oes-debug-YYYY-MM-DD.log
@@ -204,6 +204,8 @@ opencode
 ```
 
 `1`, `true`, `yes`, or `on` use the plugin's `logs/` directory. Any other non-empty value is treated as a directory path. `0`, `false`, `no`, or `off` turns it off. Lines are JSON (`ts`, `tag`, `msg`, optional `data`) — path resolution, monitor emits, Perf reads, and the `self` tag logs the plugin's own measured latencies. Logging never crashes the panel.
+
+The same semantics power `OES_DEBUG_PROFILE`, which times **every plugin entry point and hotspot** and writes one line per call to `<plugin>/logs/oes-profile-YYYY-MM-DD.log`: `{ ts, tag, ms, data? }`. In this local repo checkout, `<plugin>/logs` means `./logs` at the repository root (not `./src/logs`). Tags: `event` (per event type), `tick`, `render` (the re-render trigger), `requestRender`, `row` (per row built), `scan`, `monitor.emit` (fingerprint + snapshot), `db.snapshot` / `db.feed` / `perf.read`, `sql` (every query, with its SQL in `data.q`), `omo.read` / `omo.stamp` / `omo.config` / `omo.approvals` / `omo.docs`, `mywork.approvals` (the per-approval session lookup), `files.decorate` (git marks), `git`, `remount`, `hydrate`, and the async host calls `rpc.diff` / `rpc.selectSession` / `rpc.newSession` / `rpc.startWork` / `rpc.approve`. When the panel unmounts, one `summary` line with per-tag `{ n, total, avg, max }` is appended — the whole wall-clock split in a single line.
 
 ## How it works
 

@@ -20,6 +20,36 @@ import {
   EVENT_TOOL_SUCCESS,
 } from "./constants/pware.oc.core.constants.eventType.js"
 import { TOOL_BASH, TOOL_TASK } from "./constants/pware.oc.core.constants.toolName.js"
+import {
+  FLOW_HINT_CLEAR,
+  FLOW_RECV,
+  FLOW_TOOL,
+  FLOW_WAIT,
+  MARK_QUEUED,
+  MARK_READY,
+  PULSE_IDLE,
+  PULSE_LIVE,
+  PULSE_STALE,
+  type AgentMark,
+  type FlowDir,
+  type FlowHint,
+  type Pulse,
+} from "./constants/pware.oc.core.constants.pulse.js"
+import {
+  STATUS_ARCHIVED,
+  STATUS_COMPLETED,
+  STATUS_ERROR,
+  STATUS_RUNNING,
+  TOOL_STATUS_COMPLETED,
+  TOOL_STATUS_ERROR,
+  TOOL_STATUS_RUNNING,
+  type ToolStatus,
+} from "./constants/pware.oc.core.constants.status.js"
+
+export type { AgentMark, FlowDir, FlowHint, Pulse }
+
+/** `at` is the last event of this direction, `since` the moment the phase began. */
+export type FlowEntry = { dir: FlowDir; at: number; since: number }
 
 export const LIVE_MS = 5_000
 export const STALE_MS = 10_000
@@ -32,21 +62,10 @@ export const FLOW_TOOL_MS = 30_000
 /** Eighth blocks for sparklines. */
 export const SPARK_FRAMES = ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"] as const
 
-/** LLM direction: wait = request out, recv = tokens in, tool = tool in flight. */
-export type FlowDir = "wait" | "recv" | "tool"
-export type FlowHint = FlowDir | "clear"
-/** `at` is the last event of this direction, `since` the moment the phase began. */
-export type FlowEntry = { dir: FlowDir; at: number; since: number }
-
-export type Pulse = "live" | "stale" | "idle"
-
-/** Visual mark: pulse for open work, lifecycle wins when terminal. */
-export type AgentMark = Pulse | "ready" | "queued" | "error" | "archived"
-
 export function pulseFromAge(ageMs: number): Pulse {
-  if (ageMs < LIVE_MS) return "live"
-  if (ageMs < STALE_MS) return "stale"
-  return "idle"
+  if (ageMs < LIVE_MS) return PULSE_LIVE
+  if (ageMs < STALE_MS) return PULSE_STALE
+  return PULSE_IDLE
 }
 
 /** Epoch ms. OpenCode may store seconds, ms, or ISO strings. */
@@ -86,14 +105,14 @@ export function composeMark(opts: {
   ageMs: number | null
   busy?: boolean
 }): AgentMark {
-  if (opts.archived) return "archived"
+  if (opts.archived) return STATUS_ARCHIVED
   const c = normalizeStatus(opts.lifecycle)
-  if (c === "completed") return "ready"
-  if (c === "error") return "error"
-  if (opts.busy) return opts.ageMs == null ? "live" : pulseFromAge(Math.min(opts.ageMs, LIVE_MS - 1))
+  if (c === STATUS_COMPLETED) return MARK_READY
+  if (c === STATUS_ERROR) return STATUS_ERROR
+  if (opts.busy) return opts.ageMs == null ? PULSE_LIVE : pulseFromAge(Math.min(opts.ageMs, LIVE_MS - 1))
   if (opts.ageMs == null) {
-    if (c === "running") return "stale"
-    return "queued"
+    if (c === STATUS_RUNNING) return PULSE_STALE
+    return MARK_QUEUED
   }
   // Running is not terminal — same age window as Agents. A leftover
   // boulder `running` must not keep the spinner after the session went quiet.
@@ -105,12 +124,12 @@ export function hottestMark(marks: readonly AgentMark[]): AgentMark {
   let stale = false
   let error = false
   for (const m of marks) {
-    if (m === "live") return "live"
-    if (m === "stale") stale = true
-    else if (m === "error") error = true
+    if (m === PULSE_LIVE) return PULSE_LIVE
+    if (m === PULSE_STALE) stale = true
+    else if (m === STATUS_ERROR) error = true
   }
-  if (stale) return "stale"
-  return error ? "error" : "ready"
+  if (stale) return PULSE_STALE
+  return error ? STATUS_ERROR : MARK_READY
 }
 
 export type FlowColors = {
@@ -121,8 +140,8 @@ export type FlowColors = {
 }
 
 export function flowColor(dir: FlowDir, colors: FlowColors): string {
-  if (dir === "recv") return colors.success
-  if (dir === "wait") return colors.warning || colors.text
+  if (dir === FLOW_RECV) return colors.success
+  if (dir === FLOW_WAIT) return colors.warning || colors.text
   return colors.primary || colors.text
 }
 
@@ -133,11 +152,11 @@ export function activeFlow(
 ): FlowDir | null {
   if (entry) {
     const age = now - entry.at
-    if (entry.dir === "recv" && age < FLOW_RECV_MS) return "recv"
-    if (entry.dir === "wait" && (busy || age < FLOW_WAIT_MS)) return "wait"
-    if (entry.dir === "tool" && (busy || age < FLOW_TOOL_MS)) return "tool"
+    if (entry.dir === FLOW_RECV && age < FLOW_RECV_MS) return FLOW_RECV
+    if (entry.dir === FLOW_WAIT && (busy || age < FLOW_WAIT_MS)) return FLOW_WAIT
+    if (entry.dir === FLOW_TOOL && (busy || age < FLOW_TOOL_MS)) return FLOW_TOOL
   }
-  if (busy) return "wait"
+  if (busy) return FLOW_WAIT
   return null
 }
 
@@ -147,16 +166,16 @@ export function applyFlow(
   dir: FlowHint,
   now: number,
 ): Record<string, FlowEntry> {
-  if (dir === "clear") {
+  if (dir === FLOW_HINT_CLEAR) {
     if (!(id in prev)) return prev
     const next = { ...prev }
     delete next[id]
     return next
   }
   const cur = prev[id]
-  if (dir === "wait") {
-    if (cur?.dir === "recv" && now - cur.at < FLOW_RECV_MS) return prev
-    if (cur?.dir === "tool") return prev
+  if (dir === FLOW_WAIT) {
+    if (cur?.dir === FLOW_RECV && now - cur.at < FLOW_RECV_MS) return prev
+    if (cur?.dir === FLOW_TOOL) return prev
   }
   const since = cur?.dir === dir ? cur.since : now
   return { ...prev, [id]: { dir, at: now, since } }
@@ -200,16 +219,16 @@ export function flowFromEvent(
     type.endsWith("." + EVENT_STEP_ENDED) ||
     type.endsWith("." + EVENT_STEP_FAILED)
   ) {
-    return { id, dir: "clear" }
+    return { id, dir: FLOW_HINT_CLEAR }
   }
 
-  if (type.includes(EVENT_TOOL_CALLED)) return { id, dir: "tool" }
+  if (type.includes(EVENT_TOOL_CALLED)) return { id, dir: FLOW_TOOL }
   if (
     type.includes(EVENT_TOOL_SUCCESS) ||
     type.includes(EVENT_TOOL_FAILED) ||
     type.includes(EVENT_TOOL_ENDED)
   ) {
-    return { id, dir: "wait" }
+    return { id, dir: FLOW_WAIT }
   }
 
   if (
@@ -218,7 +237,7 @@ export function flowFromEvent(
     type.includes(EVENT_PART_DELTA) ||
     type.endsWith(".delta")
   ) {
-    return { id, dir: "recv" }
+    return { id, dir: FLOW_RECV }
   }
 
   if (
@@ -226,19 +245,19 @@ export function flowFromEvent(
     type.includes(EVENT_TEXT_STARTED) ||
     type.includes(EVENT_REASONING_STARTED)
   ) {
-    return { id, dir: "wait" }
+    return { id, dir: FLOW_WAIT }
   }
 
   if (type.includes(EVENT_MESSAGE_PART_UPDATED)) {
     const kind = partKind(evt)
-    if (kind.includes("tool")) return { id, dir: "tool" }
-    return { id, dir: "recv" }
+    if (kind.includes("tool")) return { id, dir: FLOW_TOOL }
+    return { id, dir: FLOW_RECV }
   }
 
   if (type === EVENT_SESSION_STATUS || type.endsWith(EVENT_SESSION_STATUS)) {
     const flag = sessionBusyFromEvent(evt)
-    if (flag.busy === false) return { id: flag.id ?? id, dir: "clear" }
-    if (flag.busy === true) return { id: flag.id ?? id, dir: "wait" }
+    if (flag.busy === false) return { id: flag.id ?? id, dir: FLOW_HINT_CLEAR }
+    if (flag.busy === true) return { id: flag.id ?? id, dir: FLOW_WAIT }
   }
 
   return { id, dir: null }
@@ -420,21 +439,21 @@ export function sparkline(values: Array<number | null>, width: number): string {
 
 export function toolMark(status: string): AgentMark {
   const c = normalizeStatus(status)
-  if (c === "running") return "live"
-  if (c === "error") return "error"
-  if (c === "completed") return "ready"
-  return "queued"
+  if (c === STATUS_RUNNING) return PULSE_LIVE
+  if (c === STATUS_ERROR) return STATUS_ERROR
+  if (c === STATUS_COMPLETED) return MARK_READY
+  return MARK_QUEUED
 }
 
 export function toolFlow(status: string): FlowDir | null {
-  return status === "running" ? "tool" : null
+  return status === STATUS_RUNNING ? FLOW_TOOL : null
 }
 
 export type ToolHit = {
   sessionId: string | null
   id: string
   name: string
-  status: "running" | "completed" | "error"
+  status: ToolStatus
 }
 
 function clipHint(s: string, max: number): string {
@@ -576,13 +595,13 @@ function toolIdFromEvent(evt: unknown): string | null {
 
 function toolStatusFromEvent(evt: unknown): ToolHit["status"] | null {
   const type = eventType(evt)
-  if (type.includes(EVENT_TOOL_FAILED)) return "error"
-  if (type.includes(EVENT_TOOL_SUCCESS) || type.includes(EVENT_TOOL_ENDED)) return "completed"
-  if (type.includes(EVENT_TOOL_CALLED)) return "running"
+  if (type.includes(EVENT_TOOL_FAILED)) return TOOL_STATUS_ERROR
+  if (type.includes(EVENT_TOOL_SUCCESS) || type.includes(EVENT_TOOL_ENDED)) return TOOL_STATUS_COMPLETED
+  if (type.includes(EVENT_TOOL_CALLED)) return TOOL_STATUS_RUNNING
   for (const bag of eventBags(evt)) {
     const state = bag.state && typeof bag.state === "object" ? (bag.state as Record<string, unknown>) : null
     const mapped = toToolStatus(String(state?.status ?? bag.status ?? ""))
-    if (mapped === "error" || mapped === "completed" || mapped === "running") return mapped
+    if (mapped === TOOL_STATUS_ERROR || mapped === TOOL_STATUS_COMPLETED || mapped === TOOL_STATUS_RUNNING) return mapped
   }
   if (type.includes(EVENT_MESSAGE_PART_UPDATED) && partKind(evt).includes("tool")) return null
   return null

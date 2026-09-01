@@ -22,6 +22,16 @@ import type { WorkView } from "../pware.oc.omo/resolver/pware.oc.omo.resolver.bo
 import { workStatusLabel } from "../pware.oc.omo/resolver/index.js"
 import type { StartWorkMode } from "../pware.oc.runtime/pware.oc.runtime.mywork.js"
 import { startWorkCommand } from "../pware.oc.runtime/pware.oc.runtime.mywork.js"
+import {
+  FILE_TOUCH_READ,
+  FILE_TOUCH_WRITE,
+} from "../pware.oc.opencode/constants/pware.oc.opencode.constants.fileTouch.js"
+import { TOOL_STATUS_RUNNING } from "../pware.oc.core/constants/pware.oc.core.constants.status.js"
+import {
+  START_WORK_MAKE_PR,
+  START_WORK_PLAIN,
+  START_WORK_SHIP,
+} from "../pware.oc.omo/constants/pware.oc.omo.constants.startWork.js"
 import { resolveProjectFile } from "../pware.oc.core/pware.oc.core.paths.js"
 import {
   canPreviewPath,
@@ -311,7 +321,7 @@ export function openFileDetail(
   const letter = file.letter ? `[${file.letter}]` : ""
   const diff = formatDiffStat(file.additions, file.deletions)
   const header = diff ? `${file.name} ${letter}  ${diff}`.trim() : `${file.name} ${letter}`.trim()
-  const touch = file.touch === "read" ? "read" : "write"
+  const touch = file.touch === FILE_TOUCH_READ ? FILE_TOUCH_READ : FILE_TOUCH_WRITE
 
   openDialog(api, "large", () => (
     <DialogPad>
@@ -355,7 +365,7 @@ export function openFileDetail(
 
 export function openToolDetail(api: TuiPluginApi, tool: ToolView, colors: ThemeColors): void {
   const dur =
-    tool.status === "running" && tool.startedAt != null
+    tool.status === TOOL_STATUS_RUNNING && tool.startedAt != null
       ? formatDuration(Math.max(0, Date.now() - tool.startedAt))
       : formatDuration(tool.durationMs)
   const header = [tool.tool, dur, tool.status].filter(Boolean).join(" · ")
@@ -437,8 +447,14 @@ export function openApprovalDialog(
     onApprove: (sessionId: string) => void
     onStartWork: (mode: StartWorkMode) => void
     onDocs: () => void
+    /** Hide the Approve row (a ready-to-start / finished plan is not approvable). */
+    showApprove?: boolean
+    /** Hide the three start-work rows (a finished plan is not startable). */
+    showStartWork?: boolean
   },
 ): void {
+  const showApprove = opts.showApprove ?? true
+  const showStartWork = opts.showStartWork ?? true
   const options: TuiDialogSelectOption<ApprovalAction>[] = [
     {
       title: "Navigate to session",
@@ -454,7 +470,9 @@ export function openApprovalDialog(
       },
     },
     { title: "Docs", value: "docs", onSelect: opts.onDocs },
-    {
+  ]
+  if (showApprove) {
+    options.push({
       title: "Approve",
       value: "approve",
       category: "Plan options",
@@ -468,35 +486,39 @@ export function openApprovalDialog(
         }
         toast(api, opts.continueHint ?? "No session wrote this plan", "warning")
       },
-    },
-    {
-      title: startWorkCommand("plain", opts.title),
-      value: "plain",
-      category: "Plan options",
-      onSelect: () => {
-        closeDialog(api)
-        opts.onStartWork("plain")
+    })
+  }
+  if (showStartWork) {
+    options.push(
+      {
+        title: startWorkCommand(START_WORK_PLAIN, opts.title),
+        value: START_WORK_PLAIN,
+        category: "Plan options",
+        onSelect: () => {
+          closeDialog(api)
+          opts.onStartWork(START_WORK_PLAIN)
+        },
       },
-    },
-    {
-      title: startWorkCommand("make-pr", opts.title),
-      value: "make-pr",
-      category: "Plan options",
-      onSelect: () => {
-        closeDialog(api)
-        opts.onStartWork("make-pr")
+      {
+        title: startWorkCommand(START_WORK_MAKE_PR, opts.title),
+        value: START_WORK_MAKE_PR,
+        category: "Plan options",
+        onSelect: () => {
+          closeDialog(api)
+          opts.onStartWork(START_WORK_MAKE_PR)
+        },
       },
-    },
-    {
-      title: startWorkCommand("ship", opts.title),
-      value: "ship",
-      category: "Plan options",
-      onSelect: () => {
-        closeDialog(api)
-        opts.onStartWork("ship")
+      {
+        title: startWorkCommand(START_WORK_SHIP, opts.title),
+        value: START_WORK_SHIP,
+        category: "Plan options",
+        onSelect: () => {
+          closeDialog(api)
+          opts.onStartWork(START_WORK_SHIP)
+        },
       },
-    },
-  ]
+    )
+  }
   openDialog(api, "medium", () => <api.ui.DialogSelect title={opts.title} options={options} />)
 }
 

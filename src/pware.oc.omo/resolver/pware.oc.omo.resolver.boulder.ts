@@ -8,9 +8,17 @@
 import fs from "node:fs"
 import path from "node:path"
 import { canonicalizePath, fileStamp, resolveProjectFile } from "../../pware.oc.core/pware.oc.core.paths.js"
+import { profile } from "../../pware.oc.core/pware.oc.core.debug.js"
 import { composeMark, formatAge, pulseAgeMs, toEpochMs, type AgentMark } from "../../pware.oc.core/pware.oc.core.pulse.js"
 import { workStatusGlyph } from "../../pware.oc.ui/pware.oc.ui.glyphs.js"
 import { taskRank, toWorkLabel, workIsTerminal } from "../../pware.oc.core/pware.oc.core.status.js"
+import {
+  MARK_READY,
+} from "../../pware.oc.core/constants/pware.oc.core.constants.pulse.js"
+import {
+  STATUS_ERROR,
+  STATUS_UNKNOWN,
+} from "../../pware.oc.core/constants/pware.oc.core.constants.status.js"
 import { BOULDER_STATUS_PENDING, BOULDER_STATUS_RUNNING } from "../constants/pware.oc.omo.constants.boulderStatus.js"
 
 export { workIsTerminal }
@@ -165,15 +173,17 @@ export function isOmoPresent(projectRoot: string): boolean {
  */
 export function omoStamp(projectRoot?: string | null): string {
   if (!projectRoot) return "0"
-  const root = canonicalizePath(projectRoot)
-  const parts: string[] = []
-  const boulderPath = findBoulder(root)
-  if (boulderPath) parts.push(fileStamp(boulderPath))
-  for (const rel of [".omo/omo.jsonc", ".sisyphus/omo.jsonc"]) {
-    const p = path.join(root, rel)
-    if (fs.existsSync(p)) parts.push(fileStamp(p))
-  }
-  return parts.join("|") || "0"
+  return profile("omo.stamp", () => {
+    const root = canonicalizePath(projectRoot)
+    const parts: string[] = []
+    const boulderPath = findBoulder(root)
+    if (boulderPath) parts.push(fileStamp(boulderPath))
+    for (const rel of [".omo/omo.jsonc", ".sisyphus/omo.jsonc"]) {
+      const p = path.join(root, rel)
+      if (fs.existsSync(p)) parts.push(fileStamp(p))
+    }
+    return parts.join("|") || "0"
+  })
 }
 
 function stripSessionPrefix(id: string | null | undefined): string | null {
@@ -210,9 +220,9 @@ export function workRowView(
 ): { mark: AgentMark; glyph: string | null; suffix: string } {
   const ageMs = pulseAgeMs(now, work.updatedAt, seen)
   const mark = workIsTerminal(work.status)
-    ? toWorkLabel(work.status) === "error"
-      ? "error"
-      : "ready"
+    ? toWorkLabel(work.status) === STATUS_ERROR
+      ? STATUS_ERROR
+      : MARK_READY
     : composeMark({ lifecycle: work.status, ageMs })
   return {
     mark,
@@ -256,7 +266,7 @@ function asWork(
   return {
     workId,
     name: planLabel(w.plan_name, activePlan),
-    status: (w.status || "unknown").toLowerCase(),
+          status: (w.status || STATUS_UNKNOWN).toLowerCase(),
     sessionId: lastSessionId(w.session_ids),
     sessions,
     agent: w.agent ?? null,
@@ -404,6 +414,10 @@ export function emptyOmo(): OmoSnapshot {
 /** Read boulder + plan for a project directory. Never throws. */
 export function readOmo(projectRoot: string | null | undefined): OmoSnapshot {
   if (!projectRoot) return emptyOmo()
+  return profile("omo.read", () => readOmoInner(projectRoot))
+}
+
+function readOmoInner(projectRoot: string): OmoSnapshot {
   const root = canonicalizePath(projectRoot)
   const boulderPath = findBoulder(root)
   // Installed omo (config marker) with no active run: present, but nothing to show.

@@ -7,6 +7,7 @@
  */
 import fs from "node:fs"
 import type { FileFilter, FileView } from "../pware.oc.opencode.files.js"
+import { profile } from "../../pware.oc.core/pware.oc.core.debug.js"
 import { getOes } from "../../pware.oc.core/pware.oc.core.oes.js"
 import { openReadonlyDb, withDbRead } from "../../pware.oc.core/pware.oc.core.sqlite.js"
 import {
@@ -131,8 +132,10 @@ export function readDbSnapshot(opts: {
     }
   }
 
-  return withDbRead(run, (e) =>
-    emptyDb(opts.dbPath, e instanceof Error ? e.message : "db read failed"),
+  return profile("db.snapshot", () =>
+    withDbRead(run, (e) =>
+      emptyDb(opts.dbPath, e instanceof Error ? e.message : "db read failed"),
+    ),
   )
 }
 
@@ -154,12 +157,14 @@ export function readProjectFeed(opts: {
 }): ProjectFeed {
   const empty = emptyProjectFeed()
   if (!opts.dbPath || opts.sessionIds.length === 0 || !fs.existsSync(opts.dbPath)) return empty
-  return withDbRead(() => {
-    const db = openReadonlyDb(opts.dbPath)
-    if (!db) return empty
-    return {
-      tools: listRecentToolEvents(db, opts.sessionIds, opts.toolLimit),
-      files: listRecentSessionFiles(db, opts.sessionIds, opts.filter),
-    }
-  }, () => empty)
+  return profile("db.feed", () =>
+    withDbRead(() => {
+      const db = openReadonlyDb(opts.dbPath)
+      if (!db) return empty
+      return {
+        tools: listRecentToolEvents(db, opts.sessionIds, opts.toolLimit),
+        files: listRecentSessionFiles(db, opts.sessionIds, opts.filter),
+      }
+    }, () => empty),
+  )
 }

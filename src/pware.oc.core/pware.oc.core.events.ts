@@ -20,7 +20,15 @@ import {
   EVENT_TOOL_SUCCESS,
 } from "./constants/pware.oc.core.constants.eventType.js"
 
-export type EventKind = "flow" | "tool" | "file" | "db-refresh"
+import {
+  EVENT_KIND_DB_REFRESH,
+  EVENT_KIND_FILE,
+  EVENT_KIND_FLOW,
+  EVENT_KIND_TOOL,
+  type EventKind,
+} from "./constants/pware.oc.core.constants.eventKind.js"
+
+export type { EventKind }
 
 export function eventType(evt: unknown): string {
   if (!evt || typeof evt !== "object") return ""
@@ -30,14 +38,14 @@ export function eventType(evt: unknown): string {
 export function eventKind(type: string): EventKind | null {
   const t = (type || "").toLowerCase()
   if (!t) return null
-  if (t.includes(EVENT_FILE_EDITED) || t.includes(EVENT_SESSION_DIFF)) return "file"
+  if (t.includes(EVENT_FILE_EDITED) || t.includes(EVENT_SESSION_DIFF)) return EVENT_KIND_FILE
   if (
     t.includes(EVENT_TOOL_CALLED) ||
     t.includes(EVENT_TOOL_SUCCESS) ||
     t.includes(EVENT_TOOL_FAILED) ||
     t.includes(EVENT_TOOL_ENDED)
   ) {
-    return "tool"
+    return EVENT_KIND_TOOL
   }
   if (
     t.includes(EVENT_SESSION_STATUS) ||
@@ -49,7 +57,7 @@ export function eventKind(type: string): EventKind | null {
     t.includes(EVENT_STEP_ENDED) ||
     t.includes(EVENT_STEP_FAILED)
   ) {
-    return "db-refresh"
+    return EVENT_KIND_DB_REFRESH
   }
   if (
     t.includes(EVENT_TEXT_DELTA) ||
@@ -58,7 +66,7 @@ export function eventKind(type: string): EventKind | null {
     t.includes(EVENT_PART_DELTA) ||
     t.endsWith(".delta")
   ) {
-    return "flow"
+    return EVENT_KIND_FLOW
   }
   return null
 }
@@ -67,5 +75,5 @@ export function shouldRefreshDb(type: string): boolean {
   const t = (type || "").toLowerCase()
   if (!t || t.includes(".delta")) return false
   const kind = eventKind(t)
-  return kind === "tool" || kind === "file" || kind === "db-refresh"
+  return kind === EVENT_KIND_TOOL || kind === EVENT_KIND_FILE || kind === EVENT_KIND_DB_REFRESH
 }

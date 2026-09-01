@@ -3,15 +3,26 @@
  * Never keeps path, before/after, or tool I/O.
  */
 import { readGitMarksFor, relToGitRoot, type GitLetter } from "../pware.oc.core/git/pware.oc.core.git.js"
+import { profile } from "../pware.oc.core/pware.oc.core.debug.js"
 import { ignoredByGitignore, ignoredByOesignore } from "../pware.oc.core/git/pware.oc.core.gitignore.js"
 import { getOes, OES_DEFAULTS } from "../pware.oc.core/pware.oc.core.oes.js"
 import { eventKind, eventType } from "../pware.oc.core/pware.oc.core.events.js"
+import {
+  EVENT_KIND_DB_REFRESH,
+  EVENT_KIND_FILE,
+  EVENT_KIND_TOOL,
+} from "../pware.oc.core/constants/pware.oc.core.constants.eventKind.js"
 import { basenameOf, finiteNum } from "../pware.oc.core/pware.oc.core.paths.js"
 import { sessionIdFromEvent } from "../pware.oc.core/pware.oc.core.pulse.js"
 import { READ_TOOLS, WRITE_TOOLS } from "../pware.oc.core/constants/pware.oc.core.constants.toolName.js"
 import { PART_TYPE_PATCH } from "../pware.oc.core/constants/pware.oc.core.constants.partType.js"
+import {
+  FILE_TOUCH_READ,
+  FILE_TOUCH_WRITE,
+  type FileTouch,
+} from "./constants/pware.oc.opencode.constants.fileTouch.js"
 
-export { basenameOf }
+export { basenameOf, FILE_TOUCH_READ, FILE_TOUCH_WRITE, type FileTouch }
 
 export const FILE_ROWS = OES_DEFAULTS.fileRows
 
@@ -24,8 +35,6 @@ export function fileFilter(projectRoot?: string | null): FileFilter {
   const o = getOes(projectRoot)
   return { skipGitignore: o.skipGitignore, projectRoot: projectRoot ?? null }
 }
-
-export type FileTouch = "read" | "write"
 
 /** Git porcelain letters, plus `V` (viewed) which git does not use. */
 export type FileLetter = GitLetter | "V"
@@ -96,7 +105,7 @@ function asFile(
   del: number,
   at: number,
   filter?: FileFilter,
-  touch: FileTouch = "write",
+  touch: FileTouch = FILE_TOUCH_WRITE,
 ): FileView | null {
   const raw = pathOrName.replace(/\\/g, "/").trim()
   if (!raw || raw === "." || raw === "..") return null
@@ -127,7 +136,7 @@ function fileFromDiffRow(row: unknown, at: number, filter?: FileFilter): FileVie
   const o = row as Record<string, unknown>
   const file = pickPath(o)
   if (!file) return null
-  return asFile(file, num(o.additions) || num(o.added), num(o.deletions) || num(o.removed), at, filter, "write")
+  return asFile(file, num(o.additions) || num(o.added), num(o.deletions) || num(o.removed), at, filter, FILE_TOUCH_WRITE)
 }
 
 /** Paths + +/- only. Drops before/after and any other fields. */
@@ -138,7 +147,7 @@ export function filesFromEvent(evt: unknown, sessionId: string, filter?: FileFil
   const sid = sessionIdFromEvent(evt)
   if (sid && sid !== sessionId) return []
   const kind = eventKind(type)
-  if (type && kind !== "file" && kind !== "tool" && kind !== "db-refresh") return []
+  if (type && kind !== EVENT_KIND_FILE && kind !== EVENT_KIND_TOOL && kind !== EVENT_KIND_DB_REFRESH) return []
   const at = Date.now()
   const out: FileView[] = []
 
@@ -194,7 +203,7 @@ export function filesFromEvent(evt: unknown, sessionId: string, filter?: FileFil
         ? (part.metadata as Record<string, unknown>)
         : null
     const { add, del } = statsFromBag(meta ?? part)
-    const f = asFile(p, add, del, at, filter, touch ?? "write")
+    const f = asFile(p, add, del, at, filter, touch ?? FILE_TOUCH_WRITE)
     return f ? [f] : []
   }
 
@@ -205,8 +214,8 @@ const WRITE_TOOL_SET = new Set<string>(WRITE_TOOLS)
 const READ_TOOL_SET = new Set<string>(READ_TOOLS)
 
 function touchOfTool(tool: string): FileTouch | null {
-  if (READ_TOOL_SET.has(tool)) return "read"
-  if (WRITE_TOOL_SET.has(tool)) return "write"
+  if (READ_TOOL_SET.has(tool)) return FILE_TOUCH_READ
+  if (WRITE_TOOL_SET.has(tool)) return FILE_TOUCH_WRITE
   return null
 }
 
@@ -251,7 +260,7 @@ export function filePathFromPartData(data: string): string | null {
 
 function touchFromPartData(data: string): FileTouch {
   const t = data.match(TOOL_FILE_RE)?.[1]?.toLowerCase() ?? ""
-  return touchOfTool(t) ?? "write"
+  return touchOfTool(t) ?? FILE_TOUCH_WRITE
 }
 
 /** Path + edit metadata +/- . Ignores patch/diff bodies. */
@@ -327,7 +336,7 @@ export function fileHitFromExtracted(opts: {
   const tool = (opts.tool || "").toLowerCase()
   const touch = touchOfTool(tool)
   if (tool && !touch) return null
-  return asFile(raw, firstNum(opts.additions), firstNum(opts.deletions), opts.at, opts.filter, touch ?? "write")
+  return asFile(raw, firstNum(opts.additions), firstNum(opts.deletions), opts.at, opts.filter, touch ?? FILE_TOUCH_WRITE)
 }
 
 /** Git porcelain wins. `V` (viewed) only when git has no letter — git does not use V. */
@@ -337,21 +346,23 @@ export function decorateFiles(
   opts?: { git?: boolean },
 ): FileView[] {
   if (!files.length) return files
-  if (opts?.git === false) {
-    return files.map((f) => ({
-      ...f,
-      letter: f.letter ?? (f.touch === "read" ? "V" : null),
-    }))
-  }
-  const { root, marks } = readGitMarksFor(
-    files.map((f) => f.id),
-    projectRoot ?? null,
-  )
-  return files.map((f) => {
-    const git = root
-      ? marks.get(relToGitRoot(f.id, root)) ?? marks.get(f.id.replace(/\\/g, "/").toLowerCase()) ?? null
-      : null
-    return { ...f, letter: git ?? (f.touch === "read" ? "V" : null) }
+  return profile("files.decorate", () => {
+    if (opts?.git === false) {
+      return files.map((f) => ({
+        ...f,
+        letter: f.letter ?? (f.touch === FILE_TOUCH_READ ? "V" : null),
+      }))
+    }
+    const { root, marks } = readGitMarksFor(
+      files.map((f) => f.id),
+      projectRoot ?? null,
+    )
+    return files.map((f) => {
+      const git = root
+        ? marks.get(relToGitRoot(f.id, root)) ?? marks.get(f.id.replace(/\\/g, "/").toLowerCase()) ?? null
+        : null
+      return { ...f, letter: git ?? (f.touch === FILE_TOUCH_READ ? "V" : null) }
+    })
   })
 }
 
@@ -368,7 +379,7 @@ export function sumDiff(files: FileView[]): { additions: number; deletions: numb
 export function mergeFiles(fromDb: FileView[] | null | undefined, live: Record<string, FileView>): FileView[] {
   const byId = new Map<string, FileView>()
   for (const f of fromDb ?? []) {
-    byId.set(f.id, { ...f, touch: f.touch ?? "write", letter: f.letter ?? null })
+    byId.set(f.id, { ...f, touch: f.touch ?? FILE_TOUCH_WRITE, letter: f.letter ?? null })
   }
   for (const f of Object.values(live)) {
     const prev = byId.get(f.id)
@@ -378,7 +389,7 @@ export function mergeFiles(fromDb: FileView[] | null | undefined, live: Record<s
       additions: Math.max(f.additions, prev?.additions ?? 0),
       deletions: Math.max(f.deletions, prev?.deletions ?? 0),
       at: Math.max(f.at, prev?.at ?? 0),
-      touch: prev?.touch === "write" || f.touch === "write" ? "write" : "read",
+      touch: prev?.touch === FILE_TOUCH_WRITE || f.touch === FILE_TOUCH_WRITE ? FILE_TOUCH_WRITE : FILE_TOUCH_READ,
       letter: f.letter ?? prev?.letter ?? null,
     })
   }
