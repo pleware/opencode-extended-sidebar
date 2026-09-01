@@ -67,6 +67,7 @@ import {
 } from "../pware.oc.core/constants/pware.oc.core.constants.rowKind.js"
 import {
   QUESTION_KIND_ERROR,
+  QUESTION_KIND_QUESTION,
 } from "../pware.oc.opencode/constants/pware.oc.opencode.constants.questionKind.js"
 import {
   MY_WORK_GROUP_DRAFTING,
@@ -786,7 +787,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
         glyph: myWorkGlyph(item.kind),
         name: item.title,
         suffix: `${formatAge(age)}${reason}`,
-        waiting: item.kind !== QUESTION_KIND_ERROR,
+        waiting: item.kind === QUESTION_KIND_QUESTION,
         onSelect: () => goSession(item.sessionId),
       }
     }
@@ -810,7 +811,6 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
       glyph: myWorkGlyph(item.kind),
       name: item.name,
       suffix: [sessionLabel, reviewLabel].filter(Boolean).join(" ") || undefined,
-      waiting: !drafting,
       onSelect: () => {
         const db = openReadonlyDb(snap().db.dbPath)
         const sessionId = db ? sessionForPlanFile(db, item.rel) : null

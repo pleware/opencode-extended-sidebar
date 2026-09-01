@@ -1,5 +1,6 @@
 # Changelog
 
+- **0.2.51** (2026-09-01) Normalize row highlighting so only active rows are coloured and static lists stay muted.
 - **0.2.50** (2026-09-01) Add a Session Drafts group and give file lists a searchable view-all header action.
 - **0.2.49** (2026-09-01) Remove the OMO bottom group and fold the document index into per-kind file resolvers with session and plan-status filters.
 - **0.2.48** (2026-09-01) Stop the sidebar freezing on a locked database by failing fast on lock waits, serving the last snapshot, and reading the runtime snapshot in a worker thread.

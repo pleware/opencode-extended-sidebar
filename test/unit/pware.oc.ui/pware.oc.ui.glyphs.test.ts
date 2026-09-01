@@ -169,11 +169,11 @@ describe("reviewStateSuffix", () => {
 })
 
 describe("fileLetterMark", () => {
-  test("git letters map to marks", () => {
-    expect(fileLetterMark("D")).toBe("error")
-    expect(fileLetterMark("U")).toBe("error")
-    expect(fileLetterMark("M")).toBe("stale")
-    expect(fileLetterMark("A")).toBe("live")
+  test("every git letter is muted — files are not activity-highlighted", () => {
+    expect(fileLetterMark("D")).toBe("ready")
+    expect(fileLetterMark("U")).toBe("ready")
+    expect(fileLetterMark("M")).toBe("ready")
+    expect(fileLetterMark("A")).toBe("ready")
     expect(fileLetterMark("V")).toBe("ready")
     expect(fileLetterMark(null)).toBe("ready")
   })

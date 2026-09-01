@@ -146,9 +146,7 @@ export function reviewStateSuffix(review: ReviewState | null | undefined): strin
   return lanes
 }
 
-export function fileLetterMark(letter: FileLetter | null | undefined): AgentMark {
-  if (letter === "D" || letter === "U") return STATUS_ERROR
-  if (letter === "M" || letter === "T" || letter === "R" || letter === "C") return PULSE_STALE
-  if (letter === "A") return PULSE_LIVE
+/** Files are static — the git letter is a muted glyph, never an activity colour. */
+export function fileLetterMark(_letter: FileLetter | null | undefined): AgentMark {
   return MARK_READY
 }

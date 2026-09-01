@@ -149,12 +149,7 @@ function ModelRow(props: {
     )
   const name = () => stacked().name
   const chips = () => stacked().chips
-  const chipFg = (chip: Chip): string => {
-    if (chip.text.startsWith("↑")) return flowColor(FLOW_WAIT, props.colors)
-    if (chip.text.startsWith(THINK_GLYPH)) return props.colors.primary || props.colors.text
-    if (chip.text.startsWith("↓")) return flowColor(FLOW_RECV, props.colors)
-    return props.colors.textMuted
-  }
+  const chipFg = (_chip: Chip): string => props.colors.textMuted
   return (
     <box flexDirection="column">
       <box flexDirection="row">
@@ -190,7 +185,6 @@ function ToolRow(props: {
   ]
   const chipFg = (chip: Chip): string => {
     if (chip.text.startsWith("×")) return props.colors.error || props.colors.text
-    if (chip.rank === 3) return props.colors.primary || props.colors.text
     return props.colors.textMuted
   }
   return (
@@ -221,14 +215,13 @@ function HistoryRow(props: {
     { text: r().waitMs != null ? `↑${formatDuration(r().waitMs)}` : "", rank: 0 },
     { text: r().toolShare != null ? `→${formatPercent(r().toolShare)}` : "", rank: 1 },
   ]
-  const chipFg = (chip: Chip): string =>
-    chip.text.startsWith("↑") ? flowColor(FLOW_WAIT, props.colors) : props.colors.textMuted
+  const chipFg = (_chip: Chip): string => props.colors.textMuted
   return (
     <MetricRow
       glyph="•"
       glyphFg={props.colors.textMuted}
       name={r().title}
-      nameFg={props.current ? props.colors.primary || props.colors.text : props.colors.text}
+      nameFg={props.colors.text}
       bold={props.current}
       chips={chips()}
       chipFg={chipFg}

@@ -113,10 +113,7 @@ The working spinner animates on a separate fast glyph tick (80 ms) while rows an
 | red                    | `error`                     | failed                                           |
 | muted                  | `textMuted`                 | idle, done or archived                           |
 | green `+N` / red `−M`  | `diffAdded` / `diffRemoved` | added and removed lines                          |
-| yellow `M` `R` `C` `T` | `warning`                   | Files: modified / renamed / copied / typechange  |
-| red `D` `U`            | `error`                     | Files: deleted or unmerged                       |
-| green `A`              | `success`                   | Files: added                                     |
-| muted `?` `V`          | `textMuted`                 | Files: untracked, or viewed                      |
+| muted `M` `A` `D` `?` `V` | `textMuted`                 | Files: git-status letter — not highlighted       |
 | accent `∴`             | `primary`                   | Perf: thinking                                   |
 
 While an arrow is lit it drives the colour. The current session is **bold** and tagged `[C]` in the Sessions list. Clickable labels **underline on hover**. On Perf the same arrows mean measured time: wait, stream, tools.
