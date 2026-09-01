@@ -1,5 +1,6 @@
 # Changelog
 
+- **0.2.37** (2026-09-01) Add perf chart and stat render helpers (asciiTrend, shareBar, perfStatLine, histogram, gauge).
 - **0.2.36** (2026-09-01) Add perf series pipeline helpers (interpolate, smooth, downsample, stripAnsi).
 - **0.2.35** (2026-09-01) Add asciichart, simple-statistics and @crafter/charts chart/stat dependencies.
 - **0.2.34** (2026-09-01) Close the omo layer's cross-domain edges by moving workStatusGlyph into core and the approval session-state enrichment type into runtime (EnrichedApproval), correct the perf layer rule so its TUI view may import ui, and version the .cursor rules in the repo

@@ -1,9 +1,15 @@
 import { describe, expect, test } from "bun:test"
 import {
+  asciiTrend,
   downsampleAvg,
   interpolateSeries,
+  perfStatLine,
+  shareBar,
+  shareDonut,
+  shareGauge,
   smoothSeries,
   stripAnsi,
+  waitHistogram,
 } from "../../../src/pware.oc.perf/pware.oc.perf.charts.js"
 
 describe("interpolateSeries", () => {
@@ -77,5 +83,83 @@ describe("stripAnsi", () => {
 
   test("returns an ANSI-free string", () => {
     expect(stripAnsi("\x1b[1;32mok\x1b[0m")).not.toContain("\x1b[")
+  })
+})
+
+describe("asciiTrend", () => {
+  test("renders a non-empty ANSI-free trend", () => {
+    const out = asciiTrend([1, 2, 3, null, 5], { width: 8 })
+    expect(out.length).toBeGreaterThan(0)
+    expect(out).not.toContain("\x1b[")
+  })
+
+  test("empty input returns empty string", () => {
+    expect(asciiTrend([], { width: 5 })).toBe("")
+  })
+
+  test("all-null input returns empty string", () => {
+    expect(asciiTrend([null], { width: 5 })).toBe("")
+  })
+})
+
+describe("shareBar", () => {
+  test("renders a bar of the requested width", () => {
+    expect(shareBar(0.5, 4).length).toBe(4)
+  })
+
+  test("null share renders an empty bar (no filled blocks)", () => {
+    expect(shareBar(null, 4)).not.toContain("█")
+  })
+})
+
+describe("perfStatLine", () => {
+  const fmt = (n: number) => `${n}ms`
+
+  test("renders p50/p95/p99 and sigma for enough values", () => {
+    const out = perfStatLine("wait", [100, 200, 300], fmt)
+    expect(out).toContain("p50")
+    expect(out).toContain("p95")
+    expect(out).toContain("p99")
+    expect(out).toContain("σ")
+  })
+
+  test("empty input renders the dash", () => {
+    expect(perfStatLine("wait", [], fmt)).toBe("wait  —")
+  })
+
+  test("single value renders the dash", () => {
+    expect(perfStatLine("wait", [5], fmt)).toBe("wait  —")
+  })
+})
+
+describe("waitHistogram", () => {
+  test("renders counts and is ANSI-free", () => {
+    const out = waitHistogram([10, 20, 30, 40, 50], {
+      width: 30,
+      height: 5,
+      bins: 5,
+    })
+    expect(out).toContain("n=")
+    expect(out).not.toContain("\x1b[")
+  })
+
+  test("empty input returns empty string", () => {
+    expect(waitHistogram([], {})).toBe("")
+  })
+})
+
+describe("shareGauge", () => {
+  test("is ANSI-free and shows a percentage", () => {
+    const out = shareGauge(0.5)
+    expect(out).not.toContain("\x1b[")
+    expect(out).toContain("%")
+  })
+})
+
+describe("shareDonut", () => {
+  test("is ANSI-free and shows the donut glyph", () => {
+    const out = shareDonut(0.5)
+    expect(out).not.toContain("\x1b[")
+    expect(out).toContain("●")
   })
 })

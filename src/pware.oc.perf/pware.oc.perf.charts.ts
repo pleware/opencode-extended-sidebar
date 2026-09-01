@@ -1,3 +1,7 @@
+import { plot } from "asciichart"
+import { sparkBar, sparkHistogram, sparkGauge, sparkDonut } from "@crafter/charts"
+import { quantileSorted, sampleStandardDeviation } from "simple-statistics"
+
 /**
  * Pure series-pipeline helpers for the Perf charts.
  *
@@ -88,4 +92,94 @@ export function downsampleAvg(values: number[], width: number): number[] {
  */
 export function stripAnsi(s: string): string {
   return s.replace(/\x1B\[[0-9;]*[A-Za-z]/g, "")
+}
+
+/**
+ * Plain-ASCII trend line for a series: interpolate nulls → smooth (window 3)
+ * → downsample to at most `width` points → asciichart `plot`. No `colors`
+ * config is passed, so the output is ANSI-free. Empty or all-null input
+ * returns `""`.
+ */
+export function asciiTrend(
+  values: Array<number | null>,
+  opts: { width: number; height?: number },
+): string {
+  const dense = interpolateSeries(values)
+  if (dense.length === 0) return ""
+  const smoothed = smoothSeries(dense, 3)
+  const ds = downsampleAvg(smoothed, Math.max(1, opts.width))
+  return plot(ds, { height: opts.height ?? 3 })
+}
+
+/**
+ * Single horizontal share bar (`█`-filled) for a fraction in `[0, 1]`.
+ * `null` renders an empty bar. Output is plain (no colour config passed).
+ */
+export function shareBar(share: number | null, width: number): string {
+  return sparkBar(share ?? 0, 1, { width })
+}
+
+/**
+ * One summary line of a distribution: `p50`/`p95`/`p99` via `quantileSorted`
+ * and the sample standard deviation, each formatted through the injected
+ * `fmt`. Fewer than two finite values renders `${label}  —`.
+ */
+export function perfStatLine(
+  label: string,
+  values: Array<number | null>,
+  fmt: (n: number) => string,
+): string {
+  const known = values.filter(
+    (v): v is number => v != null && Number.isFinite(v),
+  )
+  if (known.length < 2) return `${label}  —`
+  const sorted = [...known].sort((a, b) => a - b)
+  const p50 = quantileSorted(sorted, 0.5)
+  const p95 = quantileSorted(sorted, 0.95)
+  const p99 = quantileSorted(sorted, 0.99)
+  const sd = sampleStandardDeviation(known)
+  return `${label}  p50 ${fmt(p50)} · p95 ${fmt(p95)} · p99 ${fmt(p99)} · σ ${fmt(sd)}`
+}
+
+/**
+ * Binned distribution histogram of the known (finite) values, with per-bin
+ * counts. Fewer than one known value returns `""`. Plain (no colour config).
+ */
+export function waitHistogram(
+  values: Array<number | null>,
+  opts?: { width?: number; height?: number; bins?: number },
+): string {
+  const known = values.filter(
+    (v): v is number => v != null && Number.isFinite(v),
+  )
+  if (known.length < 1) return ""
+  return sparkHistogram(known, {
+    width: opts?.width ?? 60,
+    height: opts?.height ?? 8,
+    bins: opts?.bins ?? 10,
+    showCounts: true,
+  })
+}
+
+/**
+ * Radial gauge for a fraction in `[0, 1]`. `sparkGauge` colours internally;
+ * `stripAnsi` removes the escape codes so the returned string is ANSI-free.
+ */
+export function shareGauge(
+  share: number | null,
+  opts?: { width?: number; label?: string },
+): string {
+  return stripAnsi(
+    sparkGauge(share ?? 0, 1, { width: opts?.width ?? 40, label: opts?.label }),
+  )
+}
+
+/**
+ * Donut for a fraction in `[0, 1]`, ANSI-stripped (see `shareGauge`).
+ */
+export function shareDonut(
+  share: number | null,
+  opts?: { label?: string },
+): string {
+  return stripAnsi(sparkDonut(share ?? 0, 1, { label: opts?.label }))
 }
