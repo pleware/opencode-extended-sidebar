@@ -29,6 +29,14 @@ export type TabStatus = { label: string; tone: TabTone } | null
 /** The transient DB state right after a session is selected but its row is not visible yet. */
 export const TAB_STATUS_SESSION_NOT_IN_DB = "session not in db yet"
 
+/** A tab status resolved to a render line: static glyph + label + tone. Null = no row. */
+export type TabStatusLine = {
+  label: string
+  tone: TabTone
+  /** Static prefix glyph for error/muted; null for loading — the row animates the spinner. */
+  glyph: "×" | "•" | null
+} | null
+
 export function normalizeStatus(raw: string | null | undefined): CanonicalStatus {
   const s = (raw || "").toLowerCase()
   if (s === "running" || s === "in_progress" || s === "active") return STATUS_RUNNING
@@ -120,6 +128,18 @@ export function tabStatus(opts: {
     }
   }
   return null
+}
+
+/**
+ * Resolve a tab status to its render line. The null contract lives here so it
+ * is unit-testable: a ready tab (`null`) returns `null`, and the glyph maps
+ * tone → `×` error, `•` muted, `null` loading (the row animates the spinner).
+ */
+export function tabStatusLine(status: TabStatus): TabStatusLine {
+  if (!status) return null
+  if (status.tone === "error") return { label: status.label, tone: "error", glyph: "×" }
+  if (status.tone === "muted") return { label: status.label, tone: "muted", glyph: "•" }
+  return { label: status.label, tone: "loading", glyph: null }
 }
 
 /** Queued / waiting work — boulder writes no `status` while a task waits for a slot. */

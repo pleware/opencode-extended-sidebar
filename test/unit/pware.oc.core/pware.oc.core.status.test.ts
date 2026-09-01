@@ -5,6 +5,7 @@ import {
   normalizeStatus,
   sessionStatusLabel,
   tabStatus,
+  tabStatusLine,
   taskRank,
   toToolStatus,
   toWorkLabel,
@@ -191,5 +192,35 @@ describe("tabStatus", () => {
     expect(
       tabStatus({ ...ready, tab: "perf", dbError: TAB_STATUS_SESSION_NOT_IN_DB }),
     ).toEqual({ label: "waiting for session", tone: "loading" })
+  })
+})
+
+describe("tabStatusLine", () => {
+  test("a ready tab (null) renders no row", () => {
+    expect(tabStatusLine(null)).toBeNull()
+  })
+
+  test("error maps to the × glyph and keeps the label", () => {
+    expect(tabStatusLine({ label: "db missing", tone: "error" })).toEqual({
+      label: "db missing",
+      tone: "error",
+      glyph: "×",
+    })
+  })
+
+  test("muted maps to the • glyph and keeps the label", () => {
+    expect(tabStatusLine({ label: "no turns yet", tone: "muted" })).toEqual({
+      label: "no turns yet",
+      tone: "muted",
+      glyph: "•",
+    })
+  })
+
+  test("loading has a null glyph so the row animates the spinner", () => {
+    expect(tabStatusLine({ label: "loading · my work", tone: "loading" })).toEqual({
+      label: "loading · my work",
+      tone: "loading",
+      glyph: null,
+    })
   })
 })

@@ -1,5 +1,6 @@
 # Changelog
 
+- **0.2.43** (2026-09-01) Close the tab-status test gap by extracting the render decision into a tested tabStatusLine helper so a ready tab's null status can no longer crash the row.
 - **0.2.42** (2026-09-01) Fix the My work tab briefly showing nothing on first open by re-delivering the initial snapshot the bus dropped before its listener attached, and treat a not-ye.
 - **0.2.41** (2026-09-01) Add per-tab status rows that show session-switch and cold-tab loading with a braille spinner, DB errors and Stats empty notes until data lands, and relabel the .
 - **0.2.40** (2026-09-01) Document perf chart modules and the dependency change.

@@ -27,7 +27,7 @@ import {
 } from "./pware.oc.ui.glyphs.js"
 import { profile } from "../pware.oc.core/pware.oc.core.debug.js"
 import { moreRevealVisible, sliceShown } from "../pware.oc.core/pware.oc.core.layout.js"
-import type { TabStatus } from "../pware.oc.core/pware.oc.core.status.js"
+import { tabStatusLine, type TabStatus } from "../pware.oc.core/pware.oc.core.status.js"
 import {
   flowColor,
   formatTokens,
@@ -95,20 +95,16 @@ export function TabStatusRow(props: {
   colors: ThemeColors
   glyphFrame: () => number
 }): JSX.Element | null {
-  if (!props.status) return null
-  if (props.status.tone === "error") {
-    return (
-      <text fg={props.colors.error || props.colors.text}>{`× ${props.status.label}`}</text>
-    )
-  }
-  if (props.status.tone === "muted") {
-    return <text fg={props.colors.textMuted}>{`• ${props.status.label}`}</text>
-  }
-  return (
-    <text fg={props.colors.primary || props.colors.text}>
-      {`${spinnerFrame(props.glyphFrame())} ${props.status.label}`}
-    </text>
-  )
+  const line = tabStatusLine(props.status)
+  if (!line) return null
+  const prefix = line.glyph ?? spinnerFrame(props.glyphFrame())
+  const fg =
+    line.tone === "error"
+      ? props.colors.error || props.colors.text
+      : line.tone === "muted"
+        ? props.colors.textMuted
+        : props.colors.primary || props.colors.text
+  return <text fg={fg}>{`${prefix} ${line.label}`}</text>
 }
 
 /** Clickable truncation line: "… +N more", or "… less" in expand-all (toggle) mode. */
