@@ -77,7 +77,7 @@ export type PerfTotals = {
   cacheHit: number | null
 }
 
-/** One assistant turn, oldest first, for the trend sparklines. */
+/** One assistant turn, oldest first, for the trend charts. */
 export type TrendPoint = {
   at: number
   waitMs: number | null

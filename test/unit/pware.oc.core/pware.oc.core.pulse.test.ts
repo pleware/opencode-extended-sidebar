@@ -16,7 +16,6 @@ import {
   packStackedRow,
   preferToolLabel,
   shortToolLabel,
-  sparkline,
 } from "../../../src/pware.oc.core/pware.oc.core.pulse.js"
 
 describe("toEpochMs / stampMs", () => {
@@ -112,15 +111,6 @@ describe("packStackedRow", () => {
     const stacked = packStackedRow("deepseek-chat-pro", chips, 24)
     expect(stacked.name).toBe("deepseek-chat-pro")
     expect(stacked.chips.map((c) => c.text)).toEqual(["38×", "↑3.2s", "∴14s"])
-  })
-})
-
-describe("sparkline", () => {
-  test("gaps are ticks; empty window is empty", () => {
-    expect(sparkline([], 4)).toBe("")
-    const s = sparkline([1, null, 8], 3)
-    expect(s).toHaveLength(3)
-    expect(s[1]).toBe("·")
   })
 })
 

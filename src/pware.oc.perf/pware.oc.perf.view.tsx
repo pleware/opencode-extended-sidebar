@@ -4,7 +4,7 @@ import { createMemo, For, Show, type JSX } from "solid-js"
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import { ClickText, type ThemeColors } from "../pware.oc.ui/pware.oc.ui.chrome.js"
 import { FoldSection, RowList, useFold, useReveal } from "../pware.oc.ui/pware.oc.ui.sections.js"
-import { openPerfLog } from "../pware.oc.ui/pware.oc.ui.menudialogs.js"
+import { openPerfCharts, openPerfLog } from "../pware.oc.ui/pware.oc.ui.menudialogs.js"
 import type { PerfLogKind } from "./pware.oc.perf.reader.js"
 import {
   type ModelPerf,
@@ -29,7 +29,6 @@ import {
   FLOW_WAIT,
 } from "../pware.oc.core/constants/pware.oc.core.constants.pulse.js"
 import {
-  barGlyphs,
   flowColor,
   formatDuration,
   formatPercent,
@@ -40,10 +39,10 @@ import {
   timeSummary,
   tokenSummary,
   shortMiddle,
-  sparkline,
   type Chip,
   type FlowDir,
 } from "../pware.oc.core/pware.oc.core.pulse.js"
+import { asciiTrend, shareBar } from "./pware.oc.perf.charts.js"
 
 const KV_FOLD_MODELS = "oes.fold.perf.models"
 const KV_FOLD_TIME = "oes.fold.perf.time"
@@ -119,7 +118,7 @@ function PhaseRow(props: {
       <ClickText fg={props.colors.textMuted} underline={Boolean(props.onSelect)}>
         {props.label.padEnd(5)}
       </ClickText>
-      <text fg={fg()}>{` ${barGlyphs(props.share, barWidth())}`}</text>
+      <text fg={fg()}>{` ${shareBar(props.share, barWidth())}`}</text>
       <text fg={props.colors.textMuted}>
         {` ${formatPercent(props.share).padStart(4)} ${formatSpan(props.ms).padStart(4)}`}
       </text>
@@ -187,13 +186,11 @@ function ToolRow(props: {
     { text: `${t().count}×`, rank: 2 },
     { text: formatDuration(t().avgMs), rank: 0 },
     { text: t().errors > 0 ? `×${t().errors}` : "", rank: 1 },
-    { text: barGlyphs(props.share, 4), rank: 3 },
+    { text: shareBar(props.share, 4), rank: 3 },
   ]
   const chipFg = (chip: Chip): string => {
     if (chip.text.startsWith("×")) return props.colors.error || props.colors.text
-    if (chip.text.startsWith("█") || chip.text.startsWith("░")) {
-      return props.colors.primary || props.colors.text
-    }
+    if (chip.rank === 3) return props.colors.primary || props.colors.text
     return props.colors.textMuted
   }
   return (
@@ -242,18 +239,21 @@ function HistoryRow(props: {
   )
 }
 
-function SparkRow(props: {
+function TrendChart(props: {
   label: string
   values: Array<number | null>
   fg: string
   colors: ThemeColors
   lineMax: number
 }): JSX.Element {
-  const line = () => sparkline(props.values, Math.max(6, props.lineMax - 8))
+  const lines = () =>
+    asciiTrend(props.values, { width: Math.max(8, props.lineMax - 10), height: 3 }).split("\n")
   return (
-    <box flexDirection="row">
-      <text fg={props.colors.textMuted}>{props.label.padEnd(6)}</text>
-      <text fg={props.fg}>{line()}</text>
+    <box flexDirection="column">
+      <text fg={props.colors.textMuted}>{props.label}</text>
+      <For each={lines()}>
+        {(line) => <text fg={props.fg}>{line || " "}</text>}
+      </For>
     </box>
   )
 }
@@ -305,6 +305,12 @@ export function PerfPanel(props: PerfPanelProps): JSX.Element {
       turns: props.turns,
       kind,
       toolFilter,
+    })
+
+  const openCharts = () =>
+    openPerfCharts(props.api, props.colors, {
+      perf: props.perf,
+      currentSessionId: props.currentSessionId,
     })
 
   const liveLabel = () => {
@@ -422,15 +428,16 @@ export function PerfPanel(props: PerfPanelProps): JSX.Element {
                 count={props.perf.trend.length}
                 colors={props.colors}
                 onToggle={foldTrend.toggle}
+                onDetail={() => openCharts()}
               >
-                <SparkRow
+                <TrendChart
                   label={PERF_PHASE_WAIT}
                   values={trendWait()}
                   fg={props.colors.warning || props.colors.text}
                   colors={props.colors}
                   lineMax={props.lineMax}
                 />
-                <SparkRow
+                <TrendChart
                   label="tok/s"
                   values={trendRate()}
                   fg={props.colors.success}

@@ -59,9 +59,6 @@ export const FLOW_RECV_MS = 2_000
 export const FLOW_WAIT_MS = 15_000
 /** Tool call stays → until success/fail or timeout. */
 export const FLOW_TOOL_MS = 30_000
-/** Eighth blocks for sparklines. */
-export const SPARK_FRAMES = ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"] as const
-
 export function pulseFromAge(ageMs: number): Pulse {
   if (ageMs < LIVE_MS) return PULSE_LIVE
   if (ageMs < STALE_MS) return PULSE_STALE
@@ -371,15 +368,6 @@ export function formatPercent(share: number | null | undefined): string {
   return `${Math.round(pct)}%`
 }
 
-/** Filled / empty block bar. Any non-zero share keeps at least one cell. */
-export function barGlyphs(share: number | null | undefined, width: number): string {
-  const w = Math.max(1, Math.round(width))
-  if (share == null || !Number.isFinite(share) || share <= 0) return "░".repeat(w)
-  const exact = Math.min(1, share) * w
-  const filled = Math.min(w, Math.max(1, Math.round(exact)))
-  return `${"█".repeat(filled)}${"░".repeat(w - filled)}`
-}
-
 /** A metric chip on a row. Higher `rank` is dropped first when the line is tight. */
 export type Chip = { text: string; rank: number }
 
@@ -416,25 +404,6 @@ export function shortMiddle(name: string, max: number): string {
   const tail = Math.max(3, Math.floor((max - 1) / 2))
   const head = max - 1 - tail
   return `${t.slice(0, head)}…${t.slice(t.length - tail)}`
-}
-
-/** Sparkline scaled to the window's own max. Gaps render as a low tick. */
-export function sparkline(values: Array<number | null>, width: number): string {
-  const w = Math.max(1, Math.round(width))
-  const tail = values.slice(-w)
-  const known = tail.filter((v): v is number => v != null && Number.isFinite(v) && v >= 0)
-  if (!known.length) return ""
-  const max = Math.max(...known)
-  const min = Math.min(...known)
-  const range = max - min
-  return tail
-    .map((v) => {
-      if (v == null || !Number.isFinite(v)) return "·"
-      if (range <= 0) return SPARK_FRAMES[SPARK_FRAMES.length - 1]
-      const i = Math.round(((v - min) / range) * (SPARK_FRAMES.length - 1))
-      return SPARK_FRAMES[Math.min(SPARK_FRAMES.length - 1, Math.max(0, i))]
-    })
-    .join("")
 }
 
 export function toolMark(status: string): AgentMark {
