@@ -347,6 +347,11 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   createEffect(on(() => props.sessionId, remount, { defer: true }))
 
   queueMicrotask(hydrateDiff)
+  // The monitor's initial forced emit (startRuntimeSource → startMonitor) runs
+  // before the EV_OES_SNAPSHOT listener below is registered, so the bus drops
+  // it. Re-emit once now that listeners exist — the snapshot was already
+  // computed and cached, so this is a cache hit, not a second full read.
+  queueMicrotask(refresh)
 
   const offSnapshot = bus.on(EV_OES_SNAPSHOT, (evt) => {
     const data = evt.data
@@ -1035,6 +1040,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
       tab,
       currentId: snap().db.current?.id ?? null,
       dbError: snap().db.error,
+      dbPresent: snap().db.present,
       switching: switching()?.id ?? null,
       cold: coldTab() === tab,
       perfError: tab === "perf" ? perf().error : null,

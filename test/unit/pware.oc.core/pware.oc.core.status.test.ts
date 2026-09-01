@@ -118,6 +118,7 @@ describe("tabStatus", () => {
     tab: "mywork",
     currentId: "sess-current",
     dbError: null,
+    dbPresent: true,
     switching: null,
     perfError: null,
     perfTurns: 0,
@@ -149,6 +150,16 @@ describe("tabStatus", () => {
       label: "db missing",
       tone: "error",
     })
+  })
+
+  test("a not-yet-loaded snapshot (no error yet) reads as waiting", () => {
+    expect(tabStatus({ ...ready, dbPresent: false })).toEqual({
+      label: "waiting for session",
+      tone: "loading",
+    })
+    expect(
+      tabStatus({ ...ready, dbPresent: false, dbError: "db missing" }),
+    ).toEqual({ label: "db missing", tone: "error" })
   })
 
   test("cold tab shows its own loading label, my work and sessions differ", () => {

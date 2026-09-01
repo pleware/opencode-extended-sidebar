@@ -89,6 +89,7 @@ export function tabStatus(opts: {
   tab: string
   currentId: string | null
   dbError: string | null
+  dbPresent: boolean
   switching: string | null
   perfError: string | null
   perfTurns: number
@@ -102,6 +103,9 @@ export function tabStatus(opts: {
   }
   if (opts.dbError) {
     return { label: opts.dbError, tone: "error" }
+  }
+  if (!opts.dbPresent) {
+    return { label: "waiting for session", tone: "loading" }
   }
   if (opts.tab === "perf") {
     if (opts.perfError) return { label: opts.perfError, tone: "error" }
