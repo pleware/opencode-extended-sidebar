@@ -105,6 +105,7 @@ import {
   GroupSection,
   RowList,
   TabColumn,
+  TabStatusRow,
   agentDisplayName,
   clip,
   useFold,
@@ -125,7 +126,12 @@ import {
 } from "../pware.oc.opencode/pware.oc.opencode.files.js"
 import { onGitMarksChange } from "../pware.oc.core/git/pware.oc.core.git.js"
 import { getOes } from "../pware.oc.core/pware.oc.core.oes.js"
-import { isPendingWork, sessionStatusLabel } from "../pware.oc.core/pware.oc.core.status.js"
+import {
+  TAB_STATUS_SESSION_NOT_IN_DB,
+  isPendingWork,
+  sessionStatusLabel,
+  tabStatus,
+} from "../pware.oc.core/pware.oc.core.status.js"
 import { createEventBus } from "../pware.oc.core/pware.oc.core.bus.js"
 import { startRuntimeSource } from "../pware.oc.runtime/pware.oc.runtime.source.js"
 import { openApprovalDialog, openDocDetail, openFileDetail, openToolDetail, openWorkDetail } from "./pware.oc.ui.menudialogs.js"
@@ -143,6 +149,7 @@ import {
   FPS_READ_EVERY_TICKS,
   GLYPH_TICK_MS,
   NOW_MS,
+  SWITCH_TIMEOUT_MS,
   TICK_MS,
 } from "../pware.oc.core/pware.oc.core.timing.js"
 import {
@@ -235,6 +242,8 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   const [liveTools, setLiveTools] = createSignal<Record<string, ToolHit>>({})
   const [liveFiles, setLiveFiles] = createSignal<Record<string, FileView>>({})
   const [gitTick, setGitTick] = createSignal(0)
+  const [switching, setSwitching] = createSignal<{ id: string; at: number } | null>(null)
+  const [coldTab, setColdTab] = createSignal<string | null>(null)
 
   const colors = (): ThemeColors => props.theme.current as unknown as ThemeColors
 
@@ -254,6 +263,14 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   const apply = (next: RuntimeSnapshot) => {
     setSnap(next)
     requestRender()
+  }
+
+  /** Session switch with the tab status row shown until the target snapshot lands. */
+  const goSession = (id: string | null | undefined) => {
+    if (!id) return
+    selectSession(props.api, id)
+    if (id === props.sessionId) return
+    setSwitching({ id, at: Date.now() })
   }
 
   const projectDir = () => props.api.state.path.directory ?? null
@@ -337,6 +354,13 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     const snapshot = (data as Record<string, unknown>).snapshot
     if (!snapshot || typeof snapshot !== "object") return
     apply(snapshot as RuntimeSnapshot)
+    const s = switching()
+    if (s) {
+      const rs = snapshot as RuntimeSnapshot
+      const landed = rs.db?.current?.id === s.id
+      const failed = Boolean(rs.db?.error) && rs.db?.error !== TAB_STATUS_SESSION_NOT_IN_DB
+      if (landed || failed || Date.now() - s.at > SWITCH_TIMEOUT_MS) setSwitching(null)
+    }
   })
 
   const offSessionActivity = bus.on(EV_OC_SESSION_ACTIVITY, (evt) => {
@@ -442,6 +466,14 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
       glyphFrame()
       queueMicrotask(requestRender)
     })
+  })
+
+  // Cold tabs show their loading row for one short beat, then compute for real.
+  createEffect(() => {
+    const t = coldTab()
+    if (!t) return
+    const timer = setTimeout(() => setColdTab(null), 100)
+    onCleanup(() => clearTimeout(timer))
   })
 
   onCleanup(() => {
@@ -580,7 +612,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
    * only while the Sessions tab is open; elsewhere the memo stays empty.
    */
   const projectFeed = createMemo<ProjectFeed>(() => {
-    if (tab() !== "sessions") return emptyProjectFeed()
+    if (tab() !== "sessions" || coldTab() === "sessions") return emptyProjectFeed()
     const db = snap().db
     return readProjectFeed({
       dbPath: db.dbPath,
@@ -604,8 +636,15 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   const pickTab = (next: string) => {
     if (!(OES_TABS as readonly string[]).includes(next)) return
     const picked = next as OesTab
-    setTab(picked)
-    kvWriteOne(props.api, KV_TAB, picked)
+    if (picked !== tab()) {
+      setTab(picked)
+      kvWriteOne(props.api, KV_TAB, picked)
+      // Cold start: the tab's heavy reads run after the status row shows, so
+      // the loading line is actually visible instead of a one-frame flash.
+      if (picked === "mywork" || picked === "sessions" || picked === "perf") {
+        setColdTab(picked)
+      }
+    }
     if (picked === "current" || picked === "perf") refresh()
     requestRender()
   }
@@ -623,7 +662,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
 
   /** Open `question` tools anywhere in this project — the "answer me" queue. */
   const myWorkQuestions = createMemo<MyWorkItem[]>(() => {
-    if (tab() !== "mywork") return []
+    if (tab() !== "mywork" || coldTab() === "mywork") return []
     const db = snap().db
     try {
       return toQuestionItems(listOpenQuestions({ dbPath: db.dbPath, projectId: db.projectId }))
@@ -635,7 +674,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
 
   /** OMO drafts/plans across all four states, enriched with planner-session state. */
   const myWorkApprovals = createMemo<MyWorkItem[]>(() => {
-    if (tab() !== "mywork" || !omoPresent()) return []
+    if (tab() !== "mywork" || coldTab() === "mywork" || !omoPresent()) return []
     now() // re-scan while open; the plans cache TTL gates the filesystem read
     const dir = projectDir()
     try {
@@ -662,7 +701,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
 
   /** Recent main sessions still running or idle — the "Running" group. */
   const myWorkRunning = createMemo<MyWorkItem[]>(() => {
-    if (tab() !== "mywork") return []
+    if (tab() !== "mywork" || coldTab() === "mywork") return []
     return toRunningItems(snap().db.recent)
   })
 
@@ -847,7 +886,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
         flow: rowFlow(item.sessionId, isBusy),
         name: item.title,
         suffix: sessionStatusLabel(item.status),
-        onSelect: () => selectSession(props.api, item.sessionId),
+        onSelect: () => goSession(item.sessionId),
       }
     }
     if ("sessionId" in item) {
@@ -860,7 +899,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
         name: item.title,
         suffix: `${formatAge(age)}${reason}`,
         waiting: item.kind !== QUESTION_KIND_ERROR,
-        onSelect: () => selectSession(props.api, item.sessionId),
+        onSelect: () => goSession(item.sessionId),
       }
     }
     const sessionLabel = planSessionStateLabel(item.sessionState)
@@ -885,13 +924,9 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
       suffix: [sessionLabel, reviewLabel].filter(Boolean).join(" ") || undefined,
       waiting: !drafting,
       onSelect: () => {
-        if (drafting) {
-          openDocDetail(props.api, doc, projectRoots(), colors())
-          return
-        }
         const db = openReadonlyDb(snap().db.dbPath)
         const sessionId = db ? sessionForPlanFile(db, item.rel) : null
-        openApprovalDialog(props.api, {
+        const base: Parameters<typeof openApprovalDialog>[1] = {
           title: item.name,
           sessionId,
           continueHint: approvalContinueHint(sessionId, Boolean(db)),
@@ -899,9 +934,17 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
           onApprove: (sid) => approvePlan(props.api, sid),
           onStartWork: (mode) => runStartWork(props.api, props.sessionId, mode, item.name),
           onDocs: () => openDocDetail(props.api, doc, projectRoots(), colors()),
-          showApprove,
-          showStartWork,
-        })
+        }
+        if (drafting) {
+          openApprovalDialog(props.api, {
+            ...base,
+            showApprove: false,
+            showStartWork: false,
+            docsLabel: "Preview plan file",
+          })
+          return
+        }
+        openApprovalDialog(props.api, { ...base, showApprove, showStartWork })
       },
     }
   }
@@ -962,7 +1005,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
         name: s.origin ? `${s.id.slice(0, 12)} · ${s.origin}` : s.id.slice(0, 12),
         current: s.id === props.sessionId,
         flow: rowFlow(s.id, Boolean(busy()[s.id])),
-        onSelect: () => selectSession(props.api, s.id),
+        onSelect: () => goSession(s.id),
       })
     }
     return out
@@ -970,7 +1013,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
 
   /** Perf SQLite scan runs only while this tab is open. */
   const perf = createMemo(() => {
-    if (tab() !== "perf") return emptyPerf(props.sessionId)
+    if (tab() !== "perf" || coldTab() === "perf") return emptyPerf(props.sessionId)
     const o = oes()
     const history = o.perfHistory > 0
       ? snap()
@@ -986,6 +1029,17 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
       cacheKey: `${props.sessionId}::${snap().scanStamp}::${o.perfTurns}`,
     })
   })
+
+  const tabStatusFor = (tab: OesTab) =>
+    tabStatus({
+      tab,
+      currentId: snap().db.current?.id ?? null,
+      dbError: snap().db.error,
+      switching: switching()?.id ?? null,
+      cold: coldTab() === tab,
+      perfError: tab === "perf" ? perf().error : null,
+      perfTurns: tab === "perf" ? perf().totals.turns : 0,
+    })
 
   const selfFlow = createMemo(() =>
     rowFlow(props.sessionId, Boolean(busy()[props.sessionId])),
@@ -1034,7 +1088,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
         current: Boolean(d.sessionId && d.sessionId === props.sessionId),
         flow: dir,
         dirSlot: true,
-        onSelect: () => selectSession(props.api, d.sessionId),
+        onSelect: () => goSession(d.sessionId),
       })
     }
     return out
@@ -1097,9 +1151,11 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
             try {
               const groups = myWorkGroups()
               dbg("mywork.panel", "render", { groups: groups.map((g) => `${g.kind}:${g.items.length}`) })
-              if (groups.length === 0) return <text fg={colors().textMuted}>• nothing</text>
+              const status = tabStatusFor("mywork")
+              if (!status && groups.length === 0) return <text fg={colors().textMuted}>• nothing</text>
               return (
                 <box flexDirection="column" gap={1}>
+                  <TabStatusRow status={status} colors={colors()} glyphFrame={glyphFrame} />
                   <For each={groups}>
                     {(g) => (
                       <GroupSection
@@ -1123,6 +1179,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
           },
           sessions: () => (
             <box flexDirection="column" gap={1}>
+              <TabStatusRow status={tabStatusFor("sessions")} colors={colors()} glyphFrame={glyphFrame} />
               <FoldSection title="Agents" open={foldAgents.open()} colors={colors()} onToggle={foldAgents.toggle}>
                 {snap().db.main ? (
                   <Row
@@ -1134,7 +1191,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
                     current={snap().db.main!.id === props.sessionId}
                     flow={mainFlow()}
                     dirSlot
-                    onSelect={() => selectSession(props.api, snap().db.main?.id)}
+                    onSelect={() => goSession(snap().db.main?.id)}
                   />
                 ) : (
                   <text fg={colors().textMuted}>
@@ -1177,7 +1234,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
                     current={s.id === props.sessionId}
                     flow={dir}
                     dirSlot
-                    onSelect={() => selectSession(props.api, s.id)}
+                    onSelect={() => goSession(s.id)}
                   />
                 )
               }}
@@ -1264,6 +1321,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
           ),
           current: () => (
             <box flexDirection="column" gap={1}>
+              <TabStatusRow status={tabStatusFor("current")} colors={colors()} glyphFrame={glyphFrame} />
               <FoldSection title="Agents" open={foldAgents.open()} colors={colors()} onToggle={foldAgents.toggle}>
                 {currentRow() ? (
                   <Row
@@ -1275,7 +1333,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
                     current
                     flow={currentFlow()}
                     dirSlot
-                    onSelect={() => selectSession(props.api, currentRow()?.id)}
+                    onSelect={() => goSession(currentRow()?.id)}
                   />
                 ) : (
                   <text fg={colors().textMuted}>
@@ -1376,20 +1434,23 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
             </box>
           ),
           perf: () => (
-            <PerfPanel
-              api={props.api}
-              perf={perf()}
-              colors={colors()}
-              lineMax={oes().lineMax}
-              rows={oes().perfRows}
-              glyphFrame={glyphFrame}
-              livePhase={selfFlow()}
-              livePhaseMs={selfPhaseMs()}
-              currentSessionId={props.sessionId}
-              dbPath={snap().db.dbPath}
-              turns={oes().perfTurns}
-              onSelect={(id) => selectSession(props.api, id)}
-            />
+            <box flexDirection="column" gap={1}>
+              <TabStatusRow status={tabStatusFor("perf")} colors={colors()} glyphFrame={glyphFrame} />
+              <PerfPanel
+                api={props.api}
+                perf={perf()}
+                colors={colors()}
+                lineMax={oes().lineMax}
+                rows={oes().perfRows}
+                glyphFrame={glyphFrame}
+                livePhase={selfFlow()}
+                livePhaseMs={selfPhaseMs()}
+                currentSessionId={props.sessionId}
+                dbPath={snap().db.dbPath}
+                turns={oes().perfTurns}
+                onSelect={(id) => goSession(id)}
+              />
+            </box>
           ),
         }}
       />

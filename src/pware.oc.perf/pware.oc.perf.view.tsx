@@ -334,14 +334,7 @@ export function PerfPanel(props: PerfPanelProps): JSX.Element {
         )}
       </Show>
 
-      <Show
-        when={props.perf.totals.turns > 0}
-        fallback={
-          <text fg={props.colors.textMuted}>
-            {props.perf.error ? `• ${props.perf.error}` : "• no turns yet"}
-          </text>
-        }
-      >
+      <Show when={props.perf.totals.turns > 0} fallback={null}>
         <box flexDirection="column" gap={1}>
           <FoldSection
             title="Models"

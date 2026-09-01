@@ -37,3 +37,6 @@ export const MONITOR_WATCH_DEBOUNCE_MS = 120
 
 /** Host event → scan debounce (trailing). */
 export const EVENT_SCAN_DEBOUNCE_MS = 100
+
+/** Session-switch status row safety: hide the indicator even if no snapshot lands. */
+export const SWITCH_TIMEOUT_MS = 3_000

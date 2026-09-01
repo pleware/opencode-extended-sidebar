@@ -1,5 +1,6 @@
 # Changelog
 
+- **0.2.41** (2026-09-01) Add per-tab status rows that show session-switch and cold-tab loading with a braille spinner, DB errors and Stats empty notes until data lands, and relabel the .
 - **0.2.40** (2026-09-01) Document perf chart modules and the dependency change.
 - **0.2.39** (2026-09-01) Render perf bars and trends with chart libraries, dropping hand-rolled barGlyphs and sparkline.
 - **0.2.38** (2026-09-01) Add perf charts dialog with stats, histogram and gauges.

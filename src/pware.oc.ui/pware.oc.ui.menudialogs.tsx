@@ -433,7 +433,9 @@ export function openWorkDetail(
  * start-work rows that launch the OMO plan in the current session
  * (plain / --make-pr / --ship); Docs opens the draft as a preview. A muted
  * hint is shown under the session-bound rows when no session is found.
- * Searchable + keyboard-navigable — the same picker the host uses.
+ * Searchable + keyboard-navigable — the same picker the host uses. The
+ * drafting rows use the same picker with the plan options hidden and the
+ * docs row relabelled via `docsLabel` ("Preview plan file").
  */
 type ApprovalAction = "continue" | "approve" | "docs" | StartWorkMode
 
@@ -452,10 +454,13 @@ export function openApprovalDialog(
     showApprove?: boolean
     /** Hide the three start-work rows (a finished plan is not startable). */
     showStartWork?: boolean
+    /** Label for the Docs row — a draft picker shows "Preview plan file". */
+    docsLabel?: string
   },
 ): void {
   const showApprove = opts.showApprove ?? true
   const showStartWork = opts.showStartWork ?? true
+  const docsLabel = opts.docsLabel ?? "Docs"
   const options: TuiDialogSelectOption<ApprovalAction>[] = [
     {
       title: "Navigate to session",
@@ -470,7 +475,7 @@ export function openApprovalDialog(
         toast(api, opts.continueHint ?? "No session wrote this plan", "warning")
       },
     },
-    { title: "Docs", value: "docs", onSelect: opts.onDocs },
+    { title: docsLabel, value: "docs", onSelect: opts.onDocs },
   ]
   if (showApprove) {
     options.push({

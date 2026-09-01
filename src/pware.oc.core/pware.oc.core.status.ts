@@ -16,8 +16,18 @@ import {
   type CanonicalStatus,
   type ToolStatus,
 } from "./constants/pware.oc.core.constants.status.js"
+import { shortMiddle } from "./pware.oc.core.pulse.js"
 
 export type { CanonicalStatus, ToolStatus }
+
+/** The transient one-line status a tab shows while it waits for its data. */
+export type TabTone = "loading" | "error" | "muted"
+
+/** Null when the tab's data is ready — the row does not exist then. */
+export type TabStatus = { label: string; tone: TabTone } | null
+
+/** The transient DB state right after a session is selected but its row is not visible yet. */
+export const TAB_STATUS_SESSION_NOT_IN_DB = "session not in db yet"
 
 export function normalizeStatus(raw: string | null | undefined): CanonicalStatus {
   const s = (raw || "").toLowerCase()
@@ -67,6 +77,45 @@ export function workStatusGlyph(status: string): string | null {
 
 export function sessionStatusLabel(status: string): string {
   return status
+}
+
+/**
+ * The one shared decision behind every tab's status row. Priority order:
+ * a session switch in flight, then the transient "row not visible yet" state,
+ * then any real DB error, then Perf's own states, then a cold (not yet loaded)
+ * tab. Null when the tab's data is ready.
+ */
+export function tabStatus(opts: {
+  tab: string
+  currentId: string | null
+  dbError: string | null
+  switching: string | null
+  perfError: string | null
+  perfTurns: number
+  cold: boolean
+}): TabStatus {
+  if (opts.switching && opts.currentId !== opts.switching && !opts.dbError) {
+    return { label: `switching · ${shortMiddle(opts.switching, 10)}`, tone: "loading" }
+  }
+  if (opts.dbError === TAB_STATUS_SESSION_NOT_IN_DB) {
+    return { label: "waiting for session", tone: "loading" }
+  }
+  if (opts.dbError) {
+    return { label: opts.dbError, tone: "error" }
+  }
+  if (opts.tab === "perf") {
+    if (opts.perfError) return { label: opts.perfError, tone: "error" }
+    if (opts.cold) return { label: "loading · stats", tone: "loading" }
+    if (opts.perfTurns === 0) return { label: "no turns yet", tone: "muted" }
+    return null
+  }
+  if (opts.cold) {
+    return {
+      label: opts.tab === "mywork" ? "loading · my work" : "loading · sessions",
+      tone: "loading",
+    }
+  }
+  return null
 }
 
 /** Queued / waiting work — boulder writes no `status` while a task waits for a slot. */

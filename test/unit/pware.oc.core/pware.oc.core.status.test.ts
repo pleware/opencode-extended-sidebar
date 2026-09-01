@@ -4,11 +4,13 @@ import {
   isRunningLifecycle,
   normalizeStatus,
   sessionStatusLabel,
+  tabStatus,
   taskRank,
   toToolStatus,
   toWorkLabel,
   workIsTerminal,
   workStatusGlyph,
+  TAB_STATUS_SESSION_NOT_IN_DB,
 } from "../../../src/pware.oc.core/pware.oc.core.status.js"
 import type { CanonicalStatus } from "../../../src/pware.oc.core/pware.oc.core.status.js"
 
@@ -108,5 +110,75 @@ describe("sessionStatusLabel", () => {
   test("an unrecognised status stays raw", () => {
     expect(sessionStatusLabel("weird")).toBe("weird")
     expect(sessionStatusLabel("")).toBe("")
+  })
+})
+
+describe("tabStatus", () => {
+  const ready = {
+    tab: "mywork",
+    currentId: "sess-current",
+    dbError: null,
+    switching: null,
+    perfError: null,
+    perfTurns: 0,
+    cold: false,
+  }
+
+  test("null when the tab data is ready", () => {
+    expect(tabStatus(ready)).toBeNull()
+  })
+
+  test("switching wins while the target snapshot has not landed", () => {
+    expect(tabStatus({ ...ready, switching: "sess-target" })).toEqual({
+      label: expect.stringMatching(/^switching · /),
+      tone: "loading",
+    })
+    expect(
+      tabStatus({ ...ready, switching: "sess-target", currentId: "sess-target" }),
+    ).toBeNull()
+  })
+
+  test("a fresh session row not visible yet reads as waiting", () => {
+    expect(
+      tabStatus({ ...ready, dbError: TAB_STATUS_SESSION_NOT_IN_DB }),
+    ).toEqual({ label: "waiting for session", tone: "loading" })
+  })
+
+  test("a real db error surfaces as error tone", () => {
+    expect(tabStatus({ ...ready, dbError: "db missing" })).toEqual({
+      label: "db missing",
+      tone: "error",
+    })
+  })
+
+  test("cold tab shows its own loading label, my work and sessions differ", () => {
+    expect(tabStatus({ ...ready, cold: true })).toEqual({
+      label: "loading · my work",
+      tone: "loading",
+    })
+    expect(tabStatus({ ...ready, tab: "sessions", cold: true })).toEqual({
+      label: "loading · sessions",
+      tone: "loading",
+    })
+  })
+
+  test("perf: error, then cold, then no-turns, then ready", () => {
+    const perf = { ...ready, tab: "perf" }
+    expect(tabStatus({ ...perf, perfError: "db missing" })).toEqual({
+      label: "db missing",
+      tone: "error",
+    })
+    expect(tabStatus({ ...perf, cold: true })).toEqual({
+      label: "loading · stats",
+      tone: "loading",
+    })
+    expect(tabStatus(perf)).toEqual({ label: "no turns yet", tone: "muted" })
+    expect(tabStatus({ ...perf, perfTurns: 3 })).toBeNull()
+  })
+
+  test("db errors outrank the perf states", () => {
+    expect(
+      tabStatus({ ...ready, tab: "perf", dbError: TAB_STATUS_SESSION_NOT_IN_DB }),
+    ).toEqual({ label: "waiting for session", tone: "loading" })
   })
 })

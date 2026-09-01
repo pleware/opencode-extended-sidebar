@@ -20,9 +20,14 @@ import {
   kvWrite,
   type ThemeColors,
 } from "./pware.oc.ui.chrome.js"
-import { flowBlinkOn, rowGlyphs } from "./pware.oc.ui.glyphs.js"
+import {
+  flowBlinkOn,
+  rowGlyphs,
+  spinnerFrame,
+} from "./pware.oc.ui.glyphs.js"
 import { profile } from "../pware.oc.core/pware.oc.core.debug.js"
 import { moreRevealVisible, sliceShown } from "../pware.oc.core/pware.oc.core.layout.js"
+import type { TabStatus } from "../pware.oc.core/pware.oc.core.status.js"
 import {
   flowColor,
   formatTokens,
@@ -78,6 +83,32 @@ export type RevealState = { more: Accessor<number>; reveal: () => void }
 export function useReveal(step: number): RevealState {
   const [more, setMore] = createSignal(0)
   return { more, reveal: () => setMore((n) => n + step) }
+}
+
+/**
+ * The one place a tab's transient status line is drawn. `null` status renders
+ * nothing, so a ready tab costs zero rows. Loading reads `glyphFrame` only in
+ * this leaf — the spinner steps on the fast tick without rebuilding the panel.
+ */
+export function TabStatusRow(props: {
+  status: TabStatus
+  colors: ThemeColors
+  glyphFrame: () => number
+}): JSX.Element | null {
+  if (!props.status) return null
+  if (props.status.tone === "error") {
+    return (
+      <text fg={props.colors.error || props.colors.text}>{`× ${props.status.label}`}</text>
+    )
+  }
+  if (props.status.tone === "muted") {
+    return <text fg={props.colors.textMuted}>{`• ${props.status.label}`}</text>
+  }
+  return (
+    <text fg={props.colors.primary || props.colors.text}>
+      {`${spinnerFrame(props.glyphFrame())} ${props.status.label}`}
+    </text>
+  )
 }
 
 /** Clickable truncation line: "… +N more", or "… less" in expand-all (toggle) mode. */
