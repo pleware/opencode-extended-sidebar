@@ -3,6 +3,7 @@ import {
   isPendingWork,
   isRunningLifecycle,
   normalizeStatus,
+  sessionStatusLabel,
   taskRank,
   toToolStatus,
   toWorkLabel,
@@ -76,5 +77,19 @@ describe("mappers", () => {
     expect(taskRank("queued")).toBeLessThan(taskRank("failed"))
     expect(taskRank("cancelled")).toBe(2)
     expect(taskRank("done")).toBe(3)
+  })
+})
+
+describe("sessionStatusLabel", () => {
+  test("agent statuses pass through as their own display label", () => {
+    expect(sessionStatusLabel("running")).toBe("running")
+    expect(sessionStatusLabel("idle")).toBe("idle")
+    expect(sessionStatusLabel("archived")).toBe("archived")
+    expect(sessionStatusLabel("unknown")).toBe("unknown")
+  })
+
+  test("an unrecognised status stays raw", () => {
+    expect(sessionStatusLabel("weird")).toBe("weird")
+    expect(sessionStatusLabel("")).toBe("")
   })
 })

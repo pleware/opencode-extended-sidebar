@@ -48,6 +48,10 @@ export function toWorkLabel(raw: string | null | undefined): string {
   return c
 }
 
+export function sessionStatusLabel(status: string): string {
+  return status
+}
+
 /** Queued / waiting work — boulder writes no `status` while a task waits for a slot. */
 export function isPendingWork(status: string | null | undefined): boolean {
   return normalizeStatus(status) === STATUS_PENDING

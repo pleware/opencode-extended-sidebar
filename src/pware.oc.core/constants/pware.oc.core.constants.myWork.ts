@@ -19,6 +19,9 @@ export const MY_WORK_GROUP_READY_START = "ready-to-start"
 /** My work group: done — a follow-up only if something remains. */
 export const MY_WORK_GROUP_FINISHED = "finished"
 
+/** My work group: sessions still running or idle — jump straight back into them. */
+export const MY_WORK_GROUP_RUNNING = "running"
+
 /** Every "My work" approval group. */
 export const MY_WORK_GROUPS = [
   MY_WORK_GROUP_READY_REVIEW,

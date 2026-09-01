@@ -6,13 +6,17 @@
  * awaiting approval (optional, only when `.omo/` is present).
  */
 import type { OpenQuestion } from "../pware.oc.opencode/resolver/pware.oc.opencode.resolver.question.js"
-import type { SessionActivityState } from "../pware.oc.opencode/resolver/pware.oc.opencode.resolver.session.js"
+import type {
+  AgentStatus,
+  SessionActivityState,
+} from "../pware.oc.opencode/resolver/pware.oc.opencode.resolver.session.js"
 import type { ApprovalItem, ReviewState } from "../pware.oc.omo/resolver/pware.oc.omo.resolver.plan.js"
 import {
   MY_WORK_GROUP_DRAFTING,
   MY_WORK_GROUP_FINISHED,
   MY_WORK_GROUP_READY_REVIEW,
   MY_WORK_GROUP_READY_START,
+  MY_WORK_GROUP_RUNNING,
   type ApprovalGroupKind,
 } from "../pware.oc.core/constants/pware.oc.core.constants.myWork.js"
 import { approvalGroup, isDraftOf } from "../pware.oc.omo/resolver/pware.oc.omo.resolver.approvalGroup.js"
@@ -49,6 +53,13 @@ export type MyWorkItem =
       sessionState: SessionActivityState | null
       review: ReviewState | null
     }
+  | {
+      kind: typeof MY_WORK_GROUP_RUNNING
+      sessionId: string
+      title: string
+      status: AgentStatus
+      timeUpdated: number | null
+    }
 
 export type MyWorkKind = MyWorkItem["kind"]
 
@@ -56,6 +67,7 @@ export const MY_WORK_ORDER: readonly MyWorkKind[] = [
   QUESTION_KIND_QUESTION,
   QUESTION_KIND_INTERRUPTED,
   QUESTION_KIND_ERROR,
+  MY_WORK_GROUP_RUNNING,
   MY_WORK_GROUP_READY_REVIEW,
   MY_WORK_GROUP_READY_START,
   MY_WORK_GROUP_FINISHED,
@@ -66,6 +78,7 @@ const MY_WORK_LABELS: Record<MyWorkKind, string> = {
   [QUESTION_KIND_QUESTION]: "Awaiting answer",
   [QUESTION_KIND_INTERRUPTED]: "Interrupted",
   [QUESTION_KIND_ERROR]: "Errors",
+  [MY_WORK_GROUP_RUNNING]: "Running",
   [MY_WORK_GROUP_READY_REVIEW]: "Ready to review",
   [MY_WORK_GROUP_READY_START]: "Ready to start",
   [MY_WORK_GROUP_FINISHED]: "Finished",
@@ -137,4 +150,24 @@ export function toApprovalItems(approvals: readonly ApprovalItem[]): MyWorkItem[
     })
   }
   return out
+}
+
+/** Build the running group from recent main sessions — keeps running + idle, drops the rest. */
+export function toRunningItems(
+  sessions: readonly {
+    id: string
+    title: string
+    status: AgentStatus
+    timeUpdated: number | null
+  }[],
+): MyWorkItem[] {
+  return sessions
+    .filter((s) => s.status === "running" || s.status === "idle")
+    .map((s) => ({
+      kind: MY_WORK_GROUP_RUNNING,
+      sessionId: s.id,
+      title: s.title,
+      status: s.status,
+      timeUpdated: s.timeUpdated,
+    }))
 }

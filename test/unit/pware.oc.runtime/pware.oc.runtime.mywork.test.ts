@@ -7,6 +7,7 @@ import {
   startWorkCommand,
   toApprovalItems,
   toQuestionItems,
+  toRunningItems,
   type MyWorkItem,
 } from "../../../src/pware.oc.runtime/pware.oc.runtime.mywork.js"
 
@@ -29,10 +30,11 @@ const approval: MyWorkItem = {
 }
 
 describe("myWorkLabel", () => {
-  test("labels map to the seven actionable groups", () => {
+  test("labels map to the eight actionable groups", () => {
     expect(myWorkLabel("question")).toBe("Awaiting answer")
     expect(myWorkLabel("interrupted")).toBe("Interrupted")
     expect(myWorkLabel("error")).toBe("Errors")
+    expect(myWorkLabel("running")).toBe("Running")
     expect(myWorkLabel("ready-to-review")).toBe("Ready to review")
     expect(myWorkLabel("ready-to-start")).toBe("Ready to start")
     expect(myWorkLabel("finished")).toBe("Finished")
@@ -51,6 +53,27 @@ describe("toQuestionItems", () => {
       { kind: "question", sessionId: "ses_1", title: "Plan approval?", startedAt: 1_000, reason: null },
       { kind: "interrupted", sessionId: "ses_2", title: "Which lib?", startedAt: null, reason: "Tool execution aborted" },
       { kind: "error", sessionId: "ses_3", title: "Bad question", startedAt: 2_000, reason: "boom" },
+    ])
+  })
+})
+
+describe("toRunningItems", () => {
+  test("keeps running + idle sessions and drops archived/unknown", () => {
+    const items = toRunningItems([
+      { id: "s1", title: "Live", status: "running", timeUpdated: 1_000 },
+      { id: "s2", title: "Quiet", status: "idle", timeUpdated: null },
+      { id: "s3", title: "Done", status: "archived", timeUpdated: 2_000 },
+      { id: "s4", title: "Mystery", status: "unknown", timeUpdated: null },
+    ])
+    expect(items.map((i) => ("sessionId" in i ? i.sessionId : null))).toEqual(["s1", "s2"])
+  })
+
+  test("maps to the running variant carrying session id, title, status and timeUpdated", () => {
+    const items = toRunningItems([
+      { id: "s1", title: "Plan it", status: "running", timeUpdated: 5_000 },
+    ])
+    expect(items).toEqual([
+      { kind: "running", sessionId: "s1", title: "Plan it", status: "running", timeUpdated: 5_000 },
     ])
   })
 })
@@ -134,15 +157,33 @@ describe("toApprovalItems", () => {
 })
 
 describe("groupMyWork", () => {
-  test("orders question kinds then ready-to-review, ready-to-start, finished, drafting and drops empty kinds", () => {
+  test("orders question kinds, running, then approvals and drops empty kinds", () => {
     const interrupted: MyWorkItem = { ...question, kind: "interrupted", reason: "aborted" }
     const errored: MyWorkItem = { ...question, kind: "error", reason: "boom" }
+    const running: MyWorkItem = {
+      kind: "running",
+      sessionId: "ses_9",
+      title: "Active",
+      status: "running",
+      timeUpdated: 3_000,
+    }
     const readyStart: MyWorkItem = { ...approval, kind: "ready-to-start" }
     const finished: MyWorkItem = { ...approval, kind: "finished" }
     const drafting: MyWorkItem = { ...approval, kind: "drafting" }
     expect(
-      groupMyWork([finished, approval, readyStart, drafting, question, interrupted, errored]).map((g) => g.kind),
-    ).toEqual(["question", "interrupted", "error", "ready-to-review", "ready-to-start", "finished", "drafting"])
+      groupMyWork([finished, approval, readyStart, drafting, question, interrupted, errored, running]).map(
+        (g) => g.kind,
+      ),
+    ).toEqual([
+      "question",
+      "interrupted",
+      "error",
+      "running",
+      "ready-to-review",
+      "ready-to-start",
+      "finished",
+      "drafting",
+    ])
     expect(groupMyWork([question]).map((g) => g.kind)).toEqual(["question"])
     expect(groupMyWork([])).toEqual([])
   })
@@ -152,6 +193,7 @@ describe("groupMyWork", () => {
       "question",
       "interrupted",
       "error",
+      "running",
       "ready-to-review",
       "ready-to-start",
       "finished",
