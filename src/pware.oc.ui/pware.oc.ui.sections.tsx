@@ -189,6 +189,8 @@ export type RowData = {
   flow?: FlowDir | null
   /** Reserve the direction column so busy and idle rows align. */
   dirSlot?: boolean
+  /** Indent one glyph column — a nested child under a group header. */
+  indent?: boolean
   /** Queued work — rendered in warning colour with a clock glyph, not the idle dot. */
   waiting?: boolean
   onSelect?: () => void
@@ -284,6 +286,9 @@ export function AgentLine(props: RowData & {
   }
   return profile("row", () => (
     <box flexDirection="row" onMouseUp={props.onSelect}>
+      <Show when={props.indent}>
+        <text>{`  `}</text>
+      </Show>
       <text fg={stateFg()}>{`${props.glyph ?? glyphs().state} `}</text>
       <Show when={props.dirSlot}>
         <text fg={dirFg()}>{`${glyphs().dir ?? " "} `}</text>

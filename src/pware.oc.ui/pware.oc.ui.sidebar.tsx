@@ -915,6 +915,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
         current: Boolean(d.sessionId && d.sessionId === props.sessionId),
         flow: dir,
         dirSlot: true,
+        indent: item.grouped,
         onSelect: () => goSession(d.sessionId),
       })
     }
