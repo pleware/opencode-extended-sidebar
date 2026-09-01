@@ -23,10 +23,6 @@ import type { WorkView } from "../pware.oc.omo/resolver/pware.oc.omo.resolver.bo
 import { workStatusLabel } from "../pware.oc.omo/resolver/index.js"
 import type { StartWorkMode } from "../pware.oc.runtime/pware.oc.runtime.mywork.js"
 import { startWorkCommand } from "../pware.oc.runtime/pware.oc.runtime.mywork.js"
-import {
-  FILE_TOUCH_READ,
-  FILE_TOUCH_WRITE,
-} from "../pware.oc.opencode/constants/pware.oc.opencode.constants.fileTouch.js"
 import { TOOL_STATUS_RUNNING } from "../pware.oc.core/constants/pware.oc.core.constants.status.js"
 import {
   START_WORK_MAKE_PR,
@@ -302,6 +298,13 @@ export function openTextPreview(
   ))
 }
 
+/**
+ * A touched file's actions as a native host DialogSelect: Preview opens the
+ * file when the type can be rendered (markdown straight to a preview, other
+ * previewable types through `canPreviewPath`), Copy relative path copies the
+ * project-relative path. The row's letter + diff stats stay in the picker
+ * title; disabled options carry the reason as their description.
+ */
 export function openFileDetail(
   api: TuiPluginApi,
   file: FileView,
@@ -322,46 +325,27 @@ export function openFileDetail(
   const letter = file.letter ? `[${file.letter}]` : ""
   const diff = formatDiffStat(file.additions, file.deletions)
   const header = diff ? `${file.name} ${letter}  ${diff}`.trim() : `${file.name} ${letter}`.trim()
-  const touch = file.touch === FILE_TOUCH_READ ? FILE_TOUCH_READ : FILE_TOUCH_WRITE
 
-  openDialog(api, "large", () => (
-    <DialogPad>
-      <text fg={colors.text} attributes={textAttrs(true)}>
-        {header}
-      </text>
-      {divider(colors)}
-      <DetailLine text={rel ?? file.name} colors={colors} />
-      <DetailLine
-        text={`Touch: ${touch}${file.letter ? ` · Letter: ${file.letter}` : ""}`}
-        colors={colors}
-        muted
-      />
-      <Show when={file.additions > 0 || file.deletions > 0}>
-        <DetailLine
-          text={`Diff: ${diff} (session metadata, not patch body)`}
-          colors={colors}
-          muted
-        />
-      </Show>
-      <box flexDirection="column" gap={0} paddingTop={1}>
-        <ActionRow
-          label="Copy relative path"
-          colors={colors}
-          disabled={!rel}
-          onPick={() => copyRelativePath(api, rel)}
-        />
-        <ActionRow
-          label="Preview"
-          colors={colors}
-          disabled={!canPreview}
-          onPick={() => {
-            if (abs) openTextPreview(api, colors, file.name, rel, abs)
-          }}
-        />
-        <ActionRow label="Close" colors={colors} onPick={() => closeDialog(api)} />
-      </box>
-    </DialogPad>
-  ))
+  type FileAction = "preview" | "copy"
+  const options: TuiDialogSelectOption<FileAction>[] = [
+    {
+      title: "Preview",
+      value: "preview",
+      disabled: !canPreview,
+      description: canPreview ? (rel ?? undefined) : (abs ? "Cannot preview this file type" : "File not found on disk"),
+      onSelect: () => {
+        if (abs) openTextPreview(api, colors, file.name, rel, abs)
+      },
+    },
+    {
+      title: "Copy relative path",
+      value: "copy",
+      disabled: !rel,
+      description: rel ?? "File not found on disk",
+      onSelect: () => copyRelativePath(api, rel),
+    },
+  ]
+  openDialog(api, "medium", () => <api.ui.DialogSelect title={header} options={options} />)
 }
 
 export function openToolDetail(api: TuiPluginApi, tool: ToolView, colors: ThemeColors): void {
@@ -466,13 +450,12 @@ export function openApprovalDialog(
       title: "Navigate to session",
       value: "continue",
       description: opts.sessionId ? undefined : (opts.continueHint ?? "Navigate to session unavailable"),
+      disabled: !opts.sessionId,
       onSelect: () => {
         if (opts.sessionId) {
           closeDialog(api)
           opts.onContinue(opts.sessionId)
-          return
         }
-        toast(api, opts.continueHint ?? "No session wrote this plan", "warning")
       },
     },
     { title: docsLabel, value: "docs", onSelect: opts.onDocs },
@@ -483,14 +466,13 @@ export function openApprovalDialog(
       value: "approve",
       category: "Plan options",
       description: opts.sessionId ? undefined : (opts.continueHint ?? "Approve unavailable"),
+      disabled: !opts.sessionId,
       onSelect: () => {
         if (opts.sessionId) {
           closeDialog(api)
           opts.onApprove(opts.sessionId)
           toast(api, "Approved — ok sent", "success")
-          return
         }
-        toast(api, opts.continueHint ?? "No session wrote this plan", "warning")
       },
     })
   }

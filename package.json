@@ -1,6 +1,6 @@
 {
   "name": "opencode-extended-sidebar",
-  "version": "0.2.43",
+  "version": "0.2.44",
   "description": "OpenCode TUI sidebar: session switcher, live tools/files, click-for-detail dialogs with scrollable file preview, perf timing logs and a chart dialog with trend lines, histograms and gauges, debug/profile mode banners with a resolved log-path hint, a live self-cost status line (event/scan latency + renderer FPS), height-aware row trimming, an action-based My work queue (open questions + plan approvals grouped by ready-to-review / ready-to-start / finished / drafting, planner-session state as a row suffix), per-tab transient status rows (session-switch spinner, cold-tab loading, error and empty notes) and an optional OMO group with works, boulder and a document index (read-only)",
   "type": "module",
   "license": "MIT",

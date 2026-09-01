@@ -38,7 +38,7 @@ OpenCode gives you one conversation at a time. Real work looks different: an orc
 
 ## ± File changes with diff stats
 
-> Files this session touched, with `+N −M` and git letters (`M` `A` `D` `R` `C` `U` `T` `?`). **V** means viewed — a session read with no git status. Click Markdown for a scrollable preview; other files open a detail sheet. **Project** merges the same list across the sessions above.
+> Files this session touched, with `+N −M` and git letters (`M` `A` `D` `R` `C` `U` `T` `?`). **V** means viewed — a session read with no git status. Click Markdown for a scrollable preview; other files open a native picker — **Preview** or **Copy relative path**. **Project** merges the same list across the sessions above.
 >
 > Scratch dirs (`tmp/`, `.tmp/`, `.omo/`) and boilerplate filenames are hidden via the plugin's default `.oesignore`. The project's own `.oesignore` (gitignore format) is honoured automatically when present; set `skipGitignore` to also honour the project's `.gitignore`.
 
