@@ -1,6 +1,7 @@
 import { afterAll, describe, expect, test } from "bun:test"
 import {
   inferStatus,
+  refreshSessionStatus,
   sessionActivityState,
   toSessionView,
   type SessionRow,
@@ -34,6 +35,19 @@ describe("inferStatus", () => {
     expect(inferStatus(row({ time_archived: 9_000 }), now)).toBe("archived")
     expect(inferStatus(row({ time_updated: now - 1_000 }), now)).toBe("running")
     expect(inferStatus(row({ time_updated: now - 5 * 60_000 }), now)).toBe("idle")
+  })
+})
+
+describe("refreshSessionStatus", () => {
+  test("keeps archived, recomputes running/idle/unknown from the fresh clock", () => {
+    const now = 10_000
+    expect(refreshSessionStatus(toSessionView(row({ time_archived: 9_000 })), now)).toBe("archived")
+    expect(
+      refreshSessionStatus(toSessionView(row({ time_updated: now - 1_000 })), now),
+    ).toBe("running")
+    expect(
+      refreshSessionStatus(toSessionView(row({ time_updated: now - 5 * 60_000 })), now),
+    ).toBe("idle")
   })
 })
 

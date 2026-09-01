@@ -218,7 +218,9 @@ export function AgentLine(props: RowData & {
   const stateFg = () =>
     markColor(props.mark, props.colors, props.current, null, props.waiting)
   const dirFg = () =>
-    props.flow ? flowColor(props.flow, props.colors) : props.colors.textMuted
+    props.flow && flowBlinkOn(props.frame?.() ?? 0)
+      ? flowColor(props.flow, props.colors)
+      : props.colors.textMuted
   const glyphFg = () =>
     lit()
       ? markColor(props.mark, props.colors, props.current, props.flow, props.waiting)

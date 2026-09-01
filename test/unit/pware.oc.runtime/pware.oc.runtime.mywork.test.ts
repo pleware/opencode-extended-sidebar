@@ -58,14 +58,14 @@ describe("toQuestionItems", () => {
 })
 
 describe("toRunningItems", () => {
-  test("keeps running + idle sessions and drops archived/unknown", () => {
+  test("keeps only running sessions and drops idle/archived/unknown", () => {
     const items = toRunningItems([
       { id: "s1", title: "Live", status: "running", timeUpdated: 1_000 },
       { id: "s2", title: "Quiet", status: "idle", timeUpdated: null },
       { id: "s3", title: "Done", status: "archived", timeUpdated: 2_000 },
       { id: "s4", title: "Mystery", status: "unknown", timeUpdated: null },
     ])
-    expect(items.map((i) => ("sessionId" in i ? i.sessionId : null))).toEqual(["s1", "s2"])
+    expect(items.map((i) => ("sessionId" in i ? i.sessionId : null))).toEqual(["s1"])
   })
 
   test("maps to the running variant carrying session id, title, status and timeUpdated", () => {

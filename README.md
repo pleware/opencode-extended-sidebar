@@ -30,7 +30,7 @@ OpenCode gives you one conversation at a time. Real work looks different: an orc
 
 ## ⊚ Live activity pulse
 
-> Two glyphs per live row: a **state** glyph first — the braille spinner while working, `•` idle, `◷` queued, `×` failed — then a **direction** flow while one is active: a braille wave growing rightward while a tool call is in flight and leftward while tokens stream in (`. .. ...` from the middle row), a single dot rising while waiting on the model — coloured by what is happening: green receiving tokens, yellow waiting on the model, accent a tool in flight. Idle rows keep the slot blank so the list stays aligned. Colours come from your OpenCode theme.
+> Two glyphs per live row: a **state** glyph first — the braille spinner while working, `•` idle, `⧗` queued, `×` failed — then a **direction** glyph while one is active: **→** while a tool call is in flight, **←** while tokens stream in, **◷** while waiting on the model — blinking about twice a second and coloured by what is happening: green receiving tokens, yellow waiting on the model, accent a tool in flight. Idle rows keep the slot blank so the list stays aligned. Colours come from your OpenCode theme.
 
 ## ≡ Tool Calls feed that names things
 
@@ -96,14 +96,14 @@ The glyph says *what* is happening; the colour says *how fresh* it is. Both come
 | Glyph                           | Meaning                                                       |
 | ------------------------------- | ------------------------------------------------------------- |
 | `⠋ ⠙ ⠹ ⠸ ⠼ …`                   | working — the same braille spinner OpenCode uses for thinking |
-| `⠂⠒⠲`                        | right flow — a wave grows left to right (a tool call in flight) |
-| `⠐⠒⠙`                        | left flow — a wave grows right to left (tokens streaming in)    |
-| `⡀⠄⠂⠁`                        | up flow — a single dot rises (waiting on the model)               |
+| `◷`                             | waiting on the model (direction glyph — blinks)              |
+| `→`                             | tool in flight (direction glyph — blinks)                     |
+| `←`                             | tokens streaming in (direction glyph — blinks)                |
 | `•`                             | idle — finished or archived                                  |
-| `◷`                             | queued — waiting for a concurrency slot                       |
+| `⧗`                             | queued — waiting for a concurrency slot                       |
 | `▾`                             | group header (`▼` is the section fold)                       |
 | `×`                             | failed                                                        |
-| `✓` `◷` `║` `⊘` `○`             | Works: done / waiting / paused / abandoned / unknown        |
+| `✓` `⧗` `║` `⊘` `○`             | Works: done / waiting / paused / abandoned / unknown        |
 | `?` `◷` `×` `◔` `!` `…` `▶` `✓` | My work: awaiting an answer / interrupted / errors / running / ready to review / drafting / ready to start / finished |
 | `✓` `!` `?` `·`                 | Review lanes: approved / changes requested / inconclusive / waiting |
 | `M` `A` `D` `R` `C` `U` `T` `?` | Files: git status — same letters as `git status --short`      |
@@ -112,7 +112,7 @@ The glyph says *what* is happening; the colour says *how fresh* it is. Both come
 | `█░`                            | Perf: share of the wall clock                                  |
 | `▁▂▃▄▅▆▇█`                      | Perf: sparkline over recent turns                               |
 
-The direction flow and the working spinner animate on a separate fast glyph tick (80 ms) while rows and ages stay on the coarse 300 ms clock, and a direction expires on its own — it stops after ~2 s receiving tokens, ~15 s waiting on the model, ~30 s after a tool call — unless the session is still busy. The state glyph shows `×` on a failed row and `•` on a finished one; the direction slot shows the flow only while it is active, staying blank otherwise so every row aligns. A queued delegate shows `◷` in warning yellow — it is waiting for a slot, not done.
+The working spinner animates on a separate fast glyph tick (80 ms) while rows and ages stay on the coarse 300 ms clock, and a direction glyph blinks about twice a second, expiring on its own — it stops after ~2 s receiving tokens, ~15 s waiting on the model, ~30 s after a tool call — unless the session is still busy. The state glyph shows `×` on a failed row and `•` on a finished one; the direction slot shows the glyph only while it is active, staying blank otherwise so every row aligns. A queued delegate shows `⧗` in warning yellow — it is waiting for a slot, not done.
 
 **Colours**
 

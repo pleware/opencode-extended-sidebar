@@ -152,7 +152,7 @@ export function toApprovalItems(approvals: readonly ApprovalItem[]): MyWorkItem[
   return out
 }
 
-/** Build the running group from recent main sessions — keeps running + idle, drops the rest. */
+/** Build the running group from recent main sessions — only sessions still working, drops idle and the rest. */
 export function toRunningItems(
   sessions: readonly {
     id: string
@@ -162,7 +162,7 @@ export function toRunningItems(
   }[],
 ): MyWorkItem[] {
   return sessions
-    .filter((s) => s.status === "running" || s.status === "idle")
+    .filter((s) => s.status === "running")
     .map((s) => ({
       kind: MY_WORK_GROUP_RUNNING,
       sessionId: s.id,

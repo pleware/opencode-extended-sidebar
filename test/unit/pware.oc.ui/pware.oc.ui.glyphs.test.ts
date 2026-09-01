@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import {
-  dirFrame,
+  directionGlyph,
   fileLetterMark,
   flowBlinkOn,
   flowGlyph,
@@ -19,6 +19,14 @@ describe("flowGlyph", () => {
     expect(flowGlyph("wait")).toBe("↑")
     expect(flowGlyph("recv")).toBe("↓")
     expect(flowGlyph("tool")).toBe("→")
+  })
+})
+
+describe("directionGlyph", () => {
+  test("maps each flow to its direction glyph", () => {
+    expect(directionGlyph("wait")).toBe("◷")
+    expect(directionGlyph("recv")).toBe("←")
+    expect(directionGlyph("tool")).toBe("→")
   })
 })
 
@@ -45,8 +53,8 @@ describe("workStatusGlyph", () => {
     expect(workStatusGlyph("completed")).toBe("✓")
     expect(workStatusGlyph("failed")).toBe("×")
     expect(workStatusGlyph("in_progress")).toBeNull()
-    expect(workStatusGlyph("pending")).toBe("◷")
-    expect(workStatusGlyph("queued")).toBe("◷")
+    expect(workStatusGlyph("pending")).toBe("⧗")
+    expect(workStatusGlyph("queued")).toBe("⧗")
     expect(workStatusGlyph("paused")).toBe("║")
     expect(workStatusGlyph("abandoned")).toBe("⊘")
   })
@@ -64,8 +72,8 @@ describe("markGlyph", () => {
     expect(markGlyph("idle")).toBe("•")
   })
 
-  test("queued waits with the clock, not an idle dot", () => {
-    expect(markGlyph("queued")).toBe("◷")
+  test("queued waits with the hourglass, not an idle dot", () => {
+    expect(markGlyph("queued")).toBe("⧗")
   })
 
   test("live / stale spin the braille spinner", () => {
@@ -74,18 +82,7 @@ describe("markGlyph", () => {
   })
 })
 
-describe("dirFrame", () => {
-  test("each direction sweeps along its own axis and wraps negatives", () => {
-    expect(dirFrame("wait", 0)).toBe("⡀")
-    expect(dirFrame("wait", 1)).toBe("⠄")
-    expect(dirFrame("wait", 4)).toBe("⡀") // wraps the 4-frame set
-    expect(dirFrame("recv", 0)).toBe("⠐")
-    expect(dirFrame("recv", 1)).toBe("⠒")
-    expect(dirFrame("recv", 3)).toBe("⠐") // wraps the 3-frame wave
-    expect(dirFrame("tool", 0)).toBe("⠂")
-    expect(dirFrame("tool", -1)).toBe("⠲") // wraps negatives
-  })
-
+describe("FLOW_DIRECTION", () => {
   test("flow direction mapping: wait up, recv left, tool right", () => {
     expect(FLOW_DIRECTION.wait).toBe("up")
     expect(FLOW_DIRECTION.recv).toBe("left")
@@ -95,11 +92,11 @@ describe("dirFrame", () => {
 
 describe("rowGlyphs", () => {
   test("splits state and direction into two cells", () => {
-    expect(rowGlyphs("live", 0, "wait")).toEqual({ state: "⠋", dir: dirFrame("wait", 0) })
-    expect(rowGlyphs("live", 0, "recv")).toEqual({ state: "⠋", dir: dirFrame("recv", 0) })
-    expect(rowGlyphs("live", 0, "tool")).toEqual({ state: "⠋", dir: dirFrame("tool", 0) })
+    expect(rowGlyphs("live", 0, "wait")).toEqual({ state: "⠋", dir: "◷" })
+    expect(rowGlyphs("live", 0, "recv")).toEqual({ state: "⠋", dir: "←" })
+    expect(rowGlyphs("live", 0, "tool")).toEqual({ state: "⠋", dir: "→" })
     expect(rowGlyphs("ready", 0, null)).toEqual({ state: "•", dir: null })
-    expect(rowGlyphs("queued", 5, "wait")).toEqual({ state: "◷", dir: dirFrame("wait", 5) })
+    expect(rowGlyphs("queued", 5, "wait")).toEqual({ state: "⧗", dir: "◷" })
     expect(rowGlyphs("error", 0, undefined)).toEqual({ state: "×", dir: null })
   })
 })

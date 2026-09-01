@@ -54,39 +54,31 @@ export const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", 
 export const GROUP_GLYPH = "▾"
 /** Perf: a phase of the wall clock spent thinking. */
 export const THINK_GLYPH = "∴"
+/** Queued — waiting for a slot: the hourglass (the wait flow owns ◷). */
+export const QUEUED_GLYPH = "⧗"
 
 export function spinnerFrame(frame: number): string {
   const i = ((frame % SPINNER_FRAMES.length) + SPINNER_FRAMES.length) % SPINNER_FRAMES.length
   return SPINNER_FRAMES[i] ?? "⠋"
 }
 
-/** Compass direction a flow animation sweeps. */
+/** Compass direction a flow moves in. */
 export type FlowDirection = "up" | "down" | "left" | "right"
 
-/**
- * One direction flow per compass point — the raw braille frames move a single
- * dot up (`⡀⠄⠂⠁`) or down (`⠁⠂⠄⡀`), and grow a middle-row wave
- * right (`⠂⠒⠲`, dots appear left to right) or left (`⠐⠒⠙`); a new
- * direction is one new key.
- */
-export const DIR_FLOW_FRAMES: Record<FlowDirection, readonly string[]> = {
-  up: ["⡀", "⠄", "⠂", "⠁"],
-  down: ["⠁", "⠂", "⠄", "⡀"],
-  left: ["⠐", "⠒", "⠙"],
-  right: ["⠂", "⠒", "⠲"],
-}
-
-/** Flow → the direction its animation sweeps. */
+/** Flow → the direction its direction glyph points at. */
 export const FLOW_DIRECTION: Record<FlowDir, FlowDirection> = {
   [FLOW_WAIT]: "up",
   [FLOW_RECV]: "left",
   [FLOW_TOOL]: "right",
 }
 
-export function dirFrame(flow: FlowDir, frame: number): string {
-  const frames = DIR_FLOW_FRAMES[FLOW_DIRECTION[flow]]
-  const i = ((frame % frames.length) + frames.length) % frames.length
-  return frames[i] ?? "⠁"
+/** The direction glyph for a flow — ◷ waiting clock, ← left, → right, ↓ down. */
+export function directionGlyph(flow: FlowDir): string {
+  if (flow === FLOW_WAIT) return "◷"
+  const dir = FLOW_DIRECTION[flow]
+  if (dir === "down") return "↓"
+  if (dir === "left") return "←"
+  return "→"
 }
 
 /** ↑/↓ blink half-period in ticks (TICK_MS × BLINK_TICKS ≈ 600ms). */
@@ -103,15 +95,15 @@ export function flowGlyph(dir: FlowDir): string {
 export function markGlyph(mark: AgentMark, frame = 0): string {
   if (mark === STATUS_ERROR) return "×"
   if (mark === MARK_READY || mark === STATUS_ARCHIVED) return "•"
-  // Queued means waiting for a slot — the clock, not an idle dot.
-  if (mark === MARK_QUEUED) return "◷"
+  // Queued means waiting for a slot — the hourglass, not an idle dot.
+  if (mark === MARK_QUEUED) return QUEUED_GLYPH
   if (mark === PULSE_LIVE || mark === PULSE_STALE) return spinnerFrame(frame)
   return "•"
 }
 
 /**
  * The two glyphs of a live row split into two cells: the state glyph (spinner,
- * dot, clock, cross) and the direction flow when a flow is active. Splitting
+ * dot, clock, cross) and the direction arrow when a flow is active. Splitting
  * them lets every row reserve the direction column so busy and idle rows align.
  */
 export function rowGlyphs(
@@ -119,7 +111,7 @@ export function rowGlyphs(
   frame: number,
   flow?: FlowDir | null,
 ): { state: string; dir: string | null } {
-  return { state: markGlyph(mark, frame), dir: flow ? dirFrame(flow, frame) : null }
+  return { state: markGlyph(mark, frame), dir: flow ? directionGlyph(flow) : null }
 }
 
 export function workStatusGlyph(status: string): string | null {
@@ -127,8 +119,8 @@ export function workStatusGlyph(status: string): string | null {
   if (s === "done") return "✓"
   if (s === STATUS_ERROR) return "×"
   if (s === STATUS_RUNNING) return null
-  // A plain clock, not the emoji hourglass — one cell, monochrome.
-  if (s === STATUS_PENDING) return "◷"
+  // A single-cell geometric hourglass, not the emoji — one cell, monochrome.
+  if (s === STATUS_PENDING) return QUEUED_GLYPH
   if (s === STATUS_PAUSED) return "║"
   if (s === STATUS_ABANDONED) return "⊘"
   return "○"

@@ -93,6 +93,19 @@ export function toSessionView(row: SessionRow, now = Date.now()): SessionView {
   }
 }
 
+/**
+ * Recompute a `SessionView` status against a fresh clock. The live snapshot
+ * cache refreshes `ageMs` on every hit, so `status` (also age-derived) must be
+ * refreshed with it — otherwise a session that went idle keeps reading running.
+ */
+export function refreshSessionStatus(view: SessionView, now: number): AgentStatus {
+  if (view.status === SESSION_STATUS_ARCHIVED) return SESSION_STATUS_ARCHIVED
+  const age = now - view.timeUpdated
+  if (age < 0) return SESSION_STATUS_UNKNOWN
+  if (age <= RUNNING_MS) return SESSION_STATUS_RUNNING
+  return SESSION_STATUS_IDLE
+}
+
 export function getSessionById(db: SqlDb, id: string): SessionRow | null {
   return db.get<SessionRow>(
     `SELECT ${SESSION_SELECT} FROM session WHERE id = ? LIMIT 1`,

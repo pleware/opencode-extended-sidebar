@@ -12,6 +12,7 @@ import { openReadonlyDb, withDbRead, type SqlDb } from "../../pware.oc.core/pwar
 import {
   emptyDb,
   readDbSnapshot,
+  refreshSessionStatus,
   sessionScanStamp,
   type DbSnapshot,
   type SessionView,
@@ -149,7 +150,13 @@ export function resetRuntimeCache(): void {
 
 function withAges(db: DbSnapshot, now: number): DbSnapshot {
   const bump = (v: SessionView | null): SessionView | null =>
-    v ? { ...v, ageMs: Math.max(0, now - v.timeUpdated) } : null
+    v
+      ? {
+          ...v,
+          ageMs: Math.max(0, now - v.timeUpdated),
+          status: refreshSessionStatus(v, now),
+        }
+      : null
   const current = bump(db.current)
   const parent = bump(db.parent)
   const main = bump(db.main)
