@@ -131,8 +131,8 @@ function ModelRow(props: {
   model: ModelPerf
   colors: ThemeColors
   lineMax: number
-  /** Tick accessor — read only in the live glyph. */
-  frame: () => number
+  /** Fast glyph tick — read only in the live glyph. */
+  glyphFrame: () => number
   live: boolean
 }): JSX.Element {
   const m = () => props.model
@@ -160,7 +160,7 @@ function ModelRow(props: {
     <box flexDirection="column">
       <box flexDirection="row">
         <text fg={props.live ? props.colors.success : props.colors.textMuted}>
-          {`${props.live ? spinnerFrame(props.frame()) : "•"} `}
+          {`${props.live ? spinnerFrame(props.glyphFrame()) : "•"} `}
         </text>
         <text fg={props.colors.text}>{name()}</text>
       </box>
@@ -264,8 +264,8 @@ export type PerfPanelProps = {
   colors: ThemeColors
   lineMax: number
   rows: number
-  /** Tick accessor — read only in the live glyph, so the panel is not rebuilt per tick. */
-  frame: () => number
+  /** Fast glyph tick — read only in the live glyph, so the panel is not rebuilt per tick. */
+  glyphFrame: () => number
   /** Phase the watched session is in right now, plus how long it has lasted. */
   livePhase: FlowDir | null
   livePhaseMs: number | null
@@ -320,7 +320,7 @@ export function PerfPanel(props: PerfPanelProps): JSX.Element {
       <Show when={liveLabel()}>
         {(live) => (
           <box flexDirection="row">
-            <text fg={live().fg}>{`${spinnerFrame(props.frame())} ${live().label}`}</text>
+            <text fg={live().fg}>{`${spinnerFrame(props.glyphFrame())} ${live().label}`}</text>
             <text fg={props.colors.textMuted}>
               {live().ms != null ? ` ${formatDuration(live().ms)}` : ""}
             </text>
@@ -355,7 +355,7 @@ export function PerfPanel(props: PerfPanelProps): JSX.Element {
                   model={m}
                   colors={props.colors}
                   lineMax={props.lineMax}
-                  frame={props.frame}
+                  glyphFrame={props.glyphFrame}
                   live={Boolean(props.livePhase) && m === props.perf.models[0]}
                 />
               )}

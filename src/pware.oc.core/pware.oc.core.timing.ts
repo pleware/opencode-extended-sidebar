@@ -10,6 +10,13 @@
 export const TICK_MS = 300
 
 /**
+ * Fast glyph cadence — spinners and direction flows step this often on a
+ * separate signal (`glyphFrame`), so the animation is smooth while rows and
+ * ages still run on the coarse `TICK_MS` / `NOW_MS` clocks.
+ */
+export const GLYPH_TICK_MS = 80
+
+/**
  * Coarse `now` granularity — ages, marks and row arrays recompute at most this
  * often, while glyphs still animate at `TICK_MS`. Displayed ages use 1s
  * granularity anyway (`formatCoarseSec`).

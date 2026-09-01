@@ -1,5 +1,6 @@
 # Changelog
 
+- **0.2.31** (2026-09-01) Replace the left/right direction flows with single-dot waves growing from the middle row (⠂⠒⠲ right while a tool call is in flight, ⠐⠒⠙ left while tokens stream.
 - **0.2.30** (2026-09-01) Split every sidebar row into a state glyph plus a per-direction braille flow where a single dot sweeps right while a tool call is in flight, left while tokens s.
 - **0.2.29** (2026-09-01) Add a Running group to the My work queue that lists recent main sessions still running or idle with their live status label, built by a toRunningItems filter ov.
 - **0.2.28** (2026-09-01) Move the plan-to-writer-session index from the opencode resolver into the omo layer as a shared per-document-kind file engine (plan, draft, notepads, evidence, .

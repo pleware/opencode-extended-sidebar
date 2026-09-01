@@ -206,12 +206,15 @@ export function AgentLine(props: RowData & {
   lineMax: number
   /** Tick accessor — read only inside the glyph bindings so rows are not rebuilt per tick. */
   frame?: () => number
+  /** Fast glyph tick — spinners and direction flows step at `GLYPH_TICK_MS`. */
+  glyphFrame?: () => number
   colors: ThemeColors
 }): JSX.Element {
   const directional = () =>
     props.flow === FLOW_RECV || props.flow === FLOW_WAIT || props.flow === FLOW_TOOL
   const lit = () => !directional() || flowBlinkOn(props.frame?.() ?? 0)
-  const glyphs = () => rowGlyphs(props.mark, props.frame?.() ?? 0, props.flow)
+  const glyphs = () =>
+    rowGlyphs(props.mark, props.glyphFrame?.() ?? props.frame?.() ?? 0, props.flow)
   const stateFg = () =>
     markColor(props.mark, props.colors, props.current, null, props.waiting)
   const dirFg = () =>

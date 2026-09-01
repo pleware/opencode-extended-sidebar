@@ -75,13 +75,15 @@ describe("markGlyph", () => {
 })
 
 describe("dirFrame", () => {
-  test("each direction sweeps a single dot along its own axis and wraps negatives", () => {
+  test("each direction sweeps along its own axis and wraps negatives", () => {
     expect(dirFrame("wait", 0)).toBe("⡀")
     expect(dirFrame("wait", 1)).toBe("⠄")
     expect(dirFrame("wait", 4)).toBe("⡀") // wraps the 4-frame set
-    expect(dirFrame("recv", 0)).toBe("⠰")
-    expect(dirFrame("tool", 0)).toBe("⠄")
-    expect(dirFrame("tool", -1)).toBe("⠰") // wraps negatives
+    expect(dirFrame("recv", 0)).toBe("⠐")
+    expect(dirFrame("recv", 1)).toBe("⠒")
+    expect(dirFrame("recv", 3)).toBe("⠐") // wraps the 3-frame wave
+    expect(dirFrame("tool", 0)).toBe("⠂")
+    expect(dirFrame("tool", -1)).toBe("⠲") // wraps negatives
   })
 
   test("flow direction mapping: wait up, recv left, tool right", () => {

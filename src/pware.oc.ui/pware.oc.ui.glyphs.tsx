@@ -64,15 +64,16 @@ export function spinnerFrame(frame: number): string {
 export type FlowDirection = "up" | "down" | "left" | "right"
 
 /**
- * One single braille dot sweeping along an axis — one entry per direction, so a
- * new direction is one new key. The raw braille frames move the dot right
- * (`⠄⡀⢀⠰`), left (`⠰⢀⡀⠄`), up (`⡀⠄⠂⠁`) or down (`⠁⠂⠄⡀`).
+ * One direction flow per compass point — the raw braille frames move a single
+ * dot up (`⡀⠄⠂⠁`) or down (`⠁⠂⠄⡀`), and grow a middle-row wave
+ * right (`⠂⠒⠲`, dots appear left to right) or left (`⠐⠒⠙`); a new
+ * direction is one new key.
  */
 export const DIR_FLOW_FRAMES: Record<FlowDirection, readonly string[]> = {
   up: ["⡀", "⠄", "⠂", "⠁"],
   down: ["⠁", "⠂", "⠄", "⡀"],
-  left: ["⠰", "⢀", "⡀", "⠄"],
-  right: ["⠄", "⡀", "⢀", "⠰"],
+  left: ["⠐", "⠒", "⠙"],
+  right: ["⠂", "⠒", "⠲"],
 }
 
 /** Flow → the direction its animation sweeps. */

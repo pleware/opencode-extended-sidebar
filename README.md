@@ -30,7 +30,7 @@ OpenCode gives you one conversation at a time. Real work looks different: an orc
 
 ## ⊚ Live activity pulse
 
-> Two glyphs per live row: a **state** glyph first — the braille spinner while working, `•` idle, `◷` queued, `×` failed — then a **direction** flow while one is active: a single braille dot sweeping in the direction of the work — right while a tool call is in flight, left while tokens stream in, up while waiting on the model — coloured by what is happening: green receiving tokens, yellow waiting on the model, accent a tool in flight. Idle rows keep the slot blank so the list stays aligned. Colours come from your OpenCode theme.
+> Two glyphs per live row: a **state** glyph first — the braille spinner while working, `•` idle, `◷` queued, `×` failed — then a **direction** flow while one is active: a braille wave growing rightward while a tool call is in flight and leftward while tokens stream in (`. .. ...` from the middle row), a single dot rising while waiting on the model — coloured by what is happening: green receiving tokens, yellow waiting on the model, accent a tool in flight. Idle rows keep the slot blank so the list stays aligned. Colours come from your OpenCode theme.
 
 ## ≡ Tool Calls feed that names things
 
@@ -96,9 +96,9 @@ The glyph says *what* is happening; the colour says *how fresh* it is. Both come
 | Glyph                           | Meaning                                                       |
 | ------------------------------- | ------------------------------------------------------------- |
 | `⠋ ⠙ ⠹ ⠸ ⠼ …`                   | working — the same braille spinner OpenCode uses for thinking |
-| `⠄⡀⢀⠰`                        | right flow — the dot slides right (a tool call in flight)   |
-| `⠰⢀⡀⠄`                        | left flow — the dot slides left (tokens streaming in)       |
-| `⡀⠄⠂⠁`                        | up flow — the dot rises (waiting on the model)               |
+| `⠂⠒⠲`                        | right flow — a wave grows left to right (a tool call in flight) |
+| `⠐⠒⠙`                        | left flow — a wave grows right to left (tokens streaming in)    |
+| `⡀⠄⠂⠁`                        | up flow — a single dot rises (waiting on the model)               |
 | `•`                             | idle — finished or archived                                  |
 | `◷`                             | queued — waiting for a concurrency slot                       |
 | `▾`                             | group header (`▼` is the section fold)                       |
@@ -112,7 +112,7 @@ The glyph says *what* is happening; the colour says *how fresh* it is. Both come
 | `█░`                            | Perf: share of the wall clock                                  |
 | `▁▂▃▄▅▆▇█`                      | Perf: sparkline over recent turns                               |
 
-The direction flow animates on every tick while a direction is active and expires on its own — it stops after ~2 s receiving tokens, ~15 s waiting on the model, ~30 s after a tool call — unless the session is still busy. The state glyph shows `×` on a failed row and `•` on a finished one; the direction slot shows the flow only while it is active, staying blank otherwise so every row aligns. A queued delegate shows `◷` in warning yellow — it is waiting for a slot, not done.
+The direction flow and the working spinner animate on a separate fast glyph tick (80 ms) while rows and ages stay on the coarse 300 ms clock, and a direction expires on its own — it stops after ~2 s receiving tokens, ~15 s waiting on the model, ~30 s after a tool call — unless the session is still busy. The state glyph shows `×` on a failed row and `•` on a finished one; the direction slot shows the flow only while it is active, staying blank otherwise so every row aligns. A queued delegate shows `◷` in warning yellow — it is waiting for a slot, not done.
 
 **Colours**
 

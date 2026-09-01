@@ -140,6 +140,7 @@ import { getOpenCodeDbPath } from "../pware.oc.core/pware.oc.core.paths.js"
 import {
   EVENT_SCAN_DEBOUNCE_MS,
   FPS_READ_EVERY_TICKS,
+  GLYPH_TICK_MS,
   NOW_MS,
   TICK_MS,
 } from "../pware.oc.core/pware.oc.core.timing.js"
@@ -289,6 +290,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   const [snap, setSnap] = createSignal<RuntimeSnapshot>(emptyRuntime())
   const [now, setNow] = createSignal(Date.now())
   const [frame, setFrame] = createSignal(0)
+  const [glyphFrame, setGlyphFrame] = createSignal(0)
   const [seen, setSeen] = createSignal<Record<string, number>>({})
   const [busy, setBusy] = createSignal<Record<string, boolean>>({})
   const [flow, setFlow] = createSignal<Record<string, FlowEntry>>({})
@@ -503,6 +505,9 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     })
   }, TICK_MS)
 
+  /** Fast glyph heartbeat — spinners and direction flows step at `GLYPH_TICK_MS`. */
+  const glyphTick = setInterval(() => setGlyphFrame((n) => n + 1), GLYPH_TICK_MS)
+
   const offGit = onGitMarksChange(() => {
     profile("git", () => {
       setGitTick((n) => n + 1)
@@ -521,9 +526,17 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     })
   })
 
+  createEffect(() => {
+    profile("render", () => {
+      glyphFrame()
+      queueMicrotask(requestRender)
+    })
+  })
+
   onCleanup(() => {
     if (debounce) clearTimeout(debounce)
     clearInterval(tick)
+    clearInterval(glyphTick)
     monitor.stop()
     offGit()
     for (const off of offs) off()
@@ -1116,6 +1129,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
       {...row}
       lineMax={oes().lineMax}
       frame={frame}
+      glyphFrame={glyphFrame}
       colors={colors()}
     />
   )
@@ -1497,7 +1511,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
               colors={colors()}
               lineMax={oes().lineMax}
               rows={oes().perfRows}
-              frame={frame}
+              glyphFrame={glyphFrame}
               livePhase={selfFlow()}
               livePhaseMs={selfPhaseMs()}
               currentSessionId={props.sessionId}

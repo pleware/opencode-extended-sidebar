@@ -5,23 +5,27 @@ scan path — and why glyphs animate at full speed while rows and scans stay
 cheap. Line references point at `src/` as of the performance fix.
 
 All clock values live in one place: `src/pware.oc.core/pware.oc.core.timing.ts`
-(`TICK_MS`, `NOW_MS`, `FPS_READ_EVERY_TICKS`, `BLINK_TICKS`,
+(`TICK_MS`, `GLYPH_TICK_MS`, `NOW_MS`, `FPS_READ_EVERY_TICKS`, `BLINK_TICKS`,
 `MONITOR_POLL_MS`, `MONITOR_WATCH_DEBOUNCE_MS`, `EVENT_SCAN_DEBOUNCE_MS`).
 
-## 1. The three render triggers
+## 1. The four render triggers
 
-The panel has three independent clocks/sources. **All run on the same event
+The panel has four independent clocks/sources. **All run on the same event
 loop thread.**
 
 ```
 ┌────────────────────────────────────────────────────────────────┐
-│  SOURCE 1: TICK (animation clock)         sidebar.tsx           │
+│  SOURCE 1: TICK (row clock)                 sidebar.tsx          │
 │    setInterval(..., TICK_MS = 300ms)                            │
 │    → setNow()  (coarse — advances at most every NOW_MS = 1s)    │
-│    → setFrame() (advances every tick — spinner/blink phase)     │
+│    → setFrame() (advances every tick — glyph blink phase)       │
 │    → every FPS_READ_EVERY_TICKS (6) ticks: readRendererFps()    │
 ├────────────────────────────────────────────────────────────────┤
-│  SOURCE 2: MONITOR (DB poll)              monitor.ts             │
+│  SOURCE 2: GLYPH TICK (fast animation)      sidebar.tsx          │
+│    setInterval(..., GLYPH_TICK_MS = 80ms)                       │
+│    → setGlyphFrame() (advances every 80ms — spinner + flow)     │
+├────────────────────────────────────────────────────────────────┤
+│  SOURCE 3: MONITOR (DB poll)              monitor.ts             │
 │    setInterval(..., MONITOR_POLL_MS = 1500ms) → emit()          │
 │    + fs.watch(boulder.json, dataDir) → schedule()               │
 │    emit(): fingerprint-gated — readRuntimeSnapshot only when    │
@@ -29,17 +33,17 @@ loop thread.**
 │    gate so readRuntimeSnapshot always runs its (cheap) cache    │
 │    check                                                         │
 ├────────────────────────────────────────────────────────────────┤
-│  SOURCE 3: HOST EVENTS                   sidebar.tsx:onEvent    │
+│  SOURCE 4: HOST EVENTS                   sidebar.tsx:onEvent    │
 │    message.updated, session.status, tool.*, file.edited, ...    │
 │    → signal sets (busy/flow/tools/files) + requestRender        │
 │    → if shouldRefreshDb(type) → debounce EVENT_SCAN_DEBOUNCE_MS │
 │      (= 100ms, trailing) → refresh()                            │
 └────────────────────────────────────────────────────────────────┘
-         all three → synchronous Solid reactive cascade
-                                      ↓
-                         requestRender() (async)
-                                      ↓
-                         TUI renderer (measured fps)
+         all four → synchronous Solid reactive cascade
+                                       ↓
+                          requestRender() (async)
+                                       ↓
+                          TUI renderer (measured fps)
 ```
 
 ## 2. Anatomy of one tick (300ms)
@@ -53,8 +57,8 @@ setInterval(TICK_MS = 300)                       ── sidebar.tsx
 │  │    advances only when a full second passed;
 │  │    returning `prev` skips the Solid cascade entirely
 │  │
-│  └─ setFrame(n => n + 1)                       ── CASCADE B (frame consumers)
-│       re-renders ONLY the glyph text/colour leaves
+│  └─ setFrame(n => n + 1)                       ── CASCADE B (blink consumers)
+│       re-renders ONLY the glyph2 blink leaves
 │
 ├─ tickCount % FPS_READ_EVERY_TICKS === 0 ?     ── every 1800ms
 │  └─ readRendererFps(api.renderer)             ── perf.self.ts
@@ -63,11 +67,14 @@ setInterval(TICK_MS = 300)                       ── sidebar.tsx
 │     └─ setSelfFps(fps, frameMs)
 ```
 
+The spinners and direction flows no longer wait for this tick: a second,
+80ms clock drives them (section 4).
+
 **Why it is cheap:** Solid tracks signal reads per binding. `frame` is passed
 down as an *accessor* (`() => number`) and read **only inside the glyph
-bindings** of `AgentLine` (`sections.tsx`) — the spinner character and its
-colour. The row body (`name`/`tokens`/`suffix` formatting in `rest()`) never
-reads `frame`, so a tick re-renders just the glyph nodes, not the rows.
+bindings** of `AgentLine` (`sections.tsx`) — the glyph2 blink colour. The row
+body (`name`/`tokens`/`suffix` formatting in `rest()`) never reads `frame`, so
+a tick re-renders just the glyph nodes, not the rows.
 
 ## 3. CASCADE A — `now()` consumers (recompute at most 1×/s)
 
@@ -94,23 +101,38 @@ setNow(prev => (Date.now() - prev >= NOW_MS ? Date.now() : prev))
 Displayed ages and durations already round to whole seconds
 (`formatCoarseSec`), so 1s granularity is invisible to the user.
 
-## 4. CASCADE B — `frame()` consumers (animate every tick, rows untouched)
+## 4. CASCADE B — `frame()` consumers (blink only, rows untouched)
 
 ```
-setFrame(n + 1)
+setFrame(n + 1)                                  ── every 300ms
 │
 └─ Row helper (sidebar.tsx): frame={frame}       ← accessor, NOT frame()
 │
 └─ AgentLine (sections.tsx):
-    ├─ glyph text  → markGlyph(mark, frame(), flow)   ← braille spinner
-    └─ glyph colour→ glyphFg() → lit() → flowBlinkOn(frame())
+    └─ glyph2 colour → glyphFg() → lit() → flowBlinkOn(frame())
 ```
 
-`frame` is never read at row-construction scope (the `RowList`/`For`
-callbacks), so lists are **not** rebuilt per tick. `markGlyph` uses `frame`
-only for `live`/`stale` marks (spinner phase) and `flowBlinkOn` only for the
-arrow blink — both are glyph-level and cheap. The `PerfPanel` gets the same
-treatment: its live glyph reads `frame()` at the leaf, the panel body does not.
+## 4b. CASCADE C — `glyphFrame()` consumers (animate every 80ms, rows untouched)
+
+```
+setGlyphFrame(n + 1)                             ── every GLYPH_TICK_MS = 80ms
+│
+└─ Row helper (sidebar.tsx): glyphFrame={glyphFrame}   ← accessor
+│
+└─ AgentLine (sections.tsx):
+    ├─ glyphs() → rowGlyphs(mark, glyphFrame(), flow)
+    │    ├─ state glyph → spinnerFrame(glyphFrame())   ← braille spinner
+    │    └─ dir glyph  → dirFrame(flow, glyphFrame())  ← direction flow
+    └─ PerfPanel (perf.view.tsx): live spinner → spinnerFrame(glyphFrame())
+```
+
+`frame` and `glyphFrame` are never read at row-construction scope (the
+`RowList`/`For` callbacks), so lists are **not** rebuilt per glyph tick. The
+spinner (10 frames) and the direction flows (3-4 frames) step at 80ms —
+0.8s and ~0.24-0.32s per loop, close to the cli-spinners cadence — while the
+glyph2 blink stays at 600ms and row data still runs on the coarse clocks. The
+`PerfPanel` live glyph reads `glyphFrame()` at the leaf, the panel body does
+not.
 
 ## 5. Why the numbers were 3fps, and what changed
 
@@ -173,10 +195,13 @@ watch cover the rest.
 
 | Clock | Frequency | What updates | Cost |
 |---|---|---|---|
-| `frame` (spinner/blink) | every 300ms tick | glyph text + colour leaves only | ~10-30ms |
+| `glyphFrame` (spinner + direction flow) | every 80ms (`GLYPH_TICK_MS`) | glyph text leaves only | ~ms per frame |
+| `frame` (glyph2 blink) | every 300ms tick | glyph blink colour leaf | folded into the tick |
 | `now` (ages/marks) | 1×/s (`NOW_MS`) | row arrays, ages, marks | folded into the 1×/s tick |
 | scan (DB re-read) | on real change only | full snapshot | HIT ~5-20ms, MISS ~30-150ms+ |
 | fps read | every 6th tick | `self` line fps | negligible |
 
-The `self` line now shows the real cost: `0.2ms/ev · 1.2ms/sc · 59fps` instead
-of `0.2ms/ev · 353.4ms/sc · 285.3ms/tk · 3fps`.
+The `self` line shows the real cost: `0.2ms/ev · 1.2ms/sc · 59fps` instead
+of `0.2ms/ev · 353.4ms/sc · 285.3ms/tk · 3fps`. With the 80ms glyph tick the
+renderer now runs ~12 frames/s of glyph-only work, so the measured fps reads
+closer to that figure — each frame stays cheap because rows are untouched.
