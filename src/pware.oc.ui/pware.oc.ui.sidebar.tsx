@@ -205,7 +205,7 @@ type OmoTab = (typeof OMO_TABS)[number]
 
 const TAB_LABELS: Record<string, string> = {
   mywork: "My work",
-  sessions: "Details",
+  sessions: "Project",
   current: "Session",
   perf: "Stats",
   works: "Works",
@@ -1238,6 +1238,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
                     mark={mark}
                     name={s.title}
                     current={s.id === props.sessionId}
+                    suffix={s.id === props.sessionId ? "[C]" : undefined}
                     flow={dir}
                     dirSlot
                     onSelect={() => goSession(s.id)}
