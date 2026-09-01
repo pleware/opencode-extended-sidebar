@@ -6,9 +6,9 @@
 
 **Mission control for your OpenCode agents — right inside the TUI.**
 
-Switch sessions, watch tools run live, see which files changed, and where the time went. No browser, no dashboard, one tiny dependency.
+Switch sessions, watch tools run live, see which files changed, and where the time went. No browser, no dashboard, four tiny dependencies.
 
-![OpenCode plugin](https://img.shields.io/badge/OpenCode-TUI%20plugin-000?style=flat-square) ![Runtime deps](https://img.shields.io/badge/runtime%20deps-1-brightgreen?style=flat-square) ![Read only](https://img.shields.io/badge/database-read--only-blue?style=flat-square) ![License](https://img.shields.io/badge/license-MIT-lightgrey?style=flat-square)
+![OpenCode plugin](https://img.shields.io/badge/OpenCode-TUI%20plugin-000?style=flat-square) ![Runtime deps](https://img.shields.io/badge/runtime%20deps-4-brightgreen?style=flat-square) ![Read only](https://img.shields.io/badge/database-read--only-blue?style=flat-square) ![License](https://img.shields.io/badge/license-MIT-lightgrey?style=flat-square)
 
 ---
 
@@ -83,9 +83,9 @@ OpenCode gives you one conversation at a time. Real work looks different: an orc
 
 > The panel never shows prompts, tool arguments, outputs, patch bodies, or absolute paths. The database is opened read-only. What you see is names, counts, statuses and durations.
 
-## ∅ One dependency
+## ∅ Four dependencies
 
-> One runtime package — [`ignore`](https://www.npmjs.com/package/ignore), a gitignore parser with zero transitive dependencies. SQLite comes from `bun:sqlite` or `node:sqlite`; everything else is an OpenCode peer you already have.
+> Four runtime packages — [`ignore`](https://www.npmjs.com/package/ignore), [`asciichart`](https://www.npmjs.com/package/asciichart), [`simple-statistics`](https://www.npmjs.com/package/simple-statistics), [`@crafter/charts`](https://www.npmjs.com/package/@crafter/charts) — each with zero transitive dependencies. SQLite comes from `bun:sqlite` or `node:sqlite`; everything else is an OpenCode peer you already have.
 
 ## Legend
 
@@ -109,8 +109,8 @@ The glyph says *what* is happening; the colour says *how fresh* it is. Both come
 | `M` `A` `D` `R` `C` `U` `T` `?` | Files: git status — same letters as `git status --short`      |
 | `V`                             | Files: viewed (session read only)                             |
 | `∴`                             | Perf: thinking                                                 |
-| `█░`                            | Perf: share of the wall clock                                  |
-| `▁▂▃▄▅▆▇█`                      | Perf: sparkline over recent turns                               |
+| `█░`                            | Perf: share of the wall clock — `@crafter/charts` bar, filled `█` + partial blocks, space-empty |
+| `▁▂▃▄▅▆▇█`                      | Perf: trend line chart — `asciichart`, nulls interpolated |
 
 The working spinner animates on a separate fast glyph tick (80 ms) while rows and ages stay on the coarse 300 ms clock, and a direction glyph blinks about twice a second, expiring on its own — it stops after ~2 s receiving tokens, ~15 s waiting on the model, ~30 s after a tool call — unless the session is still busy. The state glyph shows `×` on a failed row and `•` on a finished one; the direction slot shows the glyph only while it is active, staying blank otherwise so every row aligns. A queued delegate shows `⧗` in warning yellow — it is waiting for a slot, not done.
 

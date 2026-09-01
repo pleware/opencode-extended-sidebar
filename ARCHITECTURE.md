@@ -3,7 +3,7 @@
 OpenCode Extended Sidebar is a read-only OpenCode TUI plugin. It renders a live
 mission-control panel in the sidebar from data OpenCode already stores: the
 `opencode.db` SQLite database, host events, the optional `.omo/` directory, and
-`oes.json` options. One runtime dependency (`ignore`); everything else is an
+`oes.json` options. Four runtime dependencies (`ignore`, `asciichart`, `simple-statistics`, `@crafter/charts`); everything else is an
 OpenCode / OpenTUI peer.
 
 This file is the canonical index of the project structure: what lives where,
@@ -103,6 +103,8 @@ src/
 │   ├── index.ts
 │   ├── pware.oc.perf.reader.ts
 │   ├── pware.oc.perf.self.ts
+│   ├── pware.oc.perf.charts.ts
+│   ├── pware.oc.perf.asciichart.d.ts
 │   └── pware.oc.perf.view.tsx
 └── pware.oc.ui/                           # TUI layer
     ├── index.ts
@@ -141,9 +143,8 @@ Rules:
   index reads the OpenCode DB); `opencode` stays blind to `.omo/`.
 - The panel renders; it does not re-decide. View rules (glyphs, labels, row
   budgets, folds) live in `core` or `ui` as exported helpers the JSX calls.
-- No `core` module imports a `pware.oc.ui.*` module. Formatter data such as
-  `SPARK_FRAMES` stays in `pulse.ts`; the glyphs module imports from core, not
-  the other way around.
+- No `core` module imports a `pware.oc.ui.*` module. Formatter data lives in
+  `core`; the glyphs module imports from core, not the other way around.
 
 ## What lives where
 
@@ -166,7 +167,7 @@ Plugin registration: `id = "opencode-extended-sidebar"`, load toast,
 | `oes.ts` | `oes.json` merge + clamp | `OesOptions`, `OES_DEFAULTS`, `pick()`, `getOes()`, `oesStamp()`, `resetOesCache()` |
 | `paths.ts` | OpenCode path resolution, path folding | `getOpenCodeDbPath()`, `pluginRoot()`, `resolveProjectFile()`, `basenameOf()`, `fileStamp()`, `dbStamp()`, `str()`, `finiteNum()` |
 | `preview.ts` | text/markdown preview limits | `previewViewportRows()`, `canPreviewPath()`, `isMarkdownPath()`, `readTextPreview()` |
-| `pulse.ts` | agent marks, flow, time/token formatting | `toEpochMs()`, `pulseAgeMs()`, `composeMark()`, `hottestMark()`, `activeFlow()`, `applyFlow()`, `flowFromEvent()`, `sessionBusyFromEvent()`, `sessionIdFromEvent()`, `shortToolLabel()`, `toolHitFromEvent()`, `formatAge()`, `formatDuration()`, `formatTokens()`, `formatUsd()`, `sparkline()`, `packChips()`, `SPARK_FRAMES` |
+| `pulse.ts` | agent marks, flow, time/token formatting | `toEpochMs()`, `pulseAgeMs()`, `composeMark()`, `hottestMark()`, `activeFlow()`, `applyFlow()`, `flowFromEvent()`, `sessionBusyFromEvent()`, `sessionIdFromEvent()`, `shortToolLabel()`, `toolHitFromEvent()`, `formatAge()`, `formatDuration()`, `formatTokens()`, `formatUsd()`, `packChips()` |
 | `sqlite.ts` | readonly `bun:sqlite` / `node:sqlite` handle | `openReadonlyDb()`, `withDbRead()`, `resetReadonlyDb()`, `uniqueIds()` |
 | `status.ts` | canonical lifecycle/tool/work status | `normalizeStatus()`, `toToolStatus()`, `toWorkLabel()`, `workStatusGlyph()`, `isPendingWork()`, `workIsTerminal()`, `taskRank()` |
 | `timing.ts` | panel clock budgets | `TICK_MS`, `NOW_MS`, `FPS_READ_EVERY_TICKS`, `BLINK_TICKS`, `MONITOR_POLL_MS`, `MONITOR_WATCH_DEBOUNCE_MS`, `EVENT_SCAN_DEBOUNCE_MS` |
@@ -264,6 +265,8 @@ Plugin registration: `id = "opencode-extended-sidebar"`, load toast,
 |---|---|---|
 | `reader.ts` | wall-clock split per model/tool, dated logs | `readPerfSnapshot()`, `emptyPerf()`, `aggregate()`, `readPerfLog()`, `formatPerfLog()`, `collectPerfLogRows()`, `formatColumns()`, `toolLogCall()` |
 | `self.ts` | plugin self-cost: event/scan/tick latency + renderer FPS | `selfTime()`, `readSelfStats()`, `resetSelfStats()`, `setSelfFps()`, `readRendererFps()`, `formatSelfLine()`, `SelfStats` |
+| `charts.ts` | pure chart/stat helpers: null-fill, smoothing, downsampling, ANSI strip, bars, trends, histograms, gauges | `interpolateSeries()`, `smoothSeries()`, `downsampleAvg()`, `stripAnsi()`, `asciiTrend()`, `shareBar()`, `perfStatLine()`, `waitHistogram()`, `shareGauge()`, `shareDonut()` |
+| `asciichart.d.ts` | ambient `asciichart` module typings (plain, ANSI-free output) | `plot()` |
 | `view.tsx` | Perf tab | `PerfPanel` |
 
 `reader.ts` and `self.ts` are core-only — they import nothing above core.
