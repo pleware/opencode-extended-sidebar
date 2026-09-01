@@ -1,7 +1,7 @@
 /** @jsxImportSource @opentui/solid */
 import { createEffect, createMemo, createSignal, For, on, Show, onCleanup, type JSX } from "solid-js"
 import { useTerminalDimensions } from "@opentui/solid"
-import type { TuiKeymap, TuiPluginApi, TuiTheme } from "@opencode-ai/plugin/tui"
+import type { TuiPluginApi, TuiTheme } from "@opencode-ai/plugin/tui"
 import {
   currentTask,
   emptyOmo,
@@ -22,13 +22,11 @@ import {
   approvalContinueHint,
   groupMyWork,
   myWorkLabel,
-  startWorkCommand,
   toApprovalItems,
   toQuestionItems,
   toRunningItems,
   type MyWorkItem,
   type MyWorkKind,
-  type StartWorkMode,
 } from "../pware.oc.runtime/pware.oc.runtime.mywork.js"
 import {
   emptyDb,
@@ -94,10 +92,6 @@ import {
   DOC_KIND_PROOF,
 } from "../pware.oc.omo/constants/pware.oc.omo.constants.docKind.js"
 import {
-  START_WORK_MAKE_PR,
-  START_WORK_SHIP,
-} from "../pware.oc.omo/constants/pware.oc.omo.constants.startWork.js"
-import {
   GROUP_GLYPH,
   fileLetterMark,
   myWorkGlyph,
@@ -132,13 +126,20 @@ import {
 import { onGitMarksChange } from "../pware.oc.core/git/pware.oc.core.git.js"
 import { getOes } from "../pware.oc.core/pware.oc.core.oes.js"
 import { isPendingWork, sessionStatusLabel } from "../pware.oc.core/pware.oc.core.status.js"
-import { startMonitor } from "../pware.oc.runtime/pware.oc.runtime.monitor.js"
+import { createEventBus } from "../pware.oc.core/pware.oc.core.bus.js"
+import { startRuntimeSource } from "../pware.oc.runtime/pware.oc.runtime.source.js"
 import { openApprovalDialog, openDocDetail, openFileDetail, openToolDetail, openWorkDetail } from "./pware.oc.ui.menudialogs.js"
-import { eventType, shouldRefreshDb } from "../pware.oc.core/pware.oc.core.events.js"
+import { startHostEventBridge } from "./pware.oc.ui.live.js"
+import {
+  approvePlan,
+  newSession,
+  openSessionSwitcher,
+  runStartWork,
+  selectSession,
+} from "./pware.oc.ui.host.js"
 import { dbg, debugActive, debugActiveDir, profile, profileActive, profileActiveDir, profileAsync, writeProfileSummary } from "../pware.oc.core/pware.oc.core.debug.js"
 import { getOpenCodeDbPath } from "../pware.oc.core/pware.oc.core.paths.js"
 import {
-  EVENT_SCAN_DEBOUNCE_MS,
   FPS_READ_EVERY_TICKS,
   GLYPH_TICK_MS,
   NOW_MS,
@@ -148,101 +149,33 @@ import {
   activeFlow,
   applyFlow,
   composeMark,
-  flowFromEvent,
   formatAge,
   formatDuration,
   hottestMark,
   phaseAgeMs,
   pulseAgeMs,
-  sessionBusyFromEvent,
-  sessionIdFromEvent,
   toolFlow,
-  toolHitFromEvent,
   toolMark,
   type AgentMark,
   type FlowDir,
   type FlowEntry,
   type ToolHit,
 } from "../pware.oc.core/pware.oc.core.pulse.js"
-import { PART_TYPE_TEXT } from "../pware.oc.core/constants/pware.oc.core.constants.partType.js"
+import {
+  EV_OES_SESSION_SELECT,
+  EV_OES_SNAPSHOT,
+} from "../pware.oc.core/constants/pware.oc.core.constants.eventName.js"
+import {
+  EV_OC_FILES_TOUCHED,
+  EV_OC_FLOW,
+  EV_OC_SESSION_ACTIVITY,
+  EV_OC_TOOL_HIT,
+} from "../pware.oc.opencode/constants/pware.oc.opencode.constants.eventName.js"
 
 export type SidebarProps = {
   sessionId: string
   api: TuiPluginApi
   theme: TuiTheme
-}
-
-function selectSession(api: TuiPluginApi, sessionId: string | null | undefined): void {
-  if (!sessionId) return
-  const tui = (api as TuiPluginApi & {
-    client?: {
-      tui?: {
-        selectSession?: (arg: unknown) => Promise<unknown> | unknown
-        publish?: (arg: unknown) => Promise<unknown> | unknown
-      }
-    }
-  }).client?.tui
-  if (!tui) return
-  const go = async () => {
-    try {
-      if (typeof tui.selectSession === "function") {
-        await tui.selectSession({ sessionID: sessionId })
-        return
-      }
-    } catch {
-      try {
-        await tui.selectSession?.(sessionId)
-        return
-      } catch {
-        // publish fallback
-      }
-    }
-    try {
-      await tui.publish?.({
-        type: "tui.session.select",
-        properties: { sessionID: sessionId },
-      })
-    } catch {
-      // host without session switch
-    }
-  }
-  void profileAsync("rpc.selectSession", go)
-}
-
-/** Open the host session switcher — the same dialog the `/sessions` command opens. */
-function openSessionSwitcher(api: TuiPluginApi): void {
-  try {
-    const dispatch = (api.keymap as TuiKeymap & { dispatchCommand?: (name: string) => void })
-      .dispatchCommand
-    if (typeof dispatch === "function") {
-      dispatch("session.list")
-      return
-    }
-  } catch {
-    // older host — command palette below
-  }
-  try {
-    api.command?.show()
-  } catch {
-    // host without a command palette
-  }
-}
-
-/** Create a brand-new session in the current project and jump to it. */
-function newSession(api: TuiPluginApi, directory: string | null | undefined): void {
-  const go = async () => {
-    try {
-      const created = await api.client.session.create({
-        directory: directory ?? undefined,
-      })
-      const res = created as { data?: { id?: string }; id?: string } | null | undefined
-      const id = res?.data?.id ?? res?.id
-      if (id) selectSession(api, id)
-    } catch {
-      // host without session creation
-    }
-  }
-  void profileAsync("rpc.newSession", go)
 }
 
 const KV_FOLD_AGENTS = "oes.fold.agents"
@@ -330,14 +263,15 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     return [dir, tree].filter((p): p is string => Boolean(p))
   }
 
+  const bus = createEventBus()
   let watchedId = props.sessionId
-  let monitor = startMonitor({
+  let source = startRuntimeSource({
+    bus,
     sessionId: watchedId,
     projectRoot: projectDir(),
-    onChange: apply,
   })
 
-  const refresh = () => profile("scan", () => selfTime("scan", () => monitor.refresh()))
+  const refresh = () => profile("scan", () => selfTime("scan", () => source.refresh()))
 
   const ingestFiles = (hits: FileView[]) => {
     if (!hits.length) return
@@ -389,12 +323,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
       watchedId = id
       setLiveTools({})
       setLiveFiles({})
-      monitor.stop()
-      monitor = startMonitor({
-        sessionId: id,
-        projectRoot: projectDir(),
-        onChange: apply,
-      })
+      source.setSession(id)
       queueMicrotask(hydrateDiff)
     })
 
@@ -402,88 +331,70 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
 
   queueMicrotask(hydrateDiff)
 
-  let debounce: ReturnType<typeof setTimeout> | null = null
-  const onEvent = (...args: unknown[]) =>
-    profile(
-      "event",
-      () =>
-        selfTime("event", () => {
-          const evt = args[0]
-          const id = sessionIdFromEvent(evt) ?? props.sessionId
-          const flag = sessionBusyFromEvent(evt)
-          if (flag.busy !== false) bumpSeen(id)
-          if (flag.id && flag.busy != null) {
-            setBusy((prev) => ({ ...prev, [flag.id!]: flag.busy! }))
-          } else if (flag.busy != null) {
-            setBusy((prev) => ({ ...prev, [id]: flag.busy! }))
-          }
-          const hint = flowFromEvent(evt)
-          const flowId = hint.id ?? id
-          if (flowId && hint.dir) {
-            const at = Date.now()
-            setFlow((prev) => applyFlow(prev, flowId, hint.dir!, at))
-          }
-          const hit = toolHitFromEvent(evt)
-          if (hit && (!hit.sessionId || hit.sessionId === props.sessionId)) {
-            setLiveTools((prev) => ({ ...prev, [hit.id]: hit }))
-          }
-          ingestFiles(filesFromEvent(evt, props.sessionId, fileFilter(projectDir())))
-          queueMicrotask(requestRender)
-          if (!shouldRefreshDb(eventType(evt))) return
-          if (debounce) clearTimeout(debounce)
-          debounce = setTimeout(() => {
-            debounce = null
-            refresh()
-          }, EVENT_SCAN_DEBOUNCE_MS)
-        }),
-      { type: eventType(args[0]) || undefined },
-    )
+  const offSnapshot = bus.on(EV_OES_SNAPSHOT, (evt) => {
+    const data = evt.data
+    if (!data || typeof data !== "object") return
+    const snapshot = (data as Record<string, unknown>).snapshot
+    if (!snapshot || typeof snapshot !== "object") return
+    apply(snapshot as RuntimeSnapshot)
+  })
 
-  const listen = (type: string, fn: (...args: unknown[]) => void): (() => void) => {
-    try {
-      const on = props.api.event.on as (name: string, cb: (...args: unknown[]) => void) => unknown
-      const off = on(type, (...args: unknown[]) => {
-        const raw = args[0]
-        if (raw && typeof raw === "object") {
-          const o = raw as Record<string, unknown>
-          if (typeof o.type !== "string" || !o.type) {
-            fn({ type, properties: raw })
-            return
-          }
-        } else {
-          fn({ type, properties: raw ?? {} })
-          return
-        }
-        fn(raw)
-      })
-      return typeof off === "function" ? (off as () => void) : () => {}
-    } catch {
-      return () => {}
-    }
-  }
+  const offSessionActivity = bus.on(EV_OC_SESSION_ACTIVITY, (evt) => {
+    const data = evt.data
+    if (!data || typeof data !== "object") return
+    const payload = data as Record<string, unknown>
+    const busyFlag = payload.busy
+    if (typeof busyFlag !== "boolean") return
+    const id = typeof payload.sessionId === "string" && payload.sessionId ? payload.sessionId : props.sessionId
+    if (busyFlag) bumpSeen(id)
+    setBusy((prev) => ({ ...prev, [id]: busyFlag }))
+  })
 
-  const offs = [
-    listen("message.updated", onEvent),
-    listen("message.part.updated", onEvent),
-    listen("message.part.delta", onEvent),
-    listen("session.status", onEvent),
-    listen("session.idle", onEvent),
-    listen("session.created", onEvent),
-    listen("session.updated", onEvent),
-    listen("session.next.step.started", onEvent),
-    listen("session.next.step.ended", onEvent),
-    listen("session.next.step.failed", onEvent),
-    listen("session.next.text.started", onEvent),
-    listen("session.next.text.delta", onEvent),
-    listen("session.next.reasoning.started", onEvent),
-    listen("session.next.reasoning.delta", onEvent),
-    listen("session.next.tool.called", onEvent),
-    listen("session.next.tool.success", onEvent),
-    listen("session.next.tool.failed", onEvent),
-    listen("session.diff", onEvent),
-    listen("file.edited", onEvent),
-    listen("tui.session.select", () => remount()),
-  ]
+  const offFlow = bus.on(EV_OC_FLOW, (evt) => {
+    const data = evt.data
+    if (!data || typeof data !== "object") return
+    const payload = data as Record<string, unknown>
+    const id = typeof payload.sessionId === "string" ? payload.sessionId : ""
+    const dir = payload.dir
+    if (!id || (dir !== "recv" && dir !== "wait" && dir !== "tool" && dir !== "clear")) return
+    if (dir !== "clear") bumpSeen(id)
+    const at = Date.now()
+    setFlow((prev) => applyFlow(prev, id, dir, at))
+  })
+
+  const offToolHit = bus.on(EV_OC_TOOL_HIT, (evt) => {
+    const data = evt.data
+    if (!data || typeof data !== "object") return
+    const payload = data as Record<string, unknown>
+    const hit = payload.hit
+    if (!hit || typeof hit !== "object") return
+    const h = hit as { id?: unknown }
+    if (typeof h.id !== "string" || !h.id) return
+    const toolHit = hit as ToolHit
+    bumpSeen(toolHit.sessionId ?? props.sessionId)
+    setLiveTools((prev) => ({ ...prev, [toolHit.id]: toolHit }))
+  })
+
+  const offFilesTouched = bus.on(EV_OC_FILES_TOUCHED, (evt) => {
+    const data = evt.data
+    if (!data || typeof data !== "object") return
+    const payload = data as Record<string, unknown>
+    const files = payload.files
+    if (!Array.isArray(files)) return
+    const sessionId = typeof payload.sessionId === "string" && payload.sessionId ? payload.sessionId : props.sessionId
+    bumpSeen(sessionId)
+    ingestFiles(files as FileView[])
+  })
+
+  const offSessionSelect = bus.on(EV_OES_SESSION_SELECT, () => remount())
+
+  const bridge = startHostEventBridge({
+    api: props.api,
+    bus,
+    sessionId: () => props.sessionId,
+    projectRoot: projectDir,
+    onRender: requestRender,
+  })
 
   let tickCount = 0
   const tick = setInterval(() => {
@@ -534,12 +445,17 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   })
 
   onCleanup(() => {
-    if (debounce) clearTimeout(debounce)
     clearInterval(tick)
     clearInterval(glyphTick)
-    monitor.stop()
+    bridge.stop()
+    offSnapshot()
+    offSessionActivity()
+    offFlow()
+    offToolHit()
+    offFilesTouched()
+    offSessionSelect()
+    source.stop()
     offGit()
-    for (const off of offs) off()
     writeProfileSummary()
   })
 
@@ -757,51 +673,6 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   ])
 
   const myWorkGroups = createMemo(() => groupMyWork(myWorkItems()))
-
-  /** OMO `start work` — the command endpoint first, a plain chat message as fallback. */
-  const runStartWork = (mode: StartWorkMode, planName: string): void => {
-    const client = props.api.client
-    const text = startWorkCommand(mode, planName)
-    const flag = mode === START_WORK_MAKE_PR ? "--make-pr" : mode === START_WORK_SHIP ? "--ship" : ""
-    const args = [planName, flag].map((s) => s.trim()).filter(Boolean).join(" ") || ""
-    const go = async () => {
-      try {
-        const res = await client.session.command({
-          sessionID: props.sessionId,
-          command: "start-work",
-          arguments: args,
-        })
-        if (res && !res.error) return
-      } catch {
-        // command not registered — send as a plain message below
-      }
-      try {
-        await client.session.promptAsync({
-          sessionID: props.sessionId,
-          parts: [{ type: PART_TYPE_TEXT, text }],
-        })
-      } catch {
-        // host without message send
-      }
-    }
-    void profileAsync("rpc.startWork", go)
-  }
-
-  /** OMO plan approve — answer the writer session with the `ok` the planner waits for. */
-  const approvePlan = (sessionId: string): void => {
-    const client = props.api.client
-    const go = async () => {
-      try {
-        await client.session.promptAsync({
-          sessionID: sessionId,
-          parts: [{ type: PART_TYPE_TEXT, text: "ok" }],
-        })
-      } catch {
-        // host without message send
-      }
-    }
-    void profileAsync("rpc.approve", go)
-  }
 
   /**
    * Rows are handed out on every render: chrome that always costs a line is
@@ -1025,8 +896,8 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
           sessionId,
           continueHint: approvalContinueHint(sessionId, Boolean(db)),
           onContinue: (sid) => selectSession(props.api, sid),
-          onApprove: approvePlan,
-          onStartWork: (mode) => runStartWork(mode, item.name),
+          onApprove: (sid) => approvePlan(props.api, sid),
+          onStartWork: (mode) => runStartWork(props.api, props.sessionId, mode, item.name),
           onDocs: () => openDocDetail(props.api, doc, projectRoots(), colors()),
           showApprove,
           showStartWork,

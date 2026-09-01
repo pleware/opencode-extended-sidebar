@@ -22,6 +22,7 @@ src/
 │   ├── pware.oc.core.debug.ts
 │   ├── pware.oc.core.events.ts
 │   ├── pware.oc.core.layout.ts
+│   ├── pware.oc.core.bus.ts
 │   ├── pware.oc.core.oes.ts
 │   ├── pware.oc.core.paths.ts
 │   ├── pware.oc.core.preview.ts
@@ -33,6 +34,7 @@ src/
 │   │   ├── index.ts
 │   │   ├── pware.oc.core.constants.partType.ts
 │   │   ├── pware.oc.core.constants.eventType.ts
+│   │   ├── pware.oc.core.constants.eventName.ts
 │   │   ├── pware.oc.core.constants.toolName.ts
 │   │   ├── pware.oc.core.constants.status.ts
 │   │   ├── pware.oc.core.constants.pulse.ts
@@ -47,11 +49,13 @@ src/
 ├── pware.oc.opencode/                     # OpenCode domain: SQLite + file activity
 │   ├── index.ts
 │   ├── pware.oc.opencode.files.ts
+│   ├── pware.oc.opencode.events.ts
 │   ├── constants/                         # OpenCode-domain string literals
 │   │   ├── index.ts
 │   │   ├── pware.oc.opencode.constants.sessionStatus.ts
 │   │   ├── pware.oc.opencode.constants.questionKind.ts
-│   │   └── pware.oc.opencode.constants.fileTouch.ts
+│   │   ├── pware.oc.opencode.constants.fileTouch.ts
+│   │   └── pware.oc.opencode.constants.eventName.ts
 │   └── resolver/
 │       ├── index.ts
 │       ├── pware.oc.opencode.resolver.session.ts
@@ -69,7 +73,8 @@ src/
 │   │   ├── pware.oc.omo.constants.reviewStatus.ts
 │   │   ├── pware.oc.omo.constants.verdict.ts
 │   │   ├── pware.oc.omo.constants.docKind.ts
-│   │   └── pware.oc.omo.constants.startWork.ts
+│   │   ├── pware.oc.omo.constants.startWork.ts
+│   │   └── pware.oc.omo.constants.eventName.ts
 │   └── resolver/
 │       ├── index.ts
 │       ├── pware.oc.omo.resolver.boulder.ts
@@ -88,6 +93,7 @@ src/
 ├── pware.oc.runtime/                      # runtime composition: opencode + omo
 │   ├── index.ts
 │   ├── pware.oc.runtime.monitor.ts
+│   ├── pware.oc.runtime.source.ts
 │   ├── pware.oc.runtime.mywork.ts
 │   ├── pware.oc.runtime.mywork-enrich.ts
 │   └── resolver/
@@ -103,6 +109,8 @@ src/
     ├── pware.oc.ui.chrome.tsx
     ├── pware.oc.ui.sections.tsx
     ├── pware.oc.ui.sidebar.tsx
+    ├── pware.oc.ui.live.tsx
+    ├── pware.oc.ui.host.tsx
     ├── pware.oc.ui.menudialogs.tsx
     └── pware.oc.ui.glyphs.tsx
 ```
@@ -152,6 +160,7 @@ Plugin registration: `id = "opencode-extended-sidebar"`, load toast,
 | `cache.ts` | stamp-keyed in-memory cache, optional TTL | `createStampCache()` |
 | `clipboard.ts` | OS clipboard, no npm deps | `copyText()`, `osc52Payload()` |
 | `debug.ts` | `OES_DEBUG_OPENCODE` / `OES_DEBUG_PROFILE` JSON-line file loggers | `dbg()`, `profile()`, `profileAsync()`, `readProfileStats()`, `writeProfileSummary()`, `debugLogDir()`, `profileLogDir()`, `resetDebug()` |
+| `bus.ts` | in-process plugin event bus (`pware.oc.*` / `pware.omo.*` / `pware.oes.*`) | `createEventBus()`, `PwareEvent`, `PwareEventBus` |
 | `events.ts` | host event type/kind classification | `eventType()`, `eventKind()`, `shouldRefreshDb()` |
 | `layout.ts` | vertical row budget, overflow slicing | `panelRows()`, `packSections()`, `rowsForPlan()`, `sliceShown()`, `ROW_MIN`, `ROW_RANK` |
 | `oes.ts` | `oes.json` merge + clamp | `OesOptions`, `OES_DEFAULTS`, `pick()`, `getOes()`, `oesStamp()`, `resetOesCache()` |
@@ -167,7 +176,8 @@ Plugin registration: `id = "opencode-extended-sidebar"`, load toast,
 | Module | Responsibility | Key exports |
 |---|---|---|
 | `partType.ts` | `part.data.type` values (SDK `Part` union) | `PART_TYPE_TEXT`, `PART_TYPE_REASONING`, `PART_TYPE_TOOL`, `PART_TYPE_STEP_START`, `PART_TYPE_STEP_FINISH`, `PART_TYPE_SNAPSHOT`, `PART_TYPE_PATCH`, `PART_TYPE_AGENT`, `PART_TYPE_SUBTASK`, `PART_TYPE_RETRY`, `PART_TYPE_COMPACTION`, `PART_TYPE_FILE`, `PART_TYPES`, `PartType` |
-| `eventType.ts` | host event `type` strings (SDK `Event` + stream) | per-value `EVENT_*` consts, `EVENT_TYPES`, `EventType` |
+| `eventType.ts` | host event `type` strings (SDK `Event` + stream) + sidebar subscription set | per-value `EVENT_*` consts, `EVENT_TYPES`, `EventType`, `PANEL_HOST_TYPES` |
+| `eventName.ts` | plugin-owned event names (`pware.oes.*`) | `EV_OES_REFRESH_HINT`, `EV_OES_SNAPSHOT`, `EV_OES_SESSION_SELECT` |
 | `toolName.ts` | tool names by file-touch + special non-file tools | per-value `TOOL_*` consts, `WRITE_TOOLS`, `READ_TOOLS`, `NON_FILE_TOOLS`, `ToolName` |
 | `status.ts` | the plugin's canonical lifecycle/tool statuses | `STATUS_*`, `CANONICAL_STATUSES`, `CanonicalStatus`, `TOOL_STATUS_*`, `TOOL_STATUSES`, `ToolStatus` |
 | `pulse.ts` | the plugin's pulse / flow / mark vocabulary | `PULSE_*`, `PULSES`, `Pulse`, `FLOW_*`, `FLOW_DIRS`, `FlowDir`, `FLOW_HINT_CLEAR`, `FlowHint`, `MARK_*`, `AGENT_MARKS`, `AgentMark` |
@@ -188,6 +198,7 @@ Plugin registration: `id = "opencode-extended-sidebar"`, load toast,
 | Module | Responsibility | Key exports |
 |---|---|---|
 | `files.ts` | `FileView`: basename + diff stats only | `FileView`, `FileLetter`, `filesFromEvent()`, `filesFromPatchJson()`, `fileHitFromExtracted()`, `decorateFiles()`, `mergeFiles()`, `sumDiff()`, `shortFileName()`, `formatDiffStat()` |
+| `events.ts` | host-event translation to OpenCode domain bus events | `hostEventToOcEvents()`, `OcEvent` |
 | `resolver/session.ts` | session rows → `SessionView`, hierarchy queries | `toSessionView()`, `inferStatus()`, `sessionActivityState()`, `getSessionById()`, `listChildSessions()`, `listRecentMainSessions()`, `getSessionsByIds()`, `sessionScanStamp()` |
 | `resolver/tool.ts` | tool parts → `ToolView`, metadata only | `listToolEvents()`, `listRecentToolEvents()`, `mergeTools()`, `normalizeToolStatus` |
 | `resolver/file.ts` | file-touch parts → `FileView` | `listSessionFiles()`, `listRecentSessionFiles()` |
@@ -202,6 +213,7 @@ Plugin registration: `id = "opencode-extended-sidebar"`, load toast,
 | `sessionStatus.ts` | session status + activity-state values | `SESSION_STATUS_*`, `SESSION_STATUSES`, `AgentStatus`, `SESSION_STATE_*`, `SESSION_STATES`, `SessionState` |
 | `questionKind.ts` | open `question` tool-part kinds | `QUESTION_KIND_*`, `QUESTION_KINDS`, `OpenQuestionKind` |
 | `fileTouch.ts` | file read/write touch kinds | `FILE_TOUCH_*`, `FILE_TOUCHES`, `FileTouch` |
+| `eventName.ts` | OpenCode-domain event names (`pware.oc.*`) | `EV_OC_SESSION_ACTIVITY`, `EV_OC_FLOW`, `EV_OC_TOOL_HIT`, `EV_OC_FILES_TOUCHED` |
 
 ### `pware.oc.omo` — oh-my-openagent domain
 
@@ -233,12 +245,14 @@ Plugin registration: `id = "opencode-extended-sidebar"`, load toast,
 | `verdict.ts` | review lane verdict values | `VERDICTS`, `Verdict` (+ per-value consts) |
 | `docKind.ts` | OMO document kinds | `DOC_KIND_*`, `DOC_KINDS`, `DocKind` |
 | `startWork.ts` | OMO `start work` delivery modes | `START_WORK_*`, `START_WORK_MODES`, `StartWorkMode` |
+| `eventName.ts` | OMO-domain event names (`pware.omo.*`) | `EV_OMO_BOULDER_CHANGED`, `EV_OMO_DOCS_CHANGED`, `EV_OMO_CONFIG_CHANGED` |
 
 ### `pware.oc.runtime` — runtime composition
 
 | Module | Responsibility | Key exports |
 |---|---|---|
-| `pware.oc.runtime.monitor.ts` | watch boulder + poll SQLite stamps, fingerprint-driven | `startMonitor()`, `MonitorHandle` |
+| `pware.oc.runtime.monitor.ts` | watch boulder + poll SQLite stamps, fingerprint-driven; emits snapshot + boulder-change events | `startMonitor()`, `MonitorHandle` |
+| `pware.oc.runtime.source.ts` | runtime source orchestration: monitor lifecycle + debounced refresh from `pware.oes.*`/`pware.omo.*` hints | `startRuntimeSource()`, `RuntimeSourceHandle` |
 | `pware.oc.runtime.mywork.ts` | the "My work" queue (questions + approvals) | `MyWorkItem`, `groupMyWork()`, `toQuestionItems()`, `toApprovalItems()`, `approvalContinueHint()`, `startWorkCommand()`, `StartWorkMode` |
 | `pware.oc.runtime.mywork-enrich.ts` | planner session state for approval rows (opencode SQLite + omo run-continuation) | `planSessionStateLabel()`, `enrichApprovalSessionStates()` |
 | `resolver/index.ts` | unified runtime snapshot | `RuntimeSnapshot`, `readRuntimeSnapshot()`, `computeFingerprint()`, `resetRuntimeCache()` |
@@ -258,7 +272,9 @@ Plugin registration: `id = "opencode-extended-sidebar"`, load toast,
 |---|---|---|
 | `chrome.tsx` | shared chrome, theme colours, kv persistence | `BrandTabs`, `ClickText`, `FoldHeader`, `DiffStat`, `textAttrs()`, `kvRead()`, `kvWrite()`, `kvReadOne()`, `kvWriteOne()`, `ThemeColors` |
 | `sections.tsx` | shared sidebar primitives: kv-persisted fold state, foldable sections, the base row renderer + budget-sliced `RowList`, brand+tabs+panel columns | `useFold()`, `FoldSection`, `GroupSection`, `RowList`, `MoreReveal`, `useReveal()`, `AgentLine`, `RowData`, `TabColumn` |
-| `sidebar.tsx` | the panel: groups, tabs, live rows | `SidebarPanel` |
+| `sidebar.tsx` | the panel: groups, tabs, live rows; consumes plugin event bus | `SidebarPanel` |
+| `live.tsx` | host event adapter (`api.event.on`) → plugin event bus (`pware.oc.*`, `pware.oes.*`) | `startHostEventBridge()` |
+| `host.tsx` | UI host RPC wrappers (session switch/new session/start-work/approve) | `selectSession()`, `openSessionSwitcher()`, `newSession()`, `runStartWork()`, `approvePlan()` |
 | `menudialogs.tsx` | every popup via one `openDialog()` choke-point | `openFileDetail()`, `openToolDetail()`, `openWorkDetail()`, `openApprovalDialog()`, `openDocDetail()`, `openTextPreview()`, `openPerfLog()` |
 | `glyphs.tsx` | status → character mappings | `workStatusGlyph()`, `markGlyph()`, `flowGlyph()`, `spinnerFrame()`, `flowBlinkOn()`, `myWorkGlyph()`, `reviewLaneGlyph()`, `reviewStateSuffix()`, `fileLetterMark()`, `SPINNER_FRAMES`, `GROUP_GLYPH`, `THINK_GLYPH` |
 

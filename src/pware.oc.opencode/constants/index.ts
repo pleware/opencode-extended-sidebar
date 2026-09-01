@@ -7,3 +7,4 @@
 export * from "./pware.oc.opencode.constants.sessionStatus.js"
 export * from "./pware.oc.opencode.constants.questionKind.js"
 export * from "./pware.oc.opencode.constants.fileTouch.js"
+export * from "./pware.oc.opencode.constants.eventName.js"

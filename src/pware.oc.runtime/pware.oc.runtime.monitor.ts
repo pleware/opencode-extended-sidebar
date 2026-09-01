@@ -3,6 +3,9 @@
  */
 import fs from "node:fs"
 import path from "node:path"
+import type { PwareEvent } from "../pware.oc.core/pware.oc.core.bus.js"
+import { EV_OES_SNAPSHOT } from "../pware.oc.core/constants/pware.oc.core.constants.eventName.js"
+import { EV_OMO_BOULDER_CHANGED } from "../pware.oc.omo/constants/pware.oc.omo.constants.eventName.js"
 import { findBoulder } from "../pware.oc.omo/resolver/index.js"
 import { computeFingerprint, readRuntimeSnapshot, type RuntimeSnapshot } from "./resolver/index.js"
 import { getOpenCodeDbPath } from "../pware.oc.core/pware.oc.core.paths.js"
@@ -14,7 +17,8 @@ export type MonitorOptions = {
   projectRoot: string | null
   dbPath?: string
   pollMs?: number
-  onChange: (snap: RuntimeSnapshot) => void
+  onChange?: (snap: RuntimeSnapshot) => void
+  emit?: (evt: PwareEvent) => void
 }
 
 export type MonitorHandle = {
@@ -42,13 +46,17 @@ export function startMonitor(opts: MonitorOptions): MonitorHandle {
       if (!force && fp === lastFp) return
       dbg("monitor", "emit", { force, fp: fp.slice(0, 40) })
       lastFp = fp
-      opts.onChange(
-        readRuntimeSnapshot({
-          sessionId: opts.sessionId,
-          projectRoot: opts.projectRoot,
-          dbPath,
-        }),
-      )
+      const snapshot = readRuntimeSnapshot({
+        sessionId: opts.sessionId,
+        projectRoot: opts.projectRoot,
+        dbPath,
+      })
+      opts.onChange?.(snapshot)
+      opts.emit?.({
+        type: EV_OES_SNAPSHOT,
+        ts: Date.now(),
+        data: { snapshot },
+      })
     })
 
   const schedule = () => {
@@ -70,7 +78,16 @@ export function startMonitor(opts: MonitorOptions): MonitorHandle {
     const boulderPath = findBoulder(root)
     if (boulderPath) {
       try {
-        watchers.push(fs.watch(boulderPath, { persistent: false }, schedule))
+        watchers.push(
+          fs.watch(boulderPath, { persistent: false }, () => {
+            opts.emit?.({
+              type: EV_OMO_BOULDER_CHANGED,
+              ts: Date.now(),
+              data: {},
+            })
+            schedule()
+          }),
+        )
       } catch {
         // poll covers it
       }

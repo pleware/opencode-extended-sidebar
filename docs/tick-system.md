@@ -25,19 +25,17 @@ loop thread.**
 │    setInterval(..., GLYPH_TICK_MS = 80ms)                       │
 │    → setGlyphFrame() (advances every 80ms — spinner + flow)     │
 ├────────────────────────────────────────────────────────────────┤
-│  SOURCE 3: MONITOR (DB poll)              monitor.ts             │
-│    setInterval(..., MONITOR_POLL_MS = 1500ms) → emit()          │
-│    + fs.watch(boulder.json, dataDir) → schedule()               │
-│    emit(): fingerprint-gated — readRuntimeSnapshot only when    │
-│    the fingerprint changed; refresh() = emit(true) skips the    │
-│    gate so readRuntimeSnapshot always runs its (cheap) cache    │
-│    check                                                         │
+│  SOURCE 3: RUNTIME SOURCE                  runtime.source.ts      │
+│    monitor poll/watch in monitor.ts emit pware.oes.snapshot      │
+│    + refresh hints (pware.oes.refresh.hint / pware.omo.*)        │
+│      debounced by EVENT_SCAN_DEBOUNCE_MS → monitor.refresh()     │
+│    fingerprint-gated readRuntimeSnapshot only when changed        │
 ├────────────────────────────────────────────────────────────────┤
-│  SOURCE 4: HOST EVENTS                   sidebar.tsx:onEvent    │
-│    message.updated, session.status, tool.*, file.edited, ...    │
-│    → signal sets (busy/flow/tools/files) + requestRender        │
-│    → if shouldRefreshDb(type) → debounce EVENT_SCAN_DEBOUNCE_MS │
-│      (= 100ms, trailing) → refresh()                            │
+│  SOURCE 4: HOST EVENTS ADAPTER            pware.oc.ui.live.tsx   │
+│    PANEL_HOST_TYPES via api.event.on                            │
+│    → hostEventToOcEvents() → bus emits pware.oc.*               │
+│    → shouldRefreshDb(type) emits pware.oes.refresh.hint          │
+│    sidebar subscribes to pware.oc.* and updates live signals     │
 └────────────────────────────────────────────────────────────────┘
          all four → synchronous Solid reactive cascade
                                        ↓
@@ -109,6 +107,7 @@ setFrame(n + 1)                                  ── every 300ms
 └─ Row helper (sidebar.tsx): frame={frame}       ← accessor, NOT frame()
 │
 └─ AgentLine (sections.tsx):
+    ├─ direction glyph → dirFg() → flowBlinkOn(frame())  ← static arrow/clock blinks
     └─ glyph2 colour → glyphFg() → lit() → flowBlinkOn(frame())
 ```
 
@@ -120,19 +119,21 @@ setGlyphFrame(n + 1)                             ── every GLYPH_TICK_MS = 80
 └─ Row helper (sidebar.tsx): glyphFrame={glyphFrame}   ← accessor
 │
 └─ AgentLine (sections.tsx):
-    ├─ glyphs() → rowGlyphs(mark, glyphFrame(), flow)
-    │    ├─ state glyph → spinnerFrame(glyphFrame())   ← braille spinner
-    │    └─ dir glyph  → dirFrame(flow, glyphFrame())  ← direction flow
+    └─ glyphs() → rowGlyphs(mark, glyphFrame(), flow)
+         └─ state glyph → spinnerFrame(glyphFrame())   ← braille spinner
     └─ PerfPanel (perf.view.tsx): live spinner → spinnerFrame(glyphFrame())
 ```
 
+The direction glyph is **not** animated: it is a static arrow (or the ◷ waiting
+clock, `directionGlyph`) that blinks on the slow `frame` tick instead — same
+shape as the arrow blink below.
+
 `frame` and `glyphFrame` are never read at row-construction scope (the
 `RowList`/`For` callbacks), so lists are **not** rebuilt per glyph tick. The
-spinner (10 frames) and the direction flows (3-4 frames) step at 80ms —
-0.8s and ~0.24-0.32s per loop, close to the cli-spinners cadence — while the
-glyph2 blink stays at 600ms and row data still runs on the coarse clocks. The
-`PerfPanel` live glyph reads `glyphFrame()` at the leaf, the panel body does
-not.
+spinner (10 frames) steps at 80ms — 0.8s per loop, close to the cli-spinners
+cadence — while the direction glyph blink stays at 600ms and row data still
+runs on the coarse clocks. The `PerfPanel` live glyph reads `glyphFrame()` at
+the leaf, the panel body does not.
 
 ## 5. Why the numbers were 3fps, and what changed
 
@@ -167,10 +168,13 @@ UI thread (1s of active work, after the fix):
 
 ```
 host event (e.g. session.next.tool.called)
-  → onEvent()                 sidebar.tsx   (0.2ms — cheap signal sets)
+  → startHostEventBridge()    pware.oc.ui.live.tsx
+  → hostEventToOcEvents()     pware.oc.opencode.events.ts
+  → bus.emit(pware.oc.*)      sidebar subscribers update live signals
   → shouldRefreshDb(type)?    events.ts
-  → debounce 100ms (EVENT_SCAN_DEBOUNCE_MS, trailing)
-  → refresh()                 = monitor.refresh() → emit(true)
+  → bus.emit(pware.oes.refresh.hint)
+  → runtime source debounce 100ms (EVENT_SCAN_DEBOUNCE_MS)
+  → monitor.refresh()         = emit(true)
   → readRuntimeSnapshot       runtime/resolver/index.ts
       ├─ computeFingerprint   (stat stamps: db file, omo/oes/gitignore)
       ├─ snapshotGraphStamp   (4 cheap SQL: session row + parts max +
@@ -198,7 +202,7 @@ watch cover the rest.
 | `glyphFrame` (spinner + direction flow) | every 80ms (`GLYPH_TICK_MS`) | glyph text leaves only | ~ms per frame |
 | `frame` (glyph2 blink) | every 300ms tick | glyph blink colour leaf | folded into the tick |
 | `now` (ages/marks) | 1×/s (`NOW_MS`) | row arrays, ages, marks | folded into the 1×/s tick |
-| scan (DB re-read) | on real change only | full snapshot | HIT ~5-20ms, MISS ~30-150ms+ |
+| scan (DB re-read) | on real change only + refresh hints | full snapshot (`pware.oes.snapshot`) | HIT ~5-20ms, MISS ~30-150ms+ |
 | fps read | every 6th tick | `self` line fps | negligible |
 
 The `self` line shows the real cost: `0.2ms/ev · 1.2ms/sc · 59fps` instead

@@ -1,5 +1,6 @@
 # Changelog
 
+- **0.2.33** (2026-09-01) Extract the host and OMO event wiring into a typed event bus (pware.oc.core.bus with PwareEvent and per-layer EV_* event-name constants), adapt host TUI events .
 - **0.2.32** (2026-09-01) Refresh a session's status together with its age on live-snapshot cache hits so the My work Running group no longer keeps sessions that went idle, list only run.
 - **0.2.31** (2026-09-01) Replace the left/right direction flows with single-dot waves growing from the middle row (⠂⠒⠲ right while a tool call is in flight, ⠐⠒⠙ left while tokens stream.
 - **0.2.30** (2026-09-01) Split every sidebar row into a state glyph plus a per-direction braille flow where a single dot sweeps right while a tool call is in flight, left while tokens s.

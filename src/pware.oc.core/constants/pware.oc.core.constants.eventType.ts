@@ -142,6 +142,28 @@ export const EVENT_TEXT_STARTED = "text.started"
 /** Stream event: reasoning streaming started. */
 export const EVENT_REASONING_STARTED = "reasoning.started"
 
+export const EVENT_SESSION_NEXT_STEP_STARTED = "session.next.step.started"
+
+export const EVENT_SESSION_NEXT_STEP_ENDED = "session.next.step.ended"
+
+export const EVENT_SESSION_NEXT_STEP_FAILED = "session.next.step.failed"
+
+export const EVENT_SESSION_NEXT_TEXT_STARTED = "session.next.text.started"
+
+export const EVENT_SESSION_NEXT_TEXT_DELTA = "session.next.text.delta"
+
+export const EVENT_SESSION_NEXT_REASONING_STARTED = "session.next.reasoning.started"
+
+export const EVENT_SESSION_NEXT_REASONING_DELTA = "session.next.reasoning.delta"
+
+export const EVENT_SESSION_NEXT_TOOL_CALLED = "session.next.tool.called"
+
+export const EVENT_SESSION_NEXT_TOOL_SUCCESS = "session.next.tool.success"
+
+export const EVENT_SESSION_NEXT_TOOL_FAILED = "session.next.tool.failed"
+
+export const EVENT_TUI_SESSION_SELECT = "tui.session.select"
+
 /** Every OpenCode host event type the plugin recognizes: SDK set first, then stream events. */
 export const EVENT_TYPES = [
   EVENT_MESSAGE_UPDATED,
@@ -189,6 +211,31 @@ export const EVENT_TYPES = [
   EVENT_TEXT_STARTED,
   EVENT_REASONING_STARTED,
 ] as const
+
+export const PANEL_HOST_TYPES = [
+  EVENT_MESSAGE_UPDATED,
+  EVENT_MESSAGE_PART_UPDATED,
+  "message.part.delta",
+  EVENT_SESSION_STATUS,
+  EVENT_SESSION_IDLE,
+  EVENT_SESSION_CREATED,
+  EVENT_SESSION_UPDATED,
+  EVENT_SESSION_NEXT_STEP_STARTED,
+  EVENT_SESSION_NEXT_STEP_ENDED,
+  EVENT_SESSION_NEXT_STEP_FAILED,
+  EVENT_SESSION_NEXT_TEXT_STARTED,
+  EVENT_SESSION_NEXT_TEXT_DELTA,
+  EVENT_SESSION_NEXT_REASONING_STARTED,
+  EVENT_SESSION_NEXT_REASONING_DELTA,
+  EVENT_SESSION_NEXT_TOOL_CALLED,
+  EVENT_SESSION_NEXT_TOOL_SUCCESS,
+  EVENT_SESSION_NEXT_TOOL_FAILED,
+  EVENT_SESSION_DIFF,
+  EVENT_FILE_EDITED,
+  EVENT_TUI_SESSION_SELECT,
+] as const
+
+export type PanelHostType = (typeof PANEL_HOST_TYPES)[number]
 
 /** A single OpenCode host event `type` value. */
 export type EventType = (typeof EVENT_TYPES)[number]
