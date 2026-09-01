@@ -82,7 +82,6 @@ import {
   fileLetterMark,
   myWorkGlyph,
   reviewStateSuffix,
-  workStatusGlyph,
 } from "./pware.oc.ui.glyphs.js"
 import { kvReadOne, kvWriteOne, type ThemeColors } from "./pware.oc.ui.chrome.js"
 import {
@@ -907,7 +906,6 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
       out.push({
         kind: item.grouped ? ROW_KIND_DELEGATE : ROW_KIND_AGENT,
         mark,
-        glyph2: waiting ? (workStatusGlyph(d.status) ?? undefined) : undefined,
         waiting,
         name: item.grouped ? d.title || d.taskKey || "task" : d.agent || "agent",
         tokens: d.tokensTotal,
