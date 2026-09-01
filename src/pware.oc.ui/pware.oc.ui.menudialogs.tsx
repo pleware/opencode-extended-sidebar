@@ -14,7 +14,8 @@ import { copyText } from "../pware.oc.core/pware.oc.core.clipboard.js"
 import { ClickText, textAttrs, type ThemeColors } from "./pware.oc.ui.chrome.js"
 import type { ToolView } from "../pware.oc.opencode/resolver/pware.oc.opencode.resolver.tool.js"
 import type { FileView } from "../pware.oc.opencode/pware.oc.opencode.files.js"
-import { readPerfLog, type PerfLogKind } from "../pware.oc.perf/pware.oc.perf.reader.js"
+import { readPerfLog, type PerfLogKind, type PerfSnapshot } from "../pware.oc.perf/pware.oc.perf.reader.js"
+import { asciiTrend, perfStatLine, waitHistogram, shareGauge, shareDonut } from "../pware.oc.perf/pware.oc.perf.charts.js"
 import { formatDiffStat } from "../pware.oc.opencode/pware.oc.opencode.files.js"
 import type { DocView } from "../pware.oc.omo/resolver/pware.oc.omo.resolver.doc.js"
 import { DOC_KIND_LABEL } from "../pware.oc.omo/resolver/pware.oc.omo.resolver.doc.js"
@@ -39,7 +40,7 @@ import {
   previewViewportRows,
   readTextPreview,
 } from "../pware.oc.core/pware.oc.core.preview.js"
-import { formatAge, formatDuration, formatWhen } from "../pware.oc.core/pware.oc.core.pulse.js"
+import { formatAge, formatDuration, formatRate, formatWhen } from "../pware.oc.core/pware.oc.core.pulse.js"
 
 function closeDialog(api: TuiPluginApi): void {
   try {
@@ -603,4 +604,67 @@ export function openPerfLog(
   } catch {
     toast(api, "Cannot open perf log", "warning")
   }
+}
+
+/**
+ * "Perf charts" popup: a stats line, wait histogram, tool-share gauge,
+ * cache-hit donut, and two taller trend charts. Every chart string from the
+ * charts module is ANSI-free (colours are stripped there), so they render as
+ * plain `<text fg>` lines. Soft-fails when there is no trend to chart.
+ */
+export function openPerfCharts(
+  api: TuiPluginApi,
+  colors: ThemeColors,
+  opts: { perf: PerfSnapshot; currentSessionId: string },
+): void {
+  const wait = opts.perf.trend.map((p) => p.waitMs)
+  const rate = opts.perf.trend.map((p) => p.tokensPerSec)
+  const allNull = (xs: Array<number | null>): boolean => xs.every((v) => v == null)
+  if (opts.perf.trend.length === 0 || (allNull(wait) && allNull(rate))) {
+    toast(api, "No perf trend to chart", "warning")
+    return
+  }
+  const toolShare =
+    opts.perf.totals.wallMs > 0 ? opts.perf.totals.phases.tool / opts.perf.totals.wallMs : null
+  const cacheHit = Math.max(0, Math.min(1, Number(opts.perf.totals.cacheHit) || 0))
+  const title = opts.perf.models[0]?.model ?? ""
+  const subtitle = opts.currentSessionId
+  const showSubtitle = Boolean(subtitle) && subtitle !== title
+
+  openDialog(api, "xlarge", () => (
+    <DialogPad>
+      <box flexDirection="row" justifyContent="space-between" gap={1}>
+        <text fg={colors.text} attributes={textAttrs(true)}>
+          Perf charts
+        </text>
+        <text fg={colors.text}>{title}</text>
+      </box>
+      <Show when={showSubtitle}>
+        <DetailLine text={subtitle} colors={colors} muted />
+      </Show>
+      <text fg={colors.text}>{perfStatLine("wait", wait, formatDuration)}</text>
+      <text fg={colors.text}>{perfStatLine("tok/s", rate, formatRate)}</text>
+      {divider(colors)}
+      <For each={waitHistogram(wait).split("\n")}>
+        {(line) => <text fg={colors.text}>{line || " "}</text>}
+      </For>
+      <For each={shareGauge(toolShare, { label: "tool" }).split("\n")}>
+        {(line) => <text fg={colors.primary || colors.text}>{line || " "}</text>}
+      </For>
+      <For each={shareDonut(cacheHit, { label: "cache" }).split("\n")}>
+        {(line) => <text fg={colors.primary || colors.text}>{line || " "}</text>}
+      </For>
+      <DetailLine text="wait" colors={colors} muted />
+      <For each={asciiTrend(wait, { width: 60, height: 6 }).split("\n")}>
+        {(line) => <text fg={colors.warning || colors.text}>{line || " "}</text>}
+      </For>
+      <DetailLine text="tok/s" colors={colors} muted />
+      <For each={asciiTrend(rate, { width: 60, height: 6 }).split("\n")}>
+        {(line) => <text fg={colors.success}>{line || " "}</text>}
+      </For>
+      <box flexDirection="column" gap={0} paddingTop={1}>
+        <ActionRow label="Close" colors={colors} onPick={() => closeDialog(api)} />
+      </box>
+    </DialogPad>
+  ))
 }
