@@ -17,8 +17,8 @@ import {
   MY_WORK_GROUP_READY_REVIEW,
   MY_WORK_GROUP_READY_START,
 } from "../../pware.oc.core/constants/pware.oc.core.constants.myWork.js"
-import { approvalGroup } from "./pware.oc.omo.resolver.approvalGroup.js"
-import { findOmoWatchDirs } from "./pware.oc.omo.resolver.boulder.js"
+import { resolveApprovalGroup } from "./pware.oc.omo.resolver.approvalGroup.js"
+import { findOmoWatchDirs, planWorkStateByPlanName } from "./pware.oc.omo.resolver.boulder.js"
 import {
   approvalName,
   parsePlanPendingAction,
@@ -80,6 +80,7 @@ function scan(root: string): ScanResult {
   const readyStart: ApprovalItem[] = []
   const finished: ApprovalItem[] = []
   const seen = new Set<string>()
+  const workStates = planWorkStateByPlanName(root)
   for (const omoDir of findOmoWatchDirs(root)) {
     for (const sub of ["drafts", "plans"]) {
       const isDraft = sub === "drafts"
@@ -94,16 +95,19 @@ function scan(root: string): ScanResult {
         }
         const status = parsePlanStatus(text)
         if (!status) continue
-        const group = approvalGroup(status, isDraft)
+        const name = approvalName(rel)
+        const workState = workStates.get(name) ?? "absent"
+        const group = resolveApprovalGroup(status, isDraft, workState, false)
         if (!group) continue
         seen.add(rel)
         const item: ApprovalItem = {
           rel,
-          name: approvalName(rel),
+          name,
           status,
           pendingAction: parsePlanPendingAction(text),
           updatedAt: statOf(abs),
           review: parseReviewBlock(text),
+          workState,
         }
         switch (group) {
           case MY_WORK_GROUP_DRAFTING:

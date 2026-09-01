@@ -1,5 +1,6 @@
 # Changelog
 
+- **0.2.45** (2026-09-01) Reconcile My work plan grouping against boulder work and writer-session todos so an approved plan whose work finished shows as Finished instead of Ready to star.
 - **0.2.44** (2026-09-01) Replace the touched-file detail DialogPad with a native DialogSelect that offers Preview or Copy relative path, and disable approval dialog actions instead of t.
 - **0.2.43** (2026-09-01) Close the tab-status test gap by extracting the render decision into a tested tabStatusLine helper so a ready tab's null status can no longer crash the row.
 - **0.2.42** (2026-09-01) Fix the My work tab briefly showing nothing on first open by re-delivering the initial snapshot the bus dropped before its listener attached, and treat a not-ye.

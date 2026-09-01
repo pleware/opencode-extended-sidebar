@@ -89,6 +89,8 @@ describe("toApprovalItems", () => {
         updatedAt: 2_000,
         sessionState: { running: true, state: "streaming" },
         review: null,
+        workState: "absent",
+        todosDone: false,
       },
       {
         rel: "plans/other.md",
@@ -98,6 +100,8 @@ describe("toApprovalItems", () => {
         updatedAt: null,
         sessionState: { running: false, state: "idle" },
         review: null,
+        workState: "absent",
+        todosDone: false,
       },
       {
         rel: "plans/lone.md",
@@ -107,6 +111,8 @@ describe("toApprovalItems", () => {
         updatedAt: null,
         sessionState: null,
         review: null,
+        workState: "absent",
+        todosDone: false,
       },
     ])
     expect(items.map((i) => i.kind)).toEqual(["drafting", "ready-to-start", "ready-to-review"])
@@ -119,13 +125,30 @@ describe("toApprovalItems", () => {
 
   test("drops superseded plans — approved/done drafts and unknown status", () => {
     const items = toApprovalItems([
-      { rel: "drafts/a.md", name: "a", status: "approved", pendingAction: null, updatedAt: null, sessionState: null, review: null },
-      { rel: "drafts/b.md", name: "b", status: "done", pendingAction: null, updatedAt: null, sessionState: null, review: null },
-      { rel: "drafts/c.md", name: "c", status: "unknown", pendingAction: null, updatedAt: null, sessionState: null, review: null },
-      { rel: "plans/d.md", name: "d", status: "done", pendingAction: null, updatedAt: null, sessionState: null, review: null },
+      { rel: "drafts/a.md", name: "a", status: "approved", pendingAction: null, updatedAt: null, sessionState: null, review: null, workState: "absent", todosDone: false },
+      { rel: "drafts/b.md", name: "b", status: "done", pendingAction: null, updatedAt: null, sessionState: null, review: null, workState: "absent", todosDone: false },
+      { rel: "drafts/c.md", name: "c", status: "unknown", pendingAction: null, updatedAt: null, sessionState: null, review: null, workState: "absent", todosDone: false },
+      { rel: "plans/d.md", name: "d", status: "done", pendingAction: null, updatedAt: null, sessionState: null, review: null, workState: "absent", todosDone: false },
     ])
     expect(items.map((i) => i.kind)).toEqual(["finished"])
     expect(items.map((i) => ("sessionId" in i ? null : i.name))).toEqual(["d"])
+  })
+
+  test("reconciles approved plans that actually finished — boulder or writer todos", () => {
+    const items = toApprovalItems([
+      { rel: "plans/boulder.md", name: "boulder", status: "approved", pendingAction: null, updatedAt: null, sessionState: null, review: null, workState: "completed", todosDone: false },
+      { rel: "plans/todo.md", name: "todo", status: "approved", pendingAction: null, updatedAt: null, sessionState: null, review: null, workState: "absent", todosDone: true },
+      { rel: "plans/running.md", name: "running", status: "approved", pendingAction: null, updatedAt: null, sessionState: null, review: null, workState: "not-completed", todosDone: true },
+      { rel: "plans/waiting.md", name: "waiting", status: "approved", pendingAction: null, updatedAt: null, sessionState: null, review: null, workState: "absent", todosDone: false },
+    ])
+    expect(items.map((i) => i.kind)).toEqual(["finished", "finished", "ready-to-start", "ready-to-start"])
+  })
+
+  test("writer todos do not finish a pending plan", () => {
+    const items = toApprovalItems([
+      { rel: "plans/p.md", name: "p", status: "awaiting-approval", pendingAction: null, updatedAt: null, sessionState: null, review: null, workState: "absent", todosDone: true },
+    ])
+    expect(items.map((i) => i.kind)).toEqual(["ready-to-review"])
   })
 
   test("a drafting status becomes a drafting item and carries the review state", () => {
@@ -147,6 +170,8 @@ describe("toApprovalItems", () => {
             independent: { status: "pending", result: null },
           },
         },
+        workState: "absent",
+        todosDone: false,
       },
     ])
     expect(items.map((i) => i.kind)).toEqual(["drafting"])

@@ -212,7 +212,7 @@ Plugin registration: `id = "opencode-extended-sidebar"`, load toast,
 | Module | Responsibility | Key exports |
 |---|---|---|
 | `sessionStatus.ts` | session status + activity-state values | `SESSION_STATUS_*`, `SESSION_STATUSES`, `AgentStatus`, `SESSION_STATE_*`, `SESSION_STATES`, `SessionState` |
-| `questionKind.ts` | open `question` tool-part kinds | `QUESTION_KIND_*`, `QUESTION_KINDS`, `OpenQuestionKind` |
+| `questionKind.ts` | open `question` tool-part kinds | `QUESTION_KIND_*`, `QUESTION_KINDS`, `OpenQuestionKind`, `isWaitingForAnswer()`, `isInterrupted()`, `isQuestionError()` |
 | `fileTouch.ts` | file read/write touch kinds | `FILE_TOUCH_*`, `FILE_TOUCHES`, `FileTouch` |
 | `eventName.ts` | OpenCode-domain event names (`pware.oc.*`) | `EV_OC_SESSION_ACTIVITY`, `EV_OC_FLOW`, `EV_OC_TOOL_HIT`, `EV_OC_FILES_TOUCHED` |
 
@@ -220,7 +220,7 @@ Plugin registration: `id = "opencode-extended-sidebar"`, load toast,
 
 | Module | Responsibility | Key exports |
 |---|---|---|
-| `resolver/boulder.ts` | `boulder.json` → works/tasks/delegates/plan | `readOmo()`, `emptyOmo()`, `findBoulder()`, `findOmoWatchDirs()`, `isOmoPresent()`, `omoStamp()`, `currentTask()`, `workRowView()`, `workStatusLabel` |
+| `resolver/boulder.ts` | `boulder.json` → works/tasks/delegates/plan | `readOmo()`, `emptyOmo()`, `findBoulder()`, `findOmoWatchDirs()`, `isOmoPresent()`, `omoStamp()`, `currentTask()`, `workRowView()`, `workStatusLabel`, `planWorkStateByPlanName()` |
 | `resolver/plan.ts` | plan markdown frontmatter parsing | `parsePlanStatus()`, `parsePlanPendingAction()`, `parseReviewBlock()`, `approvalName()` |
 | `resolver/planFile.ts` | omo file → writer-session index (reads the OpenCode DB via `SqlDb`); one generic engine for every document kind | `planSessionIndex()`, `sessionForPlanFile()`, `PlanSessionIndex`, `omoFileIndex()`, `sessionForOmoFile()`, `OMO_FILE_KINDS`, `OmoFileKind`, `OmoFileIndex` |
 | `resolver/draftFile.ts` | draft-file → writer-session index (thin wrapper over `planFile.ts`) | `draftSessionIndex()`, `sessionForDraftFile()` |
@@ -229,7 +229,7 @@ Plugin registration: `id = "opencode-extended-sidebar"`, load toast,
 | `resolver/rulesFile.ts` | rule-file → writer-session index (thin wrapper over `planFile.ts`) | `rulesSessionIndex()`, `sessionForRuleFile()` |
 | `resolver/runContinuationFile.ts` | run-continuation file → writer-session index (thin wrapper over `planFile.ts`) | `runContinuationSessionIndex()`, `sessionForRunContinuationFile()` |
 | `resolver/approval.ts` | the four "My work" approval buckets (ready-to-review / ready-to-start / finished / drafting; TTL, lazy) | `listApprovals()`, `resetApprovalsCache()` |
-| `resolver/approvalGroup.ts` | "My work" approval grouping from OMO plan status + draft path | `approvalGroup()`, `isDraftOf()` |
+| `resolver/approvalGroup.ts` | "My work" approval grouping from OMO plan status + draft path, reconciled against boulder + writer todos | `approvalGroup()`, `isDraftOf()`, `resolveApprovalGroup()`, `planWorkDone()`, `isDrafting()`, `isReadyToReview()`, `isReadyToStart()`, `isFinished()` |
 | `resolver/approvalState.ts` | `.omo/run-continuation` background-task marker | `readRunContinuationState()`, `firstRunContinuationDir()` |
 | `resolver/doc.ts` | docs index: plan/drafts/notepads/proof | `readOmoDocs()`, `groupDocs()`, `resetDocsCache()`, `DOC_KIND_LABEL` |
 | `resolver/config.ts` | `oh-my-openagent.json` team mode | `readOmoConfig()` |
@@ -239,7 +239,7 @@ Plugin registration: `id = "opencode-extended-sidebar"`, load toast,
 
 | Module | Responsibility | Key exports |
 |---|---|---|
-| `planStatus.ts` | plan frontmatter `status:` values: the pending sign-off set plus the plan lifecycle `drafting → awaiting-approval → approved → done` | `PLAN_PENDING_STATUSES`, `PlanPendingStatus`, `PLAN_STATUS_DRAFTING`, `PLAN_STATUS_APPROVED`, `PLAN_STATUS_DONE` (+ per-value consts) |
+| `planStatus.ts` | plan frontmatter `status:` values: the pending sign-off set plus the plan lifecycle `drafting → awaiting-approval → approved → done` | `PLAN_PENDING_STATUSES`, `PlanPendingStatus`, `PLAN_STATUS_DRAFTING`, `PLAN_STATUS_APPROVED`, `PLAN_STATUS_DONE` (+ per-value consts), `WorkState` |
 | `boulderStatus.ts` | raw boulder.json work/task status values | `BOULDER_STATUSES`, `BoulderStatus` (+ per-value consts) |
 | `backgroundTask.ts` | `.omo/run-continuation` background-task state values | `BACKGROUND_TASK_STATES`, `BackgroundTaskState` |
 | `reviewStatus.ts` | `ulw-plan` review-lifecycle status values | `REVIEW_STATUSES`, `TERMINAL_REVIEW_STATUSES`, `ReviewStatus`, `ROUND_STATUS_ACTIVE` (+ per-value consts) |

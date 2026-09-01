@@ -10,15 +10,23 @@ import path from "node:path"
 import { canonicalizePath, fileStamp, resolveProjectFile } from "../../pware.oc.core/pware.oc.core.paths.js"
 import { profile } from "../../pware.oc.core/pware.oc.core.debug.js"
 import { composeMark, formatAge, pulseAgeMs, toEpochMs, type AgentMark } from "../../pware.oc.core/pware.oc.core.pulse.js"
-import { taskRank, toWorkLabel, workIsTerminal, workStatusGlyph } from "../../pware.oc.core/pware.oc.core.status.js"
+import {
+  normalizeStatus,
+  taskRank,
+  toWorkLabel,
+  workIsTerminal,
+  workStatusGlyph,
+} from "../../pware.oc.core/pware.oc.core.status.js"
 import {
   MARK_READY,
 } from "../../pware.oc.core/constants/pware.oc.core.constants.pulse.js"
 import {
+  STATUS_COMPLETED,
   STATUS_ERROR,
   STATUS_UNKNOWN,
 } from "../../pware.oc.core/constants/pware.oc.core.constants.status.js"
 import { BOULDER_STATUS_PENDING, BOULDER_STATUS_RUNNING } from "../constants/pware.oc.omo.constants.boulderStatus.js"
+import type { WorkState } from "../constants/pware.oc.omo.constants.planStatus.js"
 
 export { workIsTerminal }
 export { toWorkLabel as workStatusLabel }
@@ -414,6 +422,23 @@ export function emptyOmo(): OmoSnapshot {
 export function readOmo(projectRoot: string | null | undefined): OmoSnapshot {
   if (!projectRoot) return emptyOmo()
   return profile("omo.read", () => readOmoInner(projectRoot))
+}
+
+/**
+ * Plan name → the latest boulder work's completion state, for the My-work
+ * reconciliation. Works are sorted newest-first, so the first entry per name
+ * wins — a completed plan re-run and still running stays `not-completed`.
+ */
+export function planWorkStateByPlanName(
+  projectRoot: string | null | undefined,
+): Map<string, WorkState> {
+  const out = new Map<string, WorkState>()
+  if (!projectRoot) return out
+  for (const w of readOmo(projectRoot).works) {
+    if (!w.name || out.has(w.name)) continue
+    out.set(w.name, normalizeStatus(w.status) === STATUS_COMPLETED ? "completed" : "not-completed")
+  }
+  return out
 }
 
 function readOmoInner(projectRoot: string): OmoSnapshot {

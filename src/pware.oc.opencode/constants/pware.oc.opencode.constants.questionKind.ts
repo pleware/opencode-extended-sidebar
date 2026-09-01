@@ -28,3 +28,18 @@ export const QUESTION_KINDS = [
 
 /** An open-question kind. */
 export type OpenQuestionKind = (typeof QUESTION_KINDS)[number]
+
+/** True when the open question is live and awaiting an answer. */
+export function isWaitingForAnswer(kind: OpenQuestionKind | null): boolean {
+  return kind === QUESTION_KIND_QUESTION
+}
+
+/** True when the question was aborted and the answer never came. */
+export function isInterrupted(kind: OpenQuestionKind | null): boolean {
+  return kind === QUESTION_KIND_INTERRUPTED
+}
+
+/** True when the question tool genuinely failed. */
+export function isQuestionError(kind: OpenQuestionKind | null): boolean {
+  return kind === QUESTION_KIND_ERROR
+}

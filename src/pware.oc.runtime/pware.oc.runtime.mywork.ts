@@ -20,7 +20,7 @@ import {
   MY_WORK_GROUP_RUNNING,
   type ApprovalGroupKind,
 } from "../pware.oc.core/constants/pware.oc.core.constants.myWork.js"
-import { approvalGroup, isDraftOf } from "../pware.oc.omo/resolver/pware.oc.omo.resolver.approvalGroup.js"
+import { isDraftOf, resolveApprovalGroup } from "../pware.oc.omo/resolver/pware.oc.omo.resolver.approvalGroup.js"
 import {
   QUESTION_KIND_ERROR,
   QUESTION_KIND_INTERRUPTED,
@@ -138,7 +138,7 @@ export function toQuestionItems(questions: readonly OpenQuestion[]): MyWorkItem[
 export function toApprovalItems(approvals: readonly EnrichedApproval[]): MyWorkItem[] {
   const out: MyWorkItem[] = []
   for (const a of approvals) {
-    const kind = approvalGroup(a.status, isDraftOf(a.rel))
+    const kind = resolveApprovalGroup(a.status, isDraftOf(a.rel), a.workState, a.todosDone)
     if (!kind) continue
     out.push({
       kind,

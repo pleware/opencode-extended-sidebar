@@ -38,3 +38,11 @@ export const PLAN_PENDING_STATUSES = [
 
 /** A plan `status:` value that counts as pending user approval. */
 export type PlanPendingStatus = (typeof PLAN_PENDING_STATUSES)[number]
+
+/**
+ * How the plan's boulder work relates to "finished", for the My-work
+ * reconciliation. `completed` = a boulder work for this plan finished;
+ * `not-completed` = a work exists but did not finish (running / error / paused /
+ * abandoned); `absent` = no boulder work for this plan (or no boulder.json).
+ */
+export type WorkState = "completed" | "not-completed" | "absent"

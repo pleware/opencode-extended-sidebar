@@ -74,6 +74,8 @@ function fixture(opts: {
     updatedAt: null,
     sessionState: null,
     review: null,
+    workState: "absent",
+    todosDone: false,
   }
   held.push({ proj, db })
   return { proj, db, approval }

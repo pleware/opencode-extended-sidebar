@@ -102,4 +102,27 @@ describe("listApprovals", () => {
     expect(review?.lanes.independent.status).toBe("approved")
     expect(review?.lanes.independent.result).toBe("pass")
   })
+
+  test("an approved plan whose boulder work completed is bucketed as finished", () => {
+    const proj = createFixtureProject({
+      files: { ".omo/plans/perf.md": "---\nstatus: approved\n---" },
+      boulder: {
+        active_work_id: "work_a",
+        works: {
+          work_a: { plan_name: "perf", status: "completed", updated_at: 1_000 },
+        },
+      },
+    })
+    held.push(proj)
+    const out = listApprovals(proj.root)
+    expect(out.finished.map((a) => a.name)).toEqual(["perf"])
+    expect(out.readyStart).toEqual([])
+  })
+
+  test("an approved plan with no boulder work stays ready-to-start", () => {
+    const root = project({ ".omo/plans/perf.md": "---\nstatus: approved\n---" })
+    const out = listApprovals(root)
+    expect(out.readyStart.map((a) => a.name)).toEqual(["perf"])
+    expect(out.finished).toEqual([])
+  })
 })

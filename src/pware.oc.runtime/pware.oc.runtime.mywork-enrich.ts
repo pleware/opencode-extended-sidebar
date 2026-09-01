@@ -14,8 +14,9 @@ import {
   sessionActivityState,
   type SessionActivityState,
 } from "../pware.oc.opencode/resolver/pware.oc.opencode.resolver.session.js"
+import { listTodos } from "../pware.oc.opencode/resolver/pware.oc.opencode.resolver.todo.js"
 import { planSessionIndex } from "../pware.oc.omo/resolver/index.js"
-import { openReadonlyDb, withDbRead } from "../pware.oc.core/pware.oc.core.sqlite.js"
+import { openReadonlyDb, withDbRead, type SqlDb } from "../pware.oc.core/pware.oc.core.sqlite.js"
 import { profile } from "../pware.oc.core/pware.oc.core.debug.js"
 import { basenameOf } from "../pware.oc.core/pware.oc.core.paths.js"
 import { readRunContinuationState } from "../pware.oc.omo/resolver/pware.oc.omo.resolver.approvalState.js"
@@ -35,7 +36,11 @@ import type { ApprovalItem } from "../pware.oc.omo/resolver/pware.oc.omo.resolve
  * is a runtime enrichment: it lives here on the runtime layer's enriched type,
  * not on omo's base `ApprovalItem` (omo must not import the opencode session type).
  */
-export type EnrichedApproval = ApprovalItem & { sessionState: SessionActivityState | null }
+export type EnrichedApproval = ApprovalItem & {
+  sessionState: SessionActivityState | null
+  /** Writer session's todos all completed (and at least one present). */
+  todosDone: boolean
+}
 
 const STATE_LABELS: Record<SessionState, string> = {
   [SESSION_STATE_STREAMING]: "working",
@@ -51,7 +56,12 @@ export function planSessionStateLabel(state: SessionActivityState | null): strin
 }
 
 function blank(items: readonly ApprovalItem[]): EnrichedApproval[] {
-  return items.map((item) => ({ ...item, sessionState: null }))
+  return items.map((item) => ({ ...item, sessionState: null, todosDone: false }))
+}
+
+function sessionTodosDone(db: SqlDb, sessionId: string): boolean {
+  const todos = listTodos(db, sessionId)
+  return todos.length > 0 && todos.every((t) => t.status === "completed")
 }
 
 export function enrichApprovalSessionStates(
@@ -79,7 +89,8 @@ export function enrichApprovalSessionStates(
                 now: opts.now,
               })
             : null
-          return { ...item, sessionState }
+          const todosDone = sessionId ? sessionTodosDone(db, sessionId) : false
+          return { ...item, sessionState, todosDone }
         })
       },
       () => blank(items),

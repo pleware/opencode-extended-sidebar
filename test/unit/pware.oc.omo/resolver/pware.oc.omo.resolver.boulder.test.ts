@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test"
 import {
   currentTask,
   isOmoPresent,
+  planWorkStateByPlanName,
   readOmo,
   workIsTerminal,
   workRowView,
@@ -267,5 +268,43 @@ describe("workRowView", () => {
     expect(live.mark).toBe("live")
     expect(live.glyph).toBeNull()
     expect(live.suffix).toBe("0s")
+  })
+})
+
+describe("planWorkStateByPlanName", () => {
+  test("a completed work maps to completed", () => {
+    const root = fixture({
+      works: { work_a: { plan_name: "refactor-auth", status: "completed", updated_at: 1_000 } },
+    })
+    expect(planWorkStateByPlanName(root).get("refactor-auth")).toBe("completed")
+  })
+
+  test("a running or errored work maps to not-completed", () => {
+    const root = fixture({
+      works: {
+        run: { plan_name: "a", status: "active", updated_at: 1_000 },
+        err: { plan_name: "b", status: "error", updated_at: 1_000 },
+      },
+    })
+    const map = planWorkStateByPlanName(root)
+    expect(map.get("a")).toBe("not-completed")
+    expect(map.get("b")).toBe("not-completed")
+  })
+
+  test("the newest work wins on a re-run — completed then re-run stays not-completed", () => {
+    const root = fixture({
+      active_work_id: "work_2",
+      works: {
+        work_1: { plan_name: "refactor-auth", status: "completed", updated_at: 1_000 },
+        work_2: { plan_name: "refactor-auth", status: "active", updated_at: 2_000 },
+      },
+    })
+    expect(planWorkStateByPlanName(root).get("refactor-auth")).toBe("not-completed")
+  })
+
+  test("no boulder yields an empty map", () => {
+    const proj = createFixtureProject()
+    held.push(proj)
+    expect(planWorkStateByPlanName(proj.root).size).toBe(0)
   })
 })
