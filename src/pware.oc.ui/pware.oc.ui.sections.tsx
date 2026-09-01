@@ -20,7 +20,7 @@ import {
   kvWrite,
   type ThemeColors,
 } from "./pware.oc.ui.chrome.js"
-import { flowBlinkOn, markGlyph } from "./pware.oc.ui.glyphs.js"
+import { flowBlinkOn, rowGlyphs } from "./pware.oc.ui.glyphs.js"
 import { profile } from "../pware.oc.core/pware.oc.core.debug.js"
 import { moreRevealVisible, sliceShown } from "../pware.oc.core/pware.oc.core.layout.js"
 import {
@@ -160,6 +160,8 @@ export type RowData = {
   diff?: { additions: number; deletions: number }
   current?: boolean
   flow?: FlowDir | null
+  /** Reserve the direction column so busy and idle rows align. */
+  dirSlot?: boolean
   /** Queued work — rendered in warning colour with a clock glyph, not the idle dot. */
   waiting?: boolean
   onSelect?: () => void
@@ -209,6 +211,11 @@ export function AgentLine(props: RowData & {
   const directional = () =>
     props.flow === FLOW_RECV || props.flow === FLOW_WAIT || props.flow === FLOW_TOOL
   const lit = () => !directional() || flowBlinkOn(props.frame?.() ?? 0)
+  const glyphs = () => rowGlyphs(props.mark, props.frame?.() ?? 0, props.flow)
+  const stateFg = () =>
+    markColor(props.mark, props.colors, props.current, null, props.waiting)
+  const dirFg = () =>
+    props.flow ? flowColor(props.flow, props.colors) : props.colors.textMuted
   const glyphFg = () =>
     lit()
       ? markColor(props.mark, props.colors, props.current, props.flow, props.waiting)
@@ -245,7 +252,10 @@ export function AgentLine(props: RowData & {
   }
   return profile("row", () => (
     <box flexDirection="row" onMouseUp={props.onSelect}>
-      <text fg={glyphFg()}>{`${props.glyph ?? markGlyph(props.mark, props.frame?.() ?? 0, props.flow)} `}</text>
+      <text fg={stateFg()}>{`${props.glyph ?? glyphs().state} `}</text>
+      <Show when={props.dirSlot}>
+        <text fg={dirFg()}>{`${glyphs().dir ?? " "} `}</text>
+      </Show>
       <Show when={props.glyph2}>
         <text fg={glyphFg()}>{`${props.glyph2} `}</text>
       </Show>

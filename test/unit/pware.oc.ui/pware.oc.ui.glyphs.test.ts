@@ -1,12 +1,15 @@
 import { describe, expect, test } from "bun:test"
 import {
+  dirFrame,
   fileLetterMark,
   flowBlinkOn,
   flowGlyph,
+  FLOW_DIRECTION,
   markGlyph,
   myWorkGlyph,
   reviewLaneGlyph,
   reviewStateSuffix,
+  rowGlyphs,
   spinnerFrame,
   workStatusGlyph,
 } from "../../../src/pware.oc.ui/pware.oc.ui.glyphs.js"
@@ -65,18 +68,44 @@ describe("markGlyph", () => {
     expect(markGlyph("queued")).toBe("◷")
   })
 
-  test("flow wins while lit; live / stale spin", () => {
-    expect(markGlyph("live", 0, "wait")).toBe("↑")
-    expect(markGlyph("live", 0, "recv")).toBe("↓")
-    expect(markGlyph("live", 0, "tool")).toBe("→")
+  test("live / stale spin the braille spinner", () => {
     expect(markGlyph("live", 0)).toBe("⠋")
     expect(markGlyph("stale", 1)).toBe("⠙")
+  })
+})
+
+describe("dirFrame", () => {
+  test("each direction sweeps a single dot along its own axis and wraps negatives", () => {
+    expect(dirFrame("wait", 0)).toBe("⡀")
+    expect(dirFrame("wait", 1)).toBe("⠄")
+    expect(dirFrame("wait", 4)).toBe("⡀") // wraps the 4-frame set
+    expect(dirFrame("recv", 0)).toBe("⠰")
+    expect(dirFrame("tool", 0)).toBe("⠄")
+    expect(dirFrame("tool", -1)).toBe("⠰") // wraps negatives
+  })
+
+  test("flow direction mapping: wait up, recv left, tool right", () => {
+    expect(FLOW_DIRECTION.wait).toBe("up")
+    expect(FLOW_DIRECTION.recv).toBe("left")
+    expect(FLOW_DIRECTION.tool).toBe("right")
+  })
+})
+
+describe("rowGlyphs", () => {
+  test("splits state and direction into two cells", () => {
+    expect(rowGlyphs("live", 0, "wait")).toEqual({ state: "⠋", dir: dirFrame("wait", 0) })
+    expect(rowGlyphs("live", 0, "recv")).toEqual({ state: "⠋", dir: dirFrame("recv", 0) })
+    expect(rowGlyphs("live", 0, "tool")).toEqual({ state: "⠋", dir: dirFrame("tool", 0) })
+    expect(rowGlyphs("ready", 0, null)).toEqual({ state: "•", dir: null })
+    expect(rowGlyphs("queued", 5, "wait")).toEqual({ state: "◷", dir: dirFrame("wait", 5) })
+    expect(rowGlyphs("error", 0, undefined)).toEqual({ state: "×", dir: null })
   })
 })
 
 describe("myWorkGlyph", () => {
   test("questions use ?, approvals the review/start/finished/draft glyphs — plain ASCII", () => {
     expect(myWorkGlyph("question")).toBe("?")
+    expect(myWorkGlyph("running")).toBe("◔")
     expect(myWorkGlyph("drafting")).toBe("…")
     expect(myWorkGlyph("ready-to-review")).toBe("!")
     expect(myWorkGlyph("ready-to-start")).toBe("▶")

@@ -30,7 +30,7 @@ OpenCode gives you one conversation at a time. Real work looks different: an orc
 
 ## ⊚ Live activity pulse
 
-> A braille spinner for work in progress, a dot for idle, and a glyph for what is happening now: **↑** waiting on the model, **↓** receiving tokens, **→** a tool in flight. Colours come from your OpenCode theme.
+> Two glyphs per live row: a **state** glyph first — the braille spinner while working, `•` idle, `◷` queued, `×` failed — then a **direction** flow while one is active: a single braille dot sweeping in the direction of the work — right while a tool call is in flight, left while tokens stream in, up while waiting on the model — coloured by what is happening: green receiving tokens, yellow waiting on the model, accent a tool in flight. Idle rows keep the slot blank so the list stays aligned. Colours come from your OpenCode theme.
 
 ## ≡ Tool Calls feed that names things
 
@@ -48,7 +48,7 @@ OpenCode gives you one conversation at a time. Real work looks different: an orc
 
 ## ? My work — what is waiting on you
 
-> One queue of things that need **your** action, shown first in the core group. Open `question` tools anywhere in the project appear as rows — click to jump to the session and answer. Three states: `?` **Awaiting answer** (the agent is live and waiting), `◷` **Interrupted** (the question was aborted — answer never came, the reason shows on the row, still your call), and `×` **Errors** (the question tool genuinely failed — collapsed by default, expand for the error text). OMO plans and drafts appear in four foldable groups by the action they need from you. Click a group header to fold it to its count line, and a trimmed group ends in a clickable `… +N more`: `Ready to review` (`!`, plans genuinely waiting for your sign-off), `Ready to start` (`▶`, approved plans you can launch), `Finished` (`✓`, done plans) and `Drafting` (`…` rows, drafts still being written, click to preview). Click a plan row for a native, searchable picker: **Navigate to session** jumps to the session that wrote the plan (a muted reason is shown when no session is found), **Docs** opens the draft as a preview, and the **Plan options** group holds **Approve** — sending `ok` to that same session — plus **start work** rows (`start work`, `start work --make-pr`, `start work --ship`) that launch the OMO plan in the current session. Session activity is a row suffix, not a group: `working` (streaming), `waiting` (awaiting a background task), `idle`, `archived` or `unknown`. Review-required plans add the ulw-plan review state `R<round> <momus><independent>`, with per-lane glyphs `✓` approved, `!` changes requested, `?` inconclusive, `…` review live, `·` waiting. When `.omo/` is absent the approval section is simply gone; the question queue works on OpenCode alone.
+> One queue of things that need **your** action, shown first in the core group. Open `question` tools anywhere in the project appear as rows — click to jump to the session and answer. Three states: `?` **Awaiting answer** (the agent is live and waiting), `◷` **Interrupted** (the question was aborted — answer never came, the reason shows on the row, still your call), and `×` **Errors** (the question tool genuinely failed — collapsed by default, expand for the error text). Then a **Running** group (`◔`) — your recent sessions still working or idle, each showing the title and its live status label on a two-glyph row, click to jump straight back in. OMO plans and drafts appear in four foldable groups by the action they need from you. Click a group header to fold it to its count line, and a trimmed group ends in a clickable `… +N more`: `Ready to review` (`!`, plans genuinely waiting for your sign-off), `Ready to start` (`▶`, approved plans you can launch), `Finished` (`✓`, done plans) and `Drafting` (`…` rows, drafts still being written, click to preview). Click a plan row for a native, searchable picker: **Navigate to session** jumps to the session that wrote the plan (a muted reason is shown when no session is found), **Docs** opens the draft as a preview, and the **Plan options** group holds **Approve** — sending `ok` to that same session — plus **start work** rows (`start work`, `start work --make-pr`, `start work --ship`) that launch the OMO plan in the current session. Session activity is a row suffix, not a group: `working` (streaming), `waiting` (awaiting a background task), `idle`, `archived` or `unknown`. Review-required plans add the ulw-plan review state `R<round> <momus><independent>`, with per-lane glyphs `✓` approved, `!` changes requested, `?` inconclusive, `…` review live, `·` waiting. When `.omo/` is absent the approval section is simply gone; the question queue works on OpenCode alone.
 
 ## ▤ OMO works, boulder and docs
 
@@ -69,11 +69,11 @@ OpenCode gives you one conversation at a time. Real work looks different: an orc
 ## ▣ Two groups, seven views
 
 > ```
-> Session | My work | Summary | Stats
+> Session | My work | Details | Stats
 > OMO | Works | Boulder | Docs
 > ```
 >
-> **Session** is this agent, its delegates, tools and files. **My work** is the queue of things waiting on you — open questions and OMO plan approvals grouped by the action they need. **Summary** is the project-wide view — recent sessions (Chat history) plus the tools and files every one of them touched. **Stats** is timing. Tabs and folds are remembered. Clickable labels underline on hover.
+> **Session** is this agent, its delegates, tools and files. **My work** is the queue of things waiting on you — open questions and OMO plan approvals grouped by the action they need. **Details** is the project-wide view — recent sessions (Chat history) plus the tools and files every one of them touched. **Stats** is timing. Tabs and folds are remembered. Clickable labels underline on hover.
 
 ## ⇕ Rows that fit the window
 
@@ -96,15 +96,15 @@ The glyph says *what* is happening; the colour says *how fresh* it is. Both come
 | Glyph                           | Meaning                                                       |
 | ------------------------------- | ------------------------------------------------------------- |
 | `⠋ ⠙ ⠹ ⠸ ⠼ …`                   | working — the same braille spinner OpenCode uses for thinking |
-| `↑`                             | waiting for the model                                         |
-| `↓`                             | tokens streaming in                                          |
-| `→`                             | a tool call in flight                                          |
+| `⠄⡀⢀⠰`                        | right flow — the dot slides right (a tool call in flight)   |
+| `⠰⢀⡀⠄`                        | left flow — the dot slides left (tokens streaming in)       |
+| `⡀⠄⠂⠁`                        | up flow — the dot rises (waiting on the model)               |
 | `•`                             | idle — finished or archived                                  |
 | `◷`                             | queued — waiting for a concurrency slot                       |
 | `▾`                             | group header (`▼` is the section fold)                       |
 | `×`                             | failed                                                        |
 | `✓` `◷` `║` `⊘` `○`             | Works: done / waiting / paused / abandoned / unknown        |
-| `?` `◷` `×` `!` `…` `▶` `✓` | My work: awaiting an answer / interrupted / errors / ready to review / drafting / ready to start / finished |
+| `?` `◷` `×` `◔` `!` `…` `▶` `✓` | My work: awaiting an answer / interrupted / errors / running / ready to review / drafting / ready to start / finished |
 | `✓` `!` `?` `·`                 | Review lanes: approved / changes requested / inconclusive / waiting |
 | `M` `A` `D` `R` `C` `U` `T` `?` | Files: git status — same letters as `git status --short`      |
 | `V`                             | Files: viewed (session read only)                             |
@@ -112,7 +112,7 @@ The glyph says *what* is happening; the colour says *how fresh* it is. Both come
 | `█░`                            | Perf: share of the wall clock                                  |
 | `▁▂▃▄▅▆▇█`                      | Perf: sparkline over recent turns                               |
 
-Arrows blink about twice per second — only the glyph, not the text. They expire on their own (`↓` ~2 s, `↑` 15 s, `→` 30 s) unless the session is still busy. A failed or finished row shows `×` or `•`, never a direction. A queued delegate shows `◷` in warning yellow — it is waiting for a slot, not done.
+The direction flow animates on every tick while a direction is active and expires on its own — it stops after ~2 s receiving tokens, ~15 s waiting on the model, ~30 s after a tool call — unless the session is still busy. The state glyph shows `×` on a failed row and `•` on a finished one; the direction slot shows the flow only while it is active, staying blank otherwise so every row aligns. A queued delegate shows `◷` in warning yellow — it is waiting for a slot, not done.
 
 **Colours**
 

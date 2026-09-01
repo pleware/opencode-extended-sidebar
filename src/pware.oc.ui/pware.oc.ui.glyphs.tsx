@@ -2,7 +2,7 @@
  * pware.oc.ui.glyphs
  *
  * Every status → character mapping in one module: work status, agent marks,
- * flow arrows, the braille spinner, My work and git letters. The panel renders
+ * direction flows, the braille spinner, My work and git letters. The panel renders
  * these; nothing else decides what a state looks like.
  */
 import type { FileLetter } from "../pware.oc.opencode/pware.oc.opencode.files.js"
@@ -40,6 +40,7 @@ import {
   MY_WORK_GROUP_FINISHED,
   MY_WORK_GROUP_READY_REVIEW,
   MY_WORK_GROUP_READY_START,
+  MY_WORK_GROUP_RUNNING,
 } from "../pware.oc.core/constants/pware.oc.core.constants.myWork.js"
 import {
   QUESTION_KIND_ERROR,
@@ -59,6 +60,34 @@ export function spinnerFrame(frame: number): string {
   return SPINNER_FRAMES[i] ?? "⠋"
 }
 
+/** Compass direction a flow animation sweeps. */
+export type FlowDirection = "up" | "down" | "left" | "right"
+
+/**
+ * One single braille dot sweeping along an axis — one entry per direction, so a
+ * new direction is one new key. The raw braille frames move the dot right
+ * (`⠄⡀⢀⠰`), left (`⠰⢀⡀⠄`), up (`⡀⠄⠂⠁`) or down (`⠁⠂⠄⡀`).
+ */
+export const DIR_FLOW_FRAMES: Record<FlowDirection, readonly string[]> = {
+  up: ["⡀", "⠄", "⠂", "⠁"],
+  down: ["⠁", "⠂", "⠄", "⡀"],
+  left: ["⠰", "⢀", "⡀", "⠄"],
+  right: ["⠄", "⡀", "⢀", "⠰"],
+}
+
+/** Flow → the direction its animation sweeps. */
+export const FLOW_DIRECTION: Record<FlowDir, FlowDirection> = {
+  [FLOW_WAIT]: "up",
+  [FLOW_RECV]: "left",
+  [FLOW_TOOL]: "right",
+}
+
+export function dirFrame(flow: FlowDir, frame: number): string {
+  const frames = DIR_FLOW_FRAMES[FLOW_DIRECTION[flow]]
+  const i = ((frame % frames.length) + frames.length) % frames.length
+  return frames[i] ?? "⠁"
+}
+
 /** ↑/↓ blink half-period in ticks (TICK_MS × BLINK_TICKS ≈ 600ms). */
 export function flowBlinkOn(frame: number): boolean {
   return Math.floor(Math.abs(frame) / BLINK_TICKS) % 2 === 0
@@ -70,14 +99,26 @@ export function flowGlyph(dir: FlowDir): string {
   return "→"
 }
 
-export function markGlyph(mark: AgentMark, frame = 0, flow?: FlowDir | null): string {
+export function markGlyph(mark: AgentMark, frame = 0): string {
   if (mark === STATUS_ERROR) return "×"
   if (mark === MARK_READY || mark === STATUS_ARCHIVED) return "•"
   // Queued means waiting for a slot — the clock, not an idle dot.
   if (mark === MARK_QUEUED) return "◷"
-  if (flow === FLOW_RECV || flow === FLOW_WAIT || flow === FLOW_TOOL) return flowGlyph(flow)
   if (mark === PULSE_LIVE || mark === PULSE_STALE) return spinnerFrame(frame)
   return "•"
+}
+
+/**
+ * The two glyphs of a live row split into two cells: the state glyph (spinner,
+ * dot, clock, cross) and the direction flow when a flow is active. Splitting
+ * them lets every row reserve the direction column so busy and idle rows align.
+ */
+export function rowGlyphs(
+  mark: AgentMark,
+  frame: number,
+  flow?: FlowDir | null,
+): { state: string; dir: string | null } {
+  return { state: markGlyph(mark, frame), dir: flow ? dirFrame(flow, frame) : null }
 }
 
 export function workStatusGlyph(status: string): string | null {
@@ -96,6 +137,7 @@ export function myWorkGlyph(kind: MyWorkKind): string {
   if (kind === QUESTION_KIND_QUESTION) return "?"
   if (kind === QUESTION_KIND_INTERRUPTED) return "◷"
   if (kind === QUESTION_KIND_ERROR) return "×"
+  if (kind === MY_WORK_GROUP_RUNNING) return "◔"
   if (kind === MY_WORK_GROUP_READY_REVIEW) return "!"
   if (kind === MY_WORK_GROUP_DRAFTING) return "…"
   if (kind === MY_WORK_GROUP_READY_START) return "▶"

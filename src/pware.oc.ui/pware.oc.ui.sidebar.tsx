@@ -3,12 +3,12 @@ import { createEffect, createMemo, createSignal, For, on, Show, onCleanup, type 
 import { useTerminalDimensions } from "@opentui/solid"
 import type { TuiKeymap, TuiPluginApi, TuiTheme } from "@opencode-ai/plugin/tui"
 import {
-  approvalName,
   currentTask,
   emptyOmo,
   groupDocs,
   listApprovals,
   readOmoDocs,
+  sessionForPlanFile,
   workRowView,
   workStatusLabel,
 } from "../pware.oc.omo/resolver/index.js"
@@ -25,6 +25,7 @@ import {
   startWorkCommand,
   toApprovalItems,
   toQuestionItems,
+  toRunningItems,
   type MyWorkItem,
   type MyWorkKind,
   type StartWorkMode,
@@ -34,9 +35,7 @@ import {
   emptyProjectFeed,
   listOpenQuestions,
   mergeTools,
-  planSessionIndex,
   readProjectFeed,
-  sessionForPlanFile,
   type ProjectFeed,
 } from "../pware.oc.opencode/resolver/index.js"
 import {
@@ -86,6 +85,7 @@ import {
   MY_WORK_GROUP_FINISHED,
   MY_WORK_GROUP_READY_REVIEW,
   MY_WORK_GROUP_READY_START,
+  MY_WORK_GROUP_RUNNING,
 } from "../pware.oc.core/constants/pware.oc.core.constants.myWork.js"
 import {
   DOC_KIND_DRAFT,
@@ -131,7 +131,7 @@ import {
 } from "../pware.oc.opencode/pware.oc.opencode.files.js"
 import { onGitMarksChange } from "../pware.oc.core/git/pware.oc.core.git.js"
 import { getOes } from "../pware.oc.core/pware.oc.core.oes.js"
-import { isPendingWork } from "../pware.oc.core/pware.oc.core.status.js"
+import { isPendingWork, sessionStatusLabel } from "../pware.oc.core/pware.oc.core.status.js"
 import { startMonitor } from "../pware.oc.runtime/pware.oc.runtime.monitor.js"
 import { openApprovalDialog, openDocDetail, openFileDetail, openToolDetail, openWorkDetail } from "./pware.oc.ui.menudialogs.js"
 import { eventType, shouldRefreshDb } from "../pware.oc.core/pware.oc.core.events.js"
@@ -264,7 +264,7 @@ type OmoTab = (typeof OMO_TABS)[number]
 
 const TAB_LABELS: Record<string, string> = {
   mywork: "My work",
-  sessions: "Summary",
+  sessions: "Details",
   current: "Session",
   perf: "Stats",
   works: "Works",
@@ -692,31 +692,6 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
 
   const omoPresent = createMemo(() => snap().omo.present)
 
-  /**
-   * Plan-file index for the "last plan" suffix. Built once per part change
-   * (stamp-cached inside `planSessionIndex`); the memo only guards the DB
-   * open + query on the render path. `sessionPlan` maps a session to its
-   * latest `.omo/` plan/draft file.
-   */
-  const planIndex = createMemo(() => {
-    const db = snap().db.present ? openReadonlyDb(snap().db.dbPath) : null
-    if (!db) return null
-    try {
-      return planSessionIndex(db, snap().db.projectId, projectDir())
-    } catch {
-      return null
-    }
-  })
-
-  /** `last plan: <slug>` for a session that wrote a plan; undefined otherwise. */
-  const lastPlanSuffix = (sessionId: string | null | undefined): string | undefined => {
-    const idx = planIndex()
-    if (!idx || !sessionId) return undefined
-    const plan = idx.sessionPlan.get(sessionId)
-    if (!plan) return undefined
-    return `last plan: ${approvalName(plan.rel)}`
-  }
-
   /** Open `question` tools anywhere in this project — the "answer me" queue. */
   const myWorkQuestions = createMemo<MyWorkItem[]>(() => {
     if (tab() !== "mywork") return []
@@ -756,8 +731,15 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     }
   })
 
+  /** Recent main sessions still running or idle — the "Running" group. */
+  const myWorkRunning = createMemo<MyWorkItem[]>(() => {
+    if (tab() !== "mywork") return []
+    return toRunningItems(snap().db.recent)
+  })
+
   const myWorkItems = createMemo<MyWorkItem[]>(() => [
     ...myWorkQuestions(),
+    ...myWorkRunning(),
     ...myWorkApprovals(),
   ])
 
@@ -966,6 +948,24 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   }
 
   const myWorkRow = (item: MyWorkItem): RowData => {
+    if (item.kind === MY_WORK_GROUP_RUNNING) {
+      const isBusy = Boolean(item.sessionId && busy()[item.sessionId])
+      return {
+        kind: ROW_KIND_AGENT,
+        mark: rowMark(
+          item.status,
+          false,
+          isBusy,
+          item.timeUpdated,
+          item.sessionId ? seen()[item.sessionId] : null,
+        ),
+        dirSlot: true,
+        flow: rowFlow(item.sessionId, isBusy),
+        name: item.title,
+        suffix: sessionStatusLabel(item.status),
+        onSelect: () => selectSession(props.api, item.sessionId),
+      }
+    }
     if ("sessionId" in item) {
       const age = pulseAgeMs(now(), item.startedAt)
       const reason = item.reason ? ` · ${item.reason}` : ""
@@ -1148,6 +1148,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
         title: item.grouped ? undefined : d.title,
         current: Boolean(d.sessionId && d.sessionId === props.sessionId),
         flow: dir,
+        dirSlot: true,
         onSelect: () => selectSession(props.api, d.sessionId),
       })
     }
@@ -1245,9 +1246,9 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
                     name={snap().db.main!.agent}
                     tokens={snap().db.main!.tokensTotal}
                     cost={snap().db.main!.cost}
-                    suffix={lastPlanSuffix(snap().db.main?.id)}
                     current={snap().db.main!.id === props.sessionId}
                     flow={mainFlow()}
+                    dirSlot
                     onSelect={() => selectSession(props.api, snap().db.main?.id)}
                   />
                 ) : (
@@ -1288,13 +1289,9 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
                     kind={ROW_KIND_AGENT}
                     mark={mark}
                     name={s.title}
-                    suffix={
-                      [formatAge(pulseAgeMs(now(), s.timeUpdated, seen()[s.id])), lastPlanSuffix(s.id)]
-                        .filter(Boolean)
-                        .join(" · ") || undefined
-                    }
                     current={s.id === props.sessionId}
                     flow={dir}
+                    dirSlot
                     onSelect={() => selectSession(props.api, s.id)}
                   />
                 )
@@ -1324,6 +1321,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
                     name={t.name}
                     suffix={dur}
                     flow={dir}
+                    dirSlot
                     onSelect={() => openToolDetail(props.api, t, colors())}
                   />
                 )
@@ -1389,9 +1387,9 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
                     name={currentRow()!.agent}
                     tokens={currentRow()!.tokensTotal}
                     cost={currentRow()!.cost}
-                    suffix={lastPlanSuffix(currentRow()?.id)}
                     current
                     flow={currentFlow()}
+                    dirSlot
                     onSelect={() => selectSession(props.api, currentRow()?.id)}
                   />
                 ) : (
@@ -1443,6 +1441,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
                       name={t.name}
                       suffix={dur}
                       flow={dir}
+                      dirSlot
                       onSelect={() => openToolDetail(props.api, t, colors())}
                     />
                   )
