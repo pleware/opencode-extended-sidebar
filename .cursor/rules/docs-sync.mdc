@@ -1,0 +1,53 @@
+---
+description: After source changes, keep README, backlog, oes.json, and package.json in sync with the code
+alwaysApply: true
+---
+
+# Docs follow the code
+
+After any change in `src/`, `oes.json`, or `package.json`, update docs **and** `package.json` in the **same turn**. Do not wait for the user to ask. Skip this only when the change is a typo, comment, or formatting with no user-visible behaviour.
+
+## What goes where
+
+- `README.md` — English, public. Feature headings (`##` + unicode glyph + blockquote), Install, Configuration table, Legend, How it works. Tone stays a short product pitch, not a changelog.
+- `backlog.md` — English, local product notes (gitignored). Refresh **Current UI** if the panel changed. Move finished work to **Done** (`[x]`). Add follow-ups to **Next** / **Bugs**. Never invent items the user did not ask for. All project `.md` is English (see `english-docs.mdc`).
+- `package.json` — npm / GitHub surface. Keep `description`, `keywords`, and `files` true to the running plugin.
+
+## oes.json schema
+
+Source of truth is `src/oes.ts`: `OesOptions`, `OES_DEFAULTS`, and `pick()`. After any options change, those three plus the plugin `oes.json` must have the **same keys**. Then copy the sample and table in README Configuration, and the `oes.json` line in backlog.
+
+- Key in the type / defaults / `pick()` but missing from `oes.json` → add it with the default value.
+- Key in `oes.json` or README but gone from `OesOptions` → delete it.
+- Rename: update all five places in the same turn (`oes.ts`, `oes.json`, README sample, README table, backlog).
+- Callers (`sidebar.tsx`, `files.ts`, `db.ts`) must read the new field; a key that `pick()` parses but nobody uses is dead — remove it.
+
+Example: adding `skipGitignore` means the field exists on `OesOptions`, in `OES_DEFAULTS`, in `pick()`, in `oes.json`, and in the README table. Leaving it only on the type is a miss.
+
+## package.json
+
+Treat it as part of the public description, not leftover scaffolding.
+
+- `description` — one English line of what the plugin **does now** (tabs, tools, file diffs, git letters). Rewrite it when a user-visible feature lands or is removed. Do not leave a stale pitch.
+- `keywords` — keep discoverable: `opencode`, `opencode-plugin`, `tui`, `sidebar`, plus a word for each real feature (`session-switcher`, `oh-my-openagent`, …). Drop keywords for things we no longer ship.
+- `files` — every path we ship (`src`, `oes.json`, `README.md`, `LICENSE`). A new top-level asset that users need at runtime goes here; a removed one comes out.
+- `exports` / `oc-plugin` — only if the entry file or slot actually changed.
+- `version` — do **not** bump it yourself. Every commit patch-bumps via `.githooks/commit-msg` + `scripts/note-commit.mjs`, then `post-commit` amends the bump in. The **first line of the commit message is the changelog sentence** (English, one sentence, no trailer). It lands in `CHANGELOG.md` as `- **x.y.z** (date) …`.
+- Do **not** add runtime `dependencies` or edit `peerDependencies` unless the user asked.
+- `--no-verify` skips the bump: then you must patch-bump `package.json` and prepend that one line yourself.
+
+## Concrete mapping
+
+| If you change | Also update |
+| --- | --- |
+| Visible row / section / tab / glyph / colour | README feature blurb or Legend; backlog **Current UI**; `package.json` `description` / `keywords` if the pitch changed |
+| New or renamed `oes.json` key | `oes.ts` + plugin `oes.json` + README Configuration sample + table; backlog `oes.json` line |
+| New shipped file or dropped asset | `package.json` `files` |
+| New privacy / data-source constraint | README Privacy / How it works; backlog **Do not** |
+| Finished Next item | backlog: tick it, one-line note of where it lives |
+
+## Do not
+
+- Rewrite the README from scratch for a small fix.
+- Commit unless the user asked.
+- Add npm dependencies or show prompts / tool I/O / full paths — those are hard product constraints, not docs style.

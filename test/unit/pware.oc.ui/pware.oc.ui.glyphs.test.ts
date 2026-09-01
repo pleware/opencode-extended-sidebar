@@ -11,7 +11,6 @@ import {
   reviewStateSuffix,
   rowGlyphs,
   spinnerFrame,
-  workStatusGlyph,
 } from "../../../src/pware.oc.ui/pware.oc.ui.glyphs.js"
 
 describe("flowGlyph", () => {
@@ -45,22 +44,6 @@ describe("flowBlinkOn", () => {
     expect(flowBlinkOn(2)).toBe(false)
     expect(flowBlinkOn(3)).toBe(false)
     expect(flowBlinkOn(4)).toBe(true)
-  })
-})
-
-describe("workStatusGlyph", () => {
-  test("maps done / error / pending / paused / abandoned", () => {
-    expect(workStatusGlyph("completed")).toBe("✓")
-    expect(workStatusGlyph("failed")).toBe("×")
-    expect(workStatusGlyph("in_progress")).toBeNull()
-    expect(workStatusGlyph("pending")).toBe("⧗")
-    expect(workStatusGlyph("queued")).toBe("⧗")
-    expect(workStatusGlyph("paused")).toBe("║")
-    expect(workStatusGlyph("abandoned")).toBe("⊘")
-  })
-
-  test("unknown stays a neutral circle", () => {
-    expect(workStatusGlyph("unknown")).toBe("○")
   })
 })
 

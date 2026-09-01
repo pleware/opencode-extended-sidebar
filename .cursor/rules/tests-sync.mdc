@@ -1,0 +1,37 @@
+---
+description: After source changes, keep bun:test coverage in sync with the code
+alwaysApply: true
+---
+
+# Tests follow the code
+
+After any change in `src/`, update tests in the **same turn**. Do not wait for the user to ask. Skip this only when the change is a typo, comment, or formatting with no behaviour change. Run `bun test` (or the touched files) before finishing.
+
+## What goes where
+
+- `test/unit/<module>.test.ts` — `bun:test` against exported helpers. Mirrors `src/<module>.ts`. Import from `../../src/<module>.js`.
+- `test/snapshot/sidebar.test.ts` — SQLite + `.omo` fixtures through `readLiveSnapshot` / `delegatesForSession`. Use when the panel data shape, session graph, or privacy contract changes.
+- `test/bench/scan.test.ts` — 5k-part budgets (fingerprint, snapshot hit/miss, tools/files, Perf). Touch only when a scan or query path you changed is in those budgets. Do not silently loosen numbers.
+- `test/helpers/` — shared fixtures (`project.ts`, `sqlite.ts`) and `assertPrivacy`. Reuse; do not add a second fixture style.
+
+Related helpers may share one unit file (e.g. `detail.test.ts` covers `preview.ts` + `paths.ts`). Thin TUI wrappers (`tui.tsx`, `sidebar.tsx`, `chrome.tsx`, `perfview.tsx`, `detail.tsx`) are tested via extracted functions and snapshot fixtures, not by mounting OpenTUI.
+
+## Concrete mapping
+
+| If you change | Also update |
+| --- | --- |
+| Exported function / clamp / parser / label / glyph | `test/unit/<module>.test.ts` — add or fix the case |
+| New `src/<name>.ts` with logic | add `test/unit/<name>.test.ts` (or extend the sibling file that already owns it) |
+| Removed or renamed export | delete or retarget the matching test; do not leave a dead import |
+| New `oes.json` key in `pick()` | `test/unit/oes.test.ts` (clamp / fallback / replace-vs-append) |
+| Session / tool / file / OMO view objects | snapshot fixture + `assertPrivacy` on anything that can reach the panel |
+| Query, fingerprint, or live-cache hot path | `test/bench/scan.test.ts` only if that path is budgeted |
+
+Example: adding `planStatusGlyph` means a unit case in `test/unit/omo.test.ts` and, if the glyph is on `PlanView`, a snapshot assertion. Leaving it only in `src/omo.ts` is a miss.
+
+## Do not
+
+- Add a test runner or assertion library. `bun:test` and `bun:sqlite` are enough.
+- Test `myworkspace/` or vendored trees.
+- Invent coverage for untouched modules.
+- Skip `assertPrivacy` on new view fields that the sidebar can display (no prompts, tool I/O, or full paths).

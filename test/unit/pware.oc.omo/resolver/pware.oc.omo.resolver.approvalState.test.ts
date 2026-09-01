@@ -5,7 +5,7 @@ import {
   enrichApprovalSessionStates,
   planSessionStateLabel,
 } from "../../../../src/pware.oc.runtime/pware.oc.runtime.mywork-enrich.js"
-import type { ApprovalItem } from "../../../../src/pware.oc.omo/resolver/pware.oc.omo.resolver.plan.js"
+import type { EnrichedApproval } from "../../../../src/pware.oc.runtime/pware.oc.runtime.mywork-enrich.js"
 import { createFixtureProject, type FixtureProject } from "../../../helpers/project.js"
 import { createFixtureDb, toolPartData, type FixtureDb } from "../../../helpers/sqlite.js"
 
@@ -25,7 +25,7 @@ function fixture(opts: {
   timeUpdated?: number
   timeArchived?: number | null
   runContinuation?: string | null
-} = {}): { proj: FixtureProject; db: FixtureDb; approval: ApprovalItem } {
+} = {}): { proj: FixtureProject; db: FixtureDb; approval: EnrichedApproval } {
   const proj = createFixtureProject({
     files: {
       [REL]: "---\nstatus: awaiting-approval\npending-action: write .omo/plans/approval-x.md\n---",
@@ -66,7 +66,7 @@ function fixture(opts: {
       JSON.stringify({ sources: { "background-task": { state: opts.runContinuation } } }),
     )
   }
-  const approval: ApprovalItem = {
+  const approval: EnrichedApproval = {
     rel: REL,
     name: "approval-x",
     status: "awaiting-approval",

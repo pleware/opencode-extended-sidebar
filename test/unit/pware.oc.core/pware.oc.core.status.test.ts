@@ -8,6 +8,7 @@ import {
   toToolStatus,
   toWorkLabel,
   workIsTerminal,
+  workStatusGlyph,
 } from "../../../src/pware.oc.core/pware.oc.core.status.js"
 import type { CanonicalStatus } from "../../../src/pware.oc.core/pware.oc.core.status.js"
 
@@ -77,6 +78,22 @@ describe("mappers", () => {
     expect(taskRank("queued")).toBeLessThan(taskRank("failed"))
     expect(taskRank("cancelled")).toBe(2)
     expect(taskRank("done")).toBe(3)
+  })
+})
+
+describe("workStatusGlyph", () => {
+  test("maps done / error / pending / paused / abandoned", () => {
+    expect(workStatusGlyph("completed")).toBe("✓")
+    expect(workStatusGlyph("failed")).toBe("×")
+    expect(workStatusGlyph("in_progress")).toBeNull()
+    expect(workStatusGlyph("pending")).toBe("⧗")
+    expect(workStatusGlyph("queued")).toBe("⧗")
+    expect(workStatusGlyph("paused")).toBe("║")
+    expect(workStatusGlyph("abandoned")).toBe("⊘")
+  })
+
+  test("unknown stays a neutral circle", () => {
+    expect(workStatusGlyph("unknown")).toBe("○")
   })
 })
 

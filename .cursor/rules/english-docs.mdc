@@ -1,0 +1,15 @@
+---
+description: All project markdown is English
+globs: "**/*.md"
+alwaysApply: true
+---
+
+# Markdown is English
+
+Every markdown file we own is English: `README.md`, `CHANGELOG.md`, `backlog.md`, `.githooks/`, `docs/`.
+
+- Do not write Polish (or any other language) in project `.md` files.
+- Headings, tables, lists, and captions stay English.
+- `backlog.md` is local and gitignored, but still English. Use **Current UI**, **Next**, **Bugs**, **Ideas**, **Do not**.
+- Leave vendored / third-party docs alone: `myworkspace/`, `.agents/skills/`.
+- Chat with the user may be Polish. Files must not.

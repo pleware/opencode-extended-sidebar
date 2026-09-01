@@ -5,7 +5,6 @@
  * `## State` section, plus the approval row label. Pure text — no fs, no scan.
  */
 import path from "node:path"
-import type { SessionActivityState } from "../../pware.oc.opencode/resolver/pware.oc.opencode.resolver.session.js"
 
 export type ApprovalItem = {
   /** Project-relative path. The panel must never show a root. */
@@ -15,8 +14,6 @@ export type ApprovalItem = {
   /** What happens after approval — e.g. `write .omo/plans/<slug>.md`. */
   pendingAction: string | null
   updatedAt: number | null
-  /** Planner session activity; null = no db / no writer session found. */
-  sessionState: SessionActivityState | null
   /** ulw-plan review lifecycle from the draft frontmatter; null = no review requested. */
   review: ReviewState | null
 }

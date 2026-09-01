@@ -120,7 +120,7 @@ src/
 | Layer | Owns | May import |
 |---|---|---|
 | `pware.oc.ui` | TUI components, dialogs, glyphs | anything below |
-| `pware.oc.perf` | timing reader + view | core |
+| `pware.oc.perf` | timing reader + view | core + ui (view) |
 | `pware.oc.runtime` | snapshot composition, monitor, my-work queue | opencode, omo, core |
 | `pware.oc.opencode` | OpenCode data source | core |
 | `pware.oc.omo` | OMO data source | opencode, core |
@@ -168,7 +168,7 @@ Plugin registration: `id = "opencode-extended-sidebar"`, load toast,
 | `preview.ts` | text/markdown preview limits | `previewViewportRows()`, `canPreviewPath()`, `isMarkdownPath()`, `readTextPreview()` |
 | `pulse.ts` | agent marks, flow, time/token formatting | `toEpochMs()`, `pulseAgeMs()`, `composeMark()`, `hottestMark()`, `activeFlow()`, `applyFlow()`, `flowFromEvent()`, `sessionBusyFromEvent()`, `sessionIdFromEvent()`, `shortToolLabel()`, `toolHitFromEvent()`, `formatAge()`, `formatDuration()`, `formatTokens()`, `formatUsd()`, `sparkline()`, `packChips()`, `SPARK_FRAMES` |
 | `sqlite.ts` | readonly `bun:sqlite` / `node:sqlite` handle | `openReadonlyDb()`, `withDbRead()`, `resetReadonlyDb()`, `uniqueIds()` |
-| `status.ts` | canonical lifecycle/tool/work status | `normalizeStatus()`, `toToolStatus()`, `toWorkLabel()`, `isPendingWork()`, `workIsTerminal()`, `taskRank()` |
+| `status.ts` | canonical lifecycle/tool/work status | `normalizeStatus()`, `toToolStatus()`, `toWorkLabel()`, `workStatusGlyph()`, `isPendingWork()`, `workIsTerminal()`, `taskRank()` |
 | `timing.ts` | panel clock budgets | `TICK_MS`, `NOW_MS`, `FPS_READ_EVERY_TICKS`, `BLINK_TICKS`, `MONITOR_POLL_MS`, `MONITOR_WATCH_DEBOUNCE_MS`, `EVENT_SCAN_DEBOUNCE_MS` |
 
 ### `pware.oc.core/constants` — host literals + the plugin's own vocabularies
@@ -266,6 +266,9 @@ Plugin registration: `id = "opencode-extended-sidebar"`, load toast,
 | `self.ts` | plugin self-cost: event/scan/tick latency + renderer FPS | `selfTime()`, `readSelfStats()`, `resetSelfStats()`, `setSelfFps()`, `readRendererFps()`, `formatSelfLine()`, `SelfStats` |
 | `view.tsx` | Perf tab | `PerfPanel` |
 
+`reader.ts` and `self.ts` are core-only — they import nothing above core.
+`view.tsx` is a TUI component: it may import ui chrome to render the Perf tab.
+
 ### `pware.oc.ui` — TUI layer
 
 | Module | Responsibility | Key exports |
@@ -276,7 +279,7 @@ Plugin registration: `id = "opencode-extended-sidebar"`, load toast,
 | `live.tsx` | host event adapter (`api.event.on`) → plugin event bus (`pware.oc.*`, `pware.oes.*`) | `startHostEventBridge()` |
 | `host.tsx` | UI host RPC wrappers (session switch/new session/start-work/approve) | `selectSession()`, `openSessionSwitcher()`, `newSession()`, `runStartWork()`, `approvePlan()` |
 | `menudialogs.tsx` | every popup via one `openDialog()` choke-point | `openFileDetail()`, `openToolDetail()`, `openWorkDetail()`, `openApprovalDialog()`, `openDocDetail()`, `openTextPreview()`, `openPerfLog()` |
-| `glyphs.tsx` | status → character mappings | `workStatusGlyph()`, `markGlyph()`, `flowGlyph()`, `spinnerFrame()`, `flowBlinkOn()`, `myWorkGlyph()`, `reviewLaneGlyph()`, `reviewStateSuffix()`, `fileLetterMark()`, `SPINNER_FRAMES`, `GROUP_GLYPH`, `THINK_GLYPH` |
+| `glyphs.tsx` | status → character mappings | `workStatusGlyph()` (re-exported from core), `markGlyph()`, `flowGlyph()`, `spinnerFrame()`, `flowBlinkOn()`, `myWorkGlyph()`, `reviewLaneGlyph()`, `reviewStateSuffix()`, `fileLetterMark()`, `SPINNER_FRAMES`, `GROUP_GLYPH`, `THINK_GLYPH` |
 
 ## Tests
 

@@ -1,0 +1,20 @@
+---
+description: This repo is a local developer checkout; live OpenCode DB is under .agentize
+alwaysApply: true
+---
+
+# Local developer checkout
+
+This workspace is a **local developer version** of the plugin, not a published npm install. Edit `src/` here and treat the running TUI as this tree.
+
+## Live OpenCode database
+
+When you need the real session / tool / file / timing store, use:
+
+`.agentize/opencode/opencode.db`
+
+That is the local agentize DB for this project. Do **not** open the global `~/.local/share/opencode/opencode.db` (or Windows equivalent) unless the user asks or the local file is missing.
+
+- Read-only. Do not write, migrate, or vacuum it.
+- Soft-fail if it is locked or absent (`present: false` / defaults). It is not an exception.
+- Unit tests use temp fixtures (`test/helpers/sqlite.ts`). Do not point tests at this file.

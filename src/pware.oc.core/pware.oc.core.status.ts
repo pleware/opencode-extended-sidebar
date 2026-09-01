@@ -48,6 +48,23 @@ export function toWorkLabel(raw: string | null | undefined): string {
   return c
 }
 
+/**
+ * One-cell glyph for a work row's status: ✓ done, × error, ⧗ pending/queued,
+ * ║ paused, ⊘ abandoned, ○ unknown. Null while running — the pulse spinner owns
+ * the running cell. Core owns this mapping; the ui layer re-exports it.
+ */
+export function workStatusGlyph(status: string): string | null {
+  const s = toWorkLabel(status)
+  if (s === "done") return "✓"
+  if (s === STATUS_ERROR) return "×"
+  if (s === STATUS_RUNNING) return null
+  // A single-cell geometric hourglass, not the emoji — one cell, monochrome.
+  if (s === STATUS_PENDING) return "⧗"
+  if (s === STATUS_PAUSED) return "║"
+  if (s === STATUS_ABANDONED) return "⊘"
+  return "○"
+}
+
 export function sessionStatusLabel(status: string): string {
   return status
 }

@@ -30,6 +30,13 @@ import {
 } from "../pware.oc.opencode/constants/pware.oc.opencode.constants.sessionStatus.js"
 import type { ApprovalItem } from "../pware.oc.omo/resolver/pware.oc.omo.resolver.plan.js"
 
+/**
+ * An approval item with its planner-session activity attached. `sessionState`
+ * is a runtime enrichment: it lives here on the runtime layer's enriched type,
+ * not on omo's base `ApprovalItem` (omo must not import the opencode session type).
+ */
+export type EnrichedApproval = ApprovalItem & { sessionState: SessionActivityState | null }
+
 const STATE_LABELS: Record<SessionState, string> = {
   [SESSION_STATE_STREAMING]: "working",
   [SESSION_STATE_AWAITING_BACKGROUND]: "waiting",
@@ -43,14 +50,14 @@ export function planSessionStateLabel(state: SessionActivityState | null): strin
   return state ? STATE_LABELS[state.state] : null
 }
 
-function blank(items: readonly ApprovalItem[]): ApprovalItem[] {
+function blank(items: readonly ApprovalItem[]): EnrichedApproval[] {
   return items.map((item) => ({ ...item, sessionState: null }))
 }
 
 export function enrichApprovalSessionStates(
   items: readonly ApprovalItem[],
   opts: { dbPath: string | null | undefined; projectRoot: string | null | undefined; now?: number },
-): ApprovalItem[] {
+): EnrichedApproval[] {
   if (items.length === 0) return []
   const dbPath = opts.dbPath
   const projectRoot = opts.projectRoot

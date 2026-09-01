@@ -10,7 +10,8 @@ import type {
   AgentStatus,
   SessionActivityState,
 } from "../pware.oc.opencode/resolver/pware.oc.opencode.resolver.session.js"
-import type { ApprovalItem, ReviewState } from "../pware.oc.omo/resolver/pware.oc.omo.resolver.plan.js"
+import type { ReviewState } from "../pware.oc.omo/resolver/pware.oc.omo.resolver.plan.js"
+import type { EnrichedApproval } from "./pware.oc.runtime.mywork-enrich.js"
 import {
   MY_WORK_GROUP_DRAFTING,
   MY_WORK_GROUP_FINISHED,
@@ -134,7 +135,7 @@ export function toQuestionItems(questions: readonly OpenQuestion[]): MyWorkItem[
 }
 
 /** Build the approval items from a pending-approval read, dropping superseded plans. */
-export function toApprovalItems(approvals: readonly ApprovalItem[]): MyWorkItem[] {
+export function toApprovalItems(approvals: readonly EnrichedApproval[]): MyWorkItem[] {
   const out: MyWorkItem[] = []
   for (const a of approvals) {
     const kind = approvalGroup(a.status, isDraftOf(a.rel))

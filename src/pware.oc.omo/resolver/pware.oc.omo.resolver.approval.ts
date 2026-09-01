@@ -103,7 +103,6 @@ function scan(root: string): ScanResult {
           status,
           pendingAction: parsePlanPendingAction(text),
           updatedAt: statOf(abs),
-          sessionState: null,
           review: parseReviewBlock(text),
         }
         switch (group) {

@@ -1,0 +1,42 @@
+---
+description: DRY — one helper per rule; import across modules, do not copy
+alwaysApply: true
+---
+
+# DRY — one helper per rule
+
+A label, glyph, clamp, stamp, fold, or formatter lives in **one** exported function. Callers import it. A second copy in JSX, `monitor`, or another module is a bug waiting to drift.
+
+## Where it lives
+
+Put the helper next to its domain. Do not open a junk-drawer `utils.ts`.
+
+| Kind | Module |
+| --- | --- |
+| Pulse, age, tokens, tool chips, flow | `pware.oc.core/pware.oc.core.pulse.ts` |
+| Boulder / plan / work status | `pware.oc.omo/resolver/pware.oc.omo.resolver.boulder.ts` |
+| Path fold, basename, skip, diff stat | `pware.oc.opencode/pware.oc.opencode.files.ts` / `pware.oc.core/pware.oc.core.paths.ts` |
+| Row budget, overflow slice | `pware.oc.core/pware.oc.core.layout.ts` |
+| `oes.json` clamp / pick | `pware.oc.core/pware.oc.core.oes.ts` |
+
+Two exports that share a rule share an internal (e.g. `formatCoarseSec` behind `formatAge` / `formatDuration` / `formatSpan`). Cross-module reuse is an import: `pware.oc.omo/resolver/pware.oc.omo.resolver.boulder.ts` already uses `toEpochMs` from `pware.oc.core/pware.oc.core.pulse.ts`.
+
+```ts
+// ❌ BAD — same fold pasted into JSX and a second file
+const label = name.length > 18 ? name.slice(0, 8) + "…" + name.slice(-7) : name
+
+// ✅ GOOD — one export, both panel and tests call it
+import { shortMiddle } from "../pware.oc.core/pware.oc.core.pulse.js"
+<text>{shortMiddle(name, 18)}</text>
+```
+
+## Unit-test friendly
+
+DRY and `try-testable.mdc` are the same shape: extract `fn(input) → output`, export it, hit it from `test/unit/<module>.test.ts`. One implementation, one test file. JSX / `monitor` / `fs.watch` stay thin wrappers.
+
+## Do not
+
+- Copy a helper and tweak one branch — parameterize the original.
+- Extract a one-liner used once. DRY starts at the **second** call site.
+- Hide a second implementation “just for the TUI”. The panel renders; it does not re-decide.
+- Duplicate the “update tests in the same turn” rule — that is `tests-sync.mdc`.

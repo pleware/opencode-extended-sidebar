@@ -1,0 +1,58 @@
+---
+description: Unit-test friendly — try at I/O edges; export logic as fn(input) → output
+alwaysApply: true
+---
+
+# Unit-test friendly — try at the edge, test the middle
+
+Write new `src/` so a unit test can hit the decision without a TUI, a live DB, or a host API. Failures stay local — the sidebar slot must not die. Same shape as `dry.mdc`: one exported helper, one unit file.
+
+## Try (soft-fail)
+
+Wrap **I/O and host calls** in `try/catch`: `fs`, JSON, SQLite, `api.client`, `api.kv`, clipboard, git spawn, toast, session switch.
+
+- Return `null`, `[]`, a default, or a soft error string. Do not rethrow through `sidebar_content`.
+- An empty `catch` is fine when the host feature is optional (`toast`, `selectSession`).
+- Missing `.omo/` / bad `oes.json` / locked DB is **not** an exception — it is `present: false` or defaults.
+- `try` belongs at the **edge**. Do not sprinkle it around pure helpers (`pick`, `clamp`, `packSections`, glyphs).
+
+```ts
+// ❌ BAD — throw reaches the slot
+const raw = JSON.parse(fs.readFileSync(p, "utf8"))
+
+// ✅ GOOD — try at the edge, typed fallback
+function readJson(p: string): Record<string, unknown> | null {
+  try {
+    if (!fs.existsSync(p)) return null
+    const raw = JSON.parse(fs.readFileSync(p, "utf8"))
+    return raw && typeof raw === "object" && !Array.isArray(raw) ? raw : null
+  } catch {
+    return null
+  }
+}
+```
+
+## Unit-test friendly
+
+- **Extract** parsers, clamps, glyphs, ranks, labels, and packing into **exported** functions. JSX / `monitor` / `fs.watch` stay thin wrappers.
+- A branch that can be wrong (status glyph, skip rule, row budget, path fold) must be callable as `fn(input) → output` from `test/unit/<module>.test.ts`.
+- Inject data (objects, stamps, fixtures). Do not hide the rule behind `useTerminalDimensions()` or a live `opencode.db`.
+- Related helpers may share one unit file. Do not mount OpenTUI to prove a label or a fold.
+- Prefer **pure** helpers: pass `now`, stamps, widths, and options in. Do not read `Date.now()`, `process.env`, or terminal size inside the rule.
+
+```ts
+// ❌ BAD — decision only inside JSX
+<text>{status === "done" ? "✓" : "○"}</text>
+
+// ✅ GOOD — exported, then rendered
+export function workStatusGlyph(status: string): string { /* … */ }
+<text>{workStatusGlyph(work.status)}</text>
+```
+
+## Do not
+
+- Catch-and-ignore a programmer error (bad invariant). Soft-fail **I/O and hosts**, not logic bugs.
+- Add a Result/Either type, a test runner, or a mock framework. `null` / defaults and `bun:test` are enough.
+- Put new behaviour only in `sidebar.tsx` / `tui.tsx` / `detail.tsx` when it can live next to `layout.ts` / `omo.ts` / `pulse.ts`.
+- Copy the helper into the test — import the same export (`dry.mdc`).
+- Duplicate the “update tests in the same turn” rule — that is `tests-sync.mdc`. This rule is **how** the code is shaped so those tests stay cheap.

@@ -1,9 +1,11 @@
 /**
  * pware.oc.ui.glyphs
  *
- * Every status → character mapping in one module: work status, agent marks,
- * direction flows, the braille spinner, My work and git letters. The panel renders
- * these; nothing else decides what a state looks like.
+ * Every status → character mapping in one module: agent marks, direction flows,
+ * the braille spinner, My work and git letters. The panel renders these; nothing
+ * else decides what a state looks like. Work-status mapping now lives in core
+ * (`pware.oc.core/pware.oc.core.status.ts`) — this module re-exports
+ * `workStatusGlyph` from there.
  */
 import type { FileLetter } from "../pware.oc.opencode/pware.oc.opencode.files.js"
 import type { AgentMark, FlowDir } from "../pware.oc.core/pware.oc.core.pulse.js"
@@ -17,7 +19,7 @@ import {
   REVIEW_STATUS_PENDING,
   ROUND_STATUS_ACTIVE,
 } from "../pware.oc.omo/constants/pware.oc.omo.constants.reviewStatus.js"
-import { toWorkLabel } from "../pware.oc.core/pware.oc.core.status.js"
+export { workStatusGlyph } from "../pware.oc.core/pware.oc.core.status.js"
 import {
   FLOW_RECV,
   FLOW_TOOL,
@@ -28,12 +30,8 @@ import {
   PULSE_STALE,
 } from "../pware.oc.core/constants/pware.oc.core.constants.pulse.js"
 import {
-  STATUS_ABANDONED,
   STATUS_ARCHIVED,
   STATUS_ERROR,
-  STATUS_PAUSED,
-  STATUS_PENDING,
-  STATUS_RUNNING,
 } from "../pware.oc.core/constants/pware.oc.core.constants.status.js"
 import {
   MY_WORK_GROUP_DRAFTING,
@@ -112,18 +110,6 @@ export function rowGlyphs(
   flow?: FlowDir | null,
 ): { state: string; dir: string | null } {
   return { state: markGlyph(mark, frame), dir: flow ? directionGlyph(flow) : null }
-}
-
-export function workStatusGlyph(status: string): string | null {
-  const s = toWorkLabel(status)
-  if (s === "done") return "✓"
-  if (s === STATUS_ERROR) return "×"
-  if (s === STATUS_RUNNING) return null
-  // A single-cell geometric hourglass, not the emoji — one cell, monochrome.
-  if (s === STATUS_PENDING) return QUEUED_GLYPH
-  if (s === STATUS_PAUSED) return "║"
-  if (s === STATUS_ABANDONED) return "⊘"
-  return "○"
 }
 
 export function myWorkGlyph(kind: MyWorkKind): string {

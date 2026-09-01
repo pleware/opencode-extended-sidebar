@@ -340,7 +340,6 @@ describe("My work queue", () => {
     const approvals = listApprovals(projFix.root).readyReview
     expect(approvals.map((a) => a.name)).toEqual(["oes-v2-hardening"])
     expect(approvals[0]?.pendingAction).toBe("write .omo/plans/oes-v2-hardening.md")
-    expect(approvals[0]?.sessionState).toBeNull()
     assertPrivacy({ approvals })
   })
 

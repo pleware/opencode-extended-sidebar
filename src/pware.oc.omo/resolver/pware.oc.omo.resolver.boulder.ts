@@ -10,8 +10,7 @@ import path from "node:path"
 import { canonicalizePath, fileStamp, resolveProjectFile } from "../../pware.oc.core/pware.oc.core.paths.js"
 import { profile } from "../../pware.oc.core/pware.oc.core.debug.js"
 import { composeMark, formatAge, pulseAgeMs, toEpochMs, type AgentMark } from "../../pware.oc.core/pware.oc.core.pulse.js"
-import { workStatusGlyph } from "../../pware.oc.ui/pware.oc.ui.glyphs.js"
-import { taskRank, toWorkLabel, workIsTerminal } from "../../pware.oc.core/pware.oc.core.status.js"
+import { taskRank, toWorkLabel, workIsTerminal, workStatusGlyph } from "../../pware.oc.core/pware.oc.core.status.js"
 import {
   MARK_READY,
 } from "../../pware.oc.core/constants/pware.oc.core.constants.pulse.js"
