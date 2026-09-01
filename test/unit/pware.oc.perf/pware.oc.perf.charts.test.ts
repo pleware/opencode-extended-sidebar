@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import {
   asciiTrend,
+  axisLabel,
   downsampleAvg,
   interpolateSeries,
   perfStatLine,
@@ -86,11 +87,32 @@ describe("stripAnsi", () => {
   })
 })
 
+describe("axisLabel", () => {
+  test("rounds to an integer for |x| ≥ 10", () => {
+    expect(axisLabel(4652.0)).toBe("4652")
+    expect(axisLabel(3879.22)).toBe("3879")
+    expect(axisLabel(-62)).toBe("-62")
+  })
+
+  test("keeps one decimal for small magnitudes", () => {
+    expect(axisLabel(3.456)).toBe("3.5")
+    expect(axisLabel(0.04)).toBe("0.0")
+  })
+})
+
 describe("asciiTrend", () => {
   test("renders a non-empty ANSI-free trend", () => {
     const out = asciiTrend([1, 2, 3, null, 5], { width: 8 })
     expect(out.length).toBeGreaterThan(0)
     expect(out).not.toContain("\x1b[")
+  })
+
+  test("rounds y-axis labels instead of showing two decimals", () => {
+    const out = asciiTrend([4652.0, 3879.22, 3106.44, 2333.67], { width: 8, height: 4 })
+    // Axis labels are integers (no `.xx`), unlike asciichart's default toFixed(2).
+    expect(out).not.toContain(".00")
+    expect(out).not.toContain(".22")
+    expect(out).not.toContain(".44")
   })
 
   test("empty input returns empty string", () => {

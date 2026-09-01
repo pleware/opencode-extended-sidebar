@@ -1,5 +1,6 @@
 # Changelog
 
+- **0.2.47** (2026-09-01) Round perf trend y-axis labels to drop trailing-zero decimals.
 - **0.2.46** (2026-09-01) Rename the Details tab to Project and tag the current session with a [C] suffix.
 - **0.2.45** (2026-09-01) Reconcile My work plan grouping against boulder work and writer-session todos so an approved plan whose work finished shows as Finished instead of Ready to star.
 - **0.2.44** (2026-09-01) Replace the touched-file detail DialogPad with a native DialogSelect that offers Preview or Copy relative path, and disable approval dialog actions instead of t.

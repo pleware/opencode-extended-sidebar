@@ -95,9 +95,18 @@ export function stripAnsi(s: string): string {
 }
 
 /**
+ * Chart y-axis label: an integer for `|x| ≥ 10`, else one decimal. Drops
+ * asciichart's default `toFixed(2)` trailing zeros (e.g. `4652.00` → `4652`).
+ */
+export function axisLabel(x: number): string {
+  return Math.abs(x) >= 10 ? String(Math.round(x)) : x.toFixed(1)
+}
+
+/**
  * Plain-ASCII trend line for a series: interpolate nulls → smooth (window 3)
  * → downsample to at most `width` points → asciichart `plot`. No `colors`
- * config is passed, so the output is ANSI-free. Empty or all-null input
+ * config is passed, so the output is ANSI-free. Y-axis labels use `axisLabel`
+ * (rounded) instead of asciichart's `toFixed(2)`. Empty or all-null input
  * returns `""`.
  */
 export function asciiTrend(
@@ -108,7 +117,11 @@ export function asciiTrend(
   if (dense.length === 0) return ""
   const smoothed = smoothSeries(dense, 3)
   const ds = downsampleAvg(smoothed, Math.max(1, opts.width))
-  return plot(ds, { height: opts.height ?? 3 })
+  const pad = "           " // 11 spaces — asciichart's label field, keeps the axis aligned
+  return plot(ds, {
+    height: opts.height ?? 3,
+    format: (x: number) => (pad + axisLabel(x)).slice(-pad.length),
+  })
 }
 
 /**
