@@ -4,7 +4,7 @@
  */
 import { createRequire } from "node:module"
 import fs from "node:fs"
-import { profile } from "./pware.oc.core.debug.js"
+import { dbg, profile } from "./pware.oc.core.debug.js"
 
 export type SqlRow = Record<string, unknown>
 
@@ -16,9 +16,34 @@ export type SqlDb = {
 
 const require = createRequire(import.meta.url)
 
+/**
+ * Lock wait before a query fails with SQLITE_BUSY. Fail-fast: a transient WAL
+ * checkpoint lock should surface as an error row (and a `sql.busy` debug line)
+ * instead of blocking the whole TUI for seconds.
+ */
+const BUSY_TIMEOUT_MS = 100
+
 /** One-line query label for the profile log; computed lazily (profiling off = free). */
 function sqlLabel(sql: string): string {
   return sql.replace(/\s+/g, " ").trim().slice(0, 80)
+}
+
+/** True when a thrown error is a SQLite lock/busy failure (SQLITE_BUSY). */
+export function isBusyError(e: unknown): boolean {
+  return e instanceof Error ? /locked|busy/i.test(e.message) : false
+}
+
+/**
+ * Run a query, logging a `sql.busy` debug line when the DB is locked. The
+ * error still propagates so `withDbRead` can retry once and then soft-fail.
+ */
+function guardQuery<T>(sql: string, fn: () => T): T {
+  try {
+    return fn()
+  } catch (e) {
+    if (isBusyError(e)) dbg("sql.busy", "db locked", { q: sqlLabel(sql) })
+    throw e
+  }
 }
 
 function wrapBun(db: {
@@ -28,15 +53,15 @@ function wrapBun(db: {
 }): SqlDb {
   try {
     db.exec("PRAGMA query_only = ON")
-    db.exec("PRAGMA busy_timeout = 3000")
+    db.exec(`PRAGMA busy_timeout = ${BUSY_TIMEOUT_MS}`)
   } catch {
     // older / restricted
   }
   return {
     all: <T extends SqlRow>(sql: string, ...params: unknown[]) =>
-      profile("sql", () => db.query(sql).all(...params) as T[], () => ({ q: sqlLabel(sql) })),
+      profile("sql", () => guardQuery(sql, () => db.query(sql).all(...params) as T[]), () => ({ q: sqlLabel(sql) })),
     get: <T extends SqlRow>(sql: string, ...params: unknown[]) =>
-      profile("sql", () => (db.query(sql).get(...params) as T | null) ?? null, () => ({ q: sqlLabel(sql) })),
+      profile("sql", () => guardQuery(sql, () => (db.query(sql).get(...params) as T | null) ?? null), () => ({ q: sqlLabel(sql) })),
     close: () => {
       try {
         db.close()
@@ -57,15 +82,15 @@ function wrapNodeSync(db: {
 }): SqlDb {
   try {
     db.exec("PRAGMA query_only = ON")
-    db.exec("PRAGMA busy_timeout = 3000")
+    db.exec(`PRAGMA busy_timeout = ${BUSY_TIMEOUT_MS}`)
   } catch {
     // ignore
   }
   return {
     all: <T extends SqlRow>(sql: string, ...params: unknown[]) =>
-      profile("sql", () => db.prepare(sql).all(...params) as T[], () => ({ q: sqlLabel(sql) })),
+      profile("sql", () => guardQuery(sql, () => db.prepare(sql).all(...params) as T[]), () => ({ q: sqlLabel(sql) })),
     get: <T extends SqlRow>(sql: string, ...params: unknown[]) =>
-      profile("sql", () => (db.prepare(sql).get(...params) as T | undefined) ?? null, () => ({ q: sqlLabel(sql) })),
+      profile("sql", () => guardQuery(sql, () => (db.prepare(sql).get(...params) as T | undefined) ?? null), () => ({ q: sqlLabel(sql) })),
     close: () => {
       try {
         db.close()

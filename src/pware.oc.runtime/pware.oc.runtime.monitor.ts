@@ -7,7 +7,8 @@ import type { PwareEvent } from "../pware.oc.core/pware.oc.core.bus.js"
 import { EV_OES_SNAPSHOT } from "../pware.oc.core/constants/pware.oc.core.constants.eventName.js"
 import { EV_OMO_BOULDER_CHANGED } from "../pware.oc.omo/constants/pware.oc.omo.constants.eventName.js"
 import { findBoulder } from "../pware.oc.omo/resolver/index.js"
-import { computeFingerprint, readRuntimeSnapshot, type RuntimeSnapshot } from "./resolver/index.js"
+import { computeFingerprint, type RuntimeSnapshot } from "./resolver/index.js"
+import { readRuntimeSnapshotAsync } from "./pware.oc.runtime.snapshotClient.js"
 import { getOpenCodeDbPath } from "../pware.oc.core/pware.oc.core.paths.js"
 import { MONITOR_POLL_MS, MONITOR_WATCH_DEBOUNCE_MS } from "../pware.oc.core/pware.oc.core.timing.js"
 import { dbg, profile } from "../pware.oc.core/pware.oc.core.debug.js"
@@ -32,6 +33,7 @@ export function startMonitor(opts: MonitorOptions): MonitorHandle {
   const pollMs = opts.pollMs ?? MONITOR_POLL_MS
   let lastFp = ""
   let stopped = false
+  let emitGen = 0
   let debounce: ReturnType<typeof setTimeout> | null = null
   const watchers: fs.FSWatcher[] = []
 
@@ -46,16 +48,19 @@ export function startMonitor(opts: MonitorOptions): MonitorHandle {
       if (!force && fp === lastFp) return
       dbg("monitor", "emit", { force, fp: fp.slice(0, 40) })
       lastFp = fp
-      const snapshot = readRuntimeSnapshot({
+      const gen = ++emitGen
+      void readRuntimeSnapshotAsync({
         sessionId: opts.sessionId,
         projectRoot: opts.projectRoot,
         dbPath,
-      })
-      opts.onChange?.(snapshot)
-      opts.emit?.({
-        type: EV_OES_SNAPSHOT,
-        ts: Date.now(),
-        data: { snapshot },
+      }).then((snapshot) => {
+        if (stopped || gen !== emitGen) return
+        opts.onChange?.(snapshot)
+        opts.emit?.({
+          type: EV_OES_SNAPSHOT,
+          ts: Date.now(),
+          data: { snapshot },
+        })
       })
     })
 

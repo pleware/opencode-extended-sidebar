@@ -94,6 +94,8 @@ src/
 │   ├── index.ts
 │   ├── pware.oc.runtime.monitor.ts
 │   ├── pware.oc.runtime.source.ts
+│   ├── pware.oc.runtime.worker.ts
+│   ├── pware.oc.runtime.snapshotClient.ts
 │   ├── pware.oc.runtime.mywork.ts
 │   ├── pware.oc.runtime.mywork-enrich.ts
 │   └── resolver/
@@ -168,7 +170,7 @@ Plugin registration: `id = "opencode-extended-sidebar"`, load toast,
 | `paths.ts` | OpenCode path resolution, path folding | `getOpenCodeDbPath()`, `pluginRoot()`, `resolveProjectFile()`, `basenameOf()`, `fileStamp()`, `dbStamp()`, `str()`, `finiteNum()` |
 | `preview.ts` | text/markdown preview limits | `previewViewportRows()`, `canPreviewPath()`, `isMarkdownPath()`, `readTextPreview()` |
 | `pulse.ts` | agent marks, flow, time/token formatting | `toEpochMs()`, `pulseAgeMs()`, `composeMark()`, `hottestMark()`, `activeFlow()`, `applyFlow()`, `flowFromEvent()`, `sessionBusyFromEvent()`, `sessionIdFromEvent()`, `shortToolLabel()`, `toolHitFromEvent()`, `formatAge()`, `formatDuration()`, `formatTokens()`, `formatUsd()`, `packChips()` |
-| `sqlite.ts` | readonly `bun:sqlite` / `node:sqlite` handle | `openReadonlyDb()`, `withDbRead()`, `resetReadonlyDb()`, `uniqueIds()` |
+| `sqlite.ts` | readonly `bun:sqlite` / `node:sqlite` handle, fail-fast busy timeout (logs `sql.busy`) | `openReadonlyDb()`, `withDbRead()`, `resetReadonlyDb()`, `uniqueIds()`, `isBusyError()` |
 | `status.ts` | canonical lifecycle/tool/work status | `normalizeStatus()`, `toToolStatus()`, `toWorkLabel()`, `workStatusGlyph()`, `isPendingWork()`, `workIsTerminal()`, `taskRank()` |
 | `timing.ts` | panel clock budgets | `TICK_MS`, `NOW_MS`, `FPS_READ_EVERY_TICKS`, `BLINK_TICKS`, `MONITOR_POLL_MS`, `MONITOR_WATCH_DEBOUNCE_MS`, `EVENT_SCAN_DEBOUNCE_MS` |
 
@@ -252,8 +254,10 @@ Plugin registration: `id = "opencode-extended-sidebar"`, load toast,
 
 | Module | Responsibility | Key exports |
 |---|---|---|
-| `pware.oc.runtime.monitor.ts` | watch boulder + poll SQLite stamps, fingerprint-driven; emits snapshot + boulder-change events | `startMonitor()`, `MonitorHandle` |
-| `pware.oc.runtime.source.ts` | runtime source orchestration: monitor lifecycle + debounced refresh from `pware.oes.*`/`pware.omo.*` hints | `startRuntimeSource()`, `RuntimeSourceHandle` |
+| `pware.oc.runtime.monitor.ts` | watch boulder + poll SQLite stamps, fingerprint-driven; emits snapshot + boulder-change events (snapshot read is off-thread via `snapshotClient`) | `startMonitor()`, `MonitorHandle` |
+| `pware.oc.runtime.source.ts` | runtime source orchestration: monitor lifecycle + debounced refresh from `pware.oes.*`/`pware.omo.*` hints; shuts the worker down on stop | `startRuntimeSource()`, `RuntimeSourceHandle` |
+| `pware.oc.runtime.worker.ts` | Bun Worker entry running `readRuntimeSnapshot` off the TUI main thread | (worker entry) |
+| `pware.oc.runtime.snapshotClient.ts` | async snapshot client: lazy singleton worker + sync fallback | `readRuntimeSnapshotAsync()`, `shutdownSnapshotWorker()`, `SnapshotRequestOpts` |
 | `pware.oc.runtime.mywork.ts` | the "My work" queue (questions + approvals) | `MyWorkItem`, `groupMyWork()`, `toQuestionItems()`, `toApprovalItems()`, `approvalContinueHint()`, `startWorkCommand()`, `StartWorkMode` |
 | `pware.oc.runtime.mywork-enrich.ts` | planner session state for approval rows (opencode SQLite + omo run-continuation) | `planSessionStateLabel()`, `enrichApprovalSessionStates()` |
 | `resolver/index.ts` | unified runtime snapshot | `RuntimeSnapshot`, `readRuntimeSnapshot()`, `computeFingerprint()`, `resetRuntimeCache()` |

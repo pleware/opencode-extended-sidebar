@@ -26,7 +26,7 @@ OpenCode gives you one conversation at a time. Real work looks different: an orc
 
 ## ⇄ Session switcher
 
-> Recent sessions, one click away. Title, age, and whether it is still alive. The header is `Sessions` — no count — with two labels: `switch` opens the host session switcher (the same `/sessions` command) and `new` starts a fresh session in the current project. When more sessions were fetched, a clickable `… +N more` reveals the next four per click. Below the list, tools and files rolled up from those same recent sessions.
+> Recent sessions, one click away. Title, age, and whether it is still alive. The current session is tagged `[C]`. The header is `Sessions` — no count — with two labels: `switch` opens the host session switcher (the same `/sessions` command) and `new` starts a fresh session in the current project. When more sessions were fetched, a clickable `… +N more` reveals the next four per click. Below the list, tools and files rolled up from those same recent sessions.
 
 ## ⊚ Live activity pulse
 
@@ -108,6 +108,7 @@ The glyph says *what* is happening; the colour says *how fresh* it is. Both come
 | `✓` `!` `?` `·`                 | Review lanes: approved / changes requested / inconclusive / waiting |
 | `M` `A` `D` `R` `C` `U` `T` `?` | Files: git status — same letters as `git status --short`      |
 | `V`                             | Files: viewed (session read only)                             |
+| `[C]`                           | Sessions: the current session label                           |
 | `∴`                             | Perf: thinking                                                 |
 | `█░`                            | Perf: share of the wall clock — `@crafter/charts` bar, filled `█` + partial blocks, space-empty |
 | `▁▂▃▄▅▆▇█`                      | Perf: trend line chart — `asciichart`, nulls interpolated |
@@ -130,7 +131,7 @@ The working spinner animates on a separate fast glyph tick (80 ms) while rows an
 | muted `?` `V`          | `textMuted`                 | Files: untracked, or viewed                      |
 | accent `∴`             | `primary`                   | Perf: thinking                                   |
 
-While an arrow is lit it drives the colour. The current session is **bold**. Clickable labels **underline on hover**. On Perf the same arrows mean measured time: wait, stream, tools.
+While an arrow is lit it drives the colour. The current session is **bold** and tagged `[C]` in the Sessions list. Clickable labels **underline on hover**. On Perf the same arrows mean measured time: wait, stream, tools.
 
 ## Install
 
@@ -205,6 +206,8 @@ opencode
 
 `1`, `true`, `yes`, or `on` use the plugin's `logs/` directory. Any other non-empty value is treated as a directory path. `0`, `false`, `no`, or `off` turns it off. Lines are JSON (`ts`, `tag`, `msg`, optional `data`) — path resolution, monitor emits, Perf reads, and the `self` tag logs the plugin's own measured latencies. Logging never crashes the panel.
 
+SQLite reads fail fast: `busy_timeout` is 100 ms, so a transient WAL lock no longer freezes the panel — the previous snapshot is kept on screen and a `sql.busy` debug line (with the SQL in `data.q`) is appended so lock contention is visible in the log.
+
 The same semantics power `OES_DEBUG_PROFILE`, which times **every plugin entry point and hotspot** and writes one line per call to `<plugin>/logs/oes-profile-YYYY-MM-DD.log`: `{ ts, tag, ms, data? }`. In this local repo checkout, `<plugin>/logs` means `./logs` at the repository root (not `./src/logs`). Tags: `event` (per event type), `tick`, `render` (the re-render trigger), `requestRender`, `row` (per row built), `scan`, `monitor.emit` (fingerprint + snapshot), `db.snapshot` / `db.feed` / `perf.read`, `sql` (every query, with its SQL in `data.q`), `omo.read` / `omo.stamp` / `omo.config` / `omo.approvals` / `omo.docs`, `mywork.approvals` (the per-approval session lookup), `files.decorate` (git marks), `git`, `remount`, `hydrate`, and the async host calls `rpc.diff` / `rpc.selectSession` / `rpc.newSession` / `rpc.startWork` / `rpc.approve`. When the panel unmounts, one `summary` line with per-tag `{ n, total, avg, max }` is appended — the whole wall-clock split in a single line.
 
 ## How it works
@@ -218,7 +221,7 @@ The panel is a read-only view of data OpenCode already stores.
 | `oes.json`      | plugin / user config / project                                 | display limits                    |
 | ignore files    | `<project>/.oesignore` (always) · `.gitignore` (with `skipGitignore`) | files hidden from the panel     |
 
-It refreshes from database stamps, file watches, and OpenCode events. Cost is shown only when the provider reports it. The `self` line measures the plugin's own runtime with `performance.now()` and the TUI renderer's native frame stats — no extra data source.
+It refreshes from database stamps, file watches, and OpenCode events. The always-on runtime snapshot is read off the TUI main thread in a Bun worker (with a synchronous fallback if the worker is unavailable), so SQLite reads never block the UI. Cost is shown only when the provider reports it. The `self` line measures the plugin's own runtime with `performance.now()` and the TUI renderer's native frame stats — no extra data source.
 
 ## Contributing
 

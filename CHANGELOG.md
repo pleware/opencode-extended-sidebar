@@ -1,5 +1,6 @@
 # Changelog
 
+- **0.2.48** (2026-09-01) Stop the sidebar freezing on a locked database by failing fast on lock waits, serving the last snapshot, and reading the runtime snapshot in a worker thread.
 - **0.2.47** (2026-09-01) Round perf trend y-axis labels to drop trailing-zero decimals.
 - **0.2.46** (2026-09-01) Rename the Details tab to Project and tag the current session with a [C] suffix.
 - **0.2.45** (2026-09-01) Reconcile My work plan grouping against boulder work and writer-session todos so an approved plan whose work finished shows as Finished instead of Ready to star.

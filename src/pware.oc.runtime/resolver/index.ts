@@ -125,7 +125,10 @@ export function readRuntimeSnapshot(opts: {
             projectRoot: opts.projectRoot,
           })
         : emptyDb(dbPath, "no session"),
-    () => emptyDb(dbPath, "db read failed"),
+    () =>
+      lastGood && lastGood.db.current?.id === opts.sessionId
+        ? lastGood.db
+        : emptyDb(dbPath, "db read failed"),
   )
 
   const snap: RuntimeSnapshot = {
@@ -137,15 +140,20 @@ export function readRuntimeSnapshot(opts: {
     omoConfig: readOmoConfig(),
     delegates: enrichDelegates(omo, db),
   }
+  lastGood = snap
   liveCache.set(cacheId, snap)
   return snap
 }
 
 const liveCache = createStampCache<RuntimeSnapshot>()
 
+/** Last successfully-read snapshot, served when a locked DB read fails. */
+let lastGood: RuntimeSnapshot | null = null
+
 /** Drop the in-memory live snapshot so the next read is a real load. */
 export function resetRuntimeCache(): void {
   liveCache.reset()
+  lastGood = null
 }
 
 function withAges(db: DbSnapshot, now: number): DbSnapshot {

@@ -7,6 +7,7 @@ import {
   EV_OMO_DOCS_CHANGED,
 } from "../pware.oc.omo/constants/pware.oc.omo.constants.eventName.js"
 import { startMonitor, type MonitorHandle } from "./pware.oc.runtime.monitor.js"
+import { shutdownSnapshotWorker } from "./pware.oc.runtime.snapshotClient.js"
 
 export type RuntimeSourceOptions = {
   bus: PwareEventBus
@@ -73,6 +74,7 @@ export function startRuntimeSource(opts: RuntimeSourceOptions): RuntimeSourceHan
       offDocsChanged()
       offConfigChanged()
       monitor.stop()
+      shutdownSnapshotWorker()
     },
   }
 }
