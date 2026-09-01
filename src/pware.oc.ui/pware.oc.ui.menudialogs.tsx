@@ -521,6 +521,32 @@ export function openDocDetail(
   ))
 }
 
+export type FileListEntry = {
+  name: string
+  description?: string
+  onSelect: () => void
+}
+
+/**
+ * A searchable list of files in a native host DialogSelect — the "view all"
+ * action for a file group. Each entry opens its own detail/preview on pick;
+ * the entry owns the type (a draft, a plan, a touched file), the dialog only
+ * lists a name and a muted description.
+ */
+export function openFileListDialog(
+  api: TuiPluginApi,
+  title: string,
+  entries: readonly FileListEntry[],
+): void {
+  const options: TuiDialogSelectOption<string>[] = entries.map((e, i) => ({
+    title: e.name,
+    value: String(i),
+    description: e.description,
+    onSelect: e.onSelect,
+  }))
+  openDialog(api, "medium", () => <api.ui.DialogSelect title={title} options={options} />)
+}
+
 /** Dated column log from opencode.db — writes a sidecar file, then shows it. */
 export function openPerfLog(
   api: TuiPluginApi,

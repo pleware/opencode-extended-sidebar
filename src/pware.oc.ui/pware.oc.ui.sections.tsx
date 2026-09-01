@@ -371,6 +371,8 @@ export function GroupSection<T>(props: {
   revealStep?: number
   /** Hoisted reveal state — used instead of an internal one when provided. */
   reveal?: RevealState
+  /** Extra clickable labels in the header, e.g. a `view all` action. */
+  actions?: ReadonlyArray<{ label: string; onPick: () => void }>
 }): JSX.Element {
   const reveal = props.reveal ?? useReveal(Math.max(1, props.revealStep ?? props.budget))
   return (
@@ -379,6 +381,7 @@ export function GroupSection<T>(props: {
       open={props.open}
       onToggle={props.onToggle}
       count={props.items.length}
+      actions={props.actions}
       colors={props.colors}
     >
       <RowList

@@ -21,6 +21,7 @@ export const SESSION_MORE_STEP = 4
 /** Rows a section keeps before it is worth folding instead. */
 export const ROW_MIN = {
   delegates: 2,
+  drafts: 2,
   files: 3,
   mywork: 2,
   sessions: 2,
@@ -34,6 +35,7 @@ export const ROW_MIN = {
  */
 export const ROW_RANK = {
   delegates: 3,
+  drafts: 3,
   files: 2,
   mywork: 1,
   sessions: 1,

@@ -38,7 +38,7 @@ OpenCode gives you one conversation at a time. Real work looks different: an orc
 
 ## ± File changes with diff stats
 
-> Files this session touched, with `+N −M` and git letters (`M` `A` `D` `R` `C` `U` `T` `?`). **V** means viewed — a session read with no git status. Click Markdown for a scrollable preview; other files open a native picker — **Preview** or **Copy relative path**. **Project** merges the same list across the sessions above.
+> Files this session touched, with `+N −M` and git letters (`M` `A` `D` `R` `C` `U` `T` `?`). **V** means viewed — a session read with no git status. Click Markdown for a scrollable preview; other files open a native picker — **Preview** or **Copy relative path**. **Project** merges the same list across the sessions above. A file list's header carries a `view all` action that opens a searchable picker of every file.
 >
 > Scratch dirs (`tmp/`, `.tmp/`, `.omo/`) and boilerplate filenames are hidden via the plugin's default `.oesignore`. The project's own `.oesignore` (gitignore format) is honoured automatically when present; set `skipGitignore` to also honour the project's `.gitignore`.
 
@@ -62,11 +62,11 @@ OpenCode gives you one conversation at a time. Real work looks different: an orc
 > Session | My work | Project | Stats
 > ```
 >
-> **Session** is this agent, its delegates, tools and files. **My work** is the queue of things waiting on you — open questions and OMO plan approvals grouped by the action they need. **Project** is the project-wide view — recent sessions (Chat history) plus the tools and files every one of them touched. **Stats** is timing. Tabs and folds are remembered. Clickable labels underline on hover. While a tab waits for its data a transient status row sits at its top — a braille spinner with `switching · <id>` while a session switch is in flight, `loading` on a cold tab, or an error/empty note (`no turns yet` on Stats) — and disappears the moment the data lands, so a switch never reads as a broken panel.
+> **Session** is this agent, its delegates, tools, files and — with OMO — the last five drafts behind a `view all` picker. **My work** is the queue of things waiting on you — open questions and OMO plan approvals grouped by the action they need. **Project** is the project-wide view — recent sessions (Chat history) plus the tools and files every one of them touched. **Stats** is timing. Tabs and folds are remembered. Clickable labels underline on hover. While a tab waits for its data a transient status row sits at its top — a braille spinner with `switching · <id>` while a session switch is in flight, `loading` on a cold tab, or an error/empty note (`no turns yet` on Stats) — and disappears the moment the data lands, so a switch never reads as a broken panel.
 
 ## ⇕ Rows that fit the window
 
-> `oes.json` row counts are ceilings. A short terminal trims live activity last, then Files, then Delegates. Every list ends in a clickable `… +N more`: the Tool Calls feed reveals another `toolRows` per click (up to `toolFetch`); the Sessions list reveals four per click (up to `sessionFetch`); Files, My work groups and Delegates reveal more with each click too; a trimmed Files list instead expands to every file (`… less` folds back).
+> `oes.json` row counts are ceilings. A short terminal trims live activity last, then Files, then Delegates. Every list ends in a clickable `… +N more`: the Tool Calls feed reveals another `toolRows` per click (up to `toolFetch`); the Sessions list reveals four per click (up to `sessionFetch`); My work groups and Delegates reveal more with each click too. File lists (Files, Drafts) drop the inline revealer for a header `view all` that opens a searchable picker of the full list.
 
 ## ⊘ Privacy first
 

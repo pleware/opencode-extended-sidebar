@@ -3,6 +3,7 @@ import { createEffect, createMemo, createSignal, For, on, Show, onCleanup, type 
 import { useTerminalDimensions } from "@opentui/solid"
 import type { TuiPluginApi, TuiTheme } from "@opencode-ai/plugin/tui"
 import {
+  DraftFile,
   emptyOmo,
   listApprovals,
   sessionForPlanFile,
@@ -118,7 +119,7 @@ import {
 } from "../pware.oc.core/pware.oc.core.status.js"
 import { createEventBus } from "../pware.oc.core/pware.oc.core.bus.js"
 import { startRuntimeSource } from "../pware.oc.runtime/pware.oc.runtime.source.js"
-import { openApprovalDialog, openDocDetail, openFileDetail, openToolDetail } from "./pware.oc.ui.menudialogs.js"
+import { openApprovalDialog, openDocDetail, openFileDetail, openFileListDialog, openToolDetail } from "./pware.oc.ui.menudialogs.js"
 import { startHostEventBridge } from "./pware.oc.ui.live.js"
 import {
   approvePlan,
@@ -174,6 +175,7 @@ const KV_FOLD_DELEGATES = "oes.fold.delegates"
 const KV_FOLD_SESSIONS = "oes.fold.sessions"
 const KV_FOLD_TOOLS = "oes.fold.tools"
 const KV_FOLD_FILES = "oes.fold.files"
+const KV_FOLD_DRAFTS = "oes.fold.drafts"
 const KV_TAB = "oes.tab"
 
 const OES_TABS = ["current", "mywork", "sessions", "perf"] as const
@@ -549,6 +551,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   const foldSessions = useFold(props.api, KV_FOLD_SESSIONS, { after: requestRender })
   const foldTools = useFold(props.api, KV_FOLD_TOOLS, { after: requestRender })
   const foldFiles = useFold(props.api, KV_FOLD_FILES, { after: requestRender })
+  const foldDrafts = useFold(props.api, KV_FOLD_DRAFTS, { after: requestRender })
 
   const myWorkFold = {} as Record<MyWorkKind, ReturnType<typeof useFold>>
   for (const kind of MY_WORK_ORDER) {
@@ -587,8 +590,6 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   })
   const projectFilesStat = createMemo(() => sumDiff(projectFeed().files))
 
-  const [filesExpanded, setFilesExpanded] = createSignal(false)
-
   const filesAll = createMemo(() => {
     gitTick()
     return decorateFiles(mergeFiles(snap().db.files ?? [], liveFiles()), projectDir(), {
@@ -614,6 +615,19 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   }
 
   const omoPresent = createMemo(() => snap().omo.present)
+
+  /** Drafts under `.omo/drafts/` — last five inline, the full list behind "view all". */
+  const draftsAll = createMemo<DocView[]>(() => {
+    if (tab() !== "current" || !omoPresent()) return []
+    now() // re-scan while open; the docs cache TTL gates the filesystem read
+    try {
+      return DraftFile.list(projectDir())
+    } catch (e) {
+      dbg("drafts", "error", String(e))
+      return []
+    }
+  })
+  const drafts = createMemo(() => draftsAll().slice(0, 5))
 
   /** Open `question` tools anywhere in this project — the "answer me" queue. */
   const myWorkQuestions = createMemo<MyWorkItem[]>(() => {
@@ -706,6 +720,9 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
         section(!foldDelegates.open(), "delegates", 6, ROW_MIN.delegates, ROW_RANK.delegates)
         section(!foldTools.open(), "tools", o.toolRows, ROW_MIN.tools, ROW_RANK.tools)
         section(!foldFiles.open(), "files", o.fileRows, ROW_MIN.files, ROW_RANK.files)
+        if (omo && draftsAll().length > 0) {
+          section(!foldDrafts.open(), "drafts", Math.min(5, draftsAll().length), ROW_MIN.drafts, ROW_RANK.drafts)
+        }
       } else if (t === "mywork") {
         header()
         for (const g of myWorkGroups()) {
@@ -738,7 +755,6 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   const sessionsReveal = useReveal(SESSION_MORE_STEP)
   const projectToolsReveal = useReveal(Math.max(1, oes().toolRows))
   const toolsReveal = useReveal(Math.max(1, oes().toolRows))
-  const projectFilesReveal = useReveal(4)
   const delegateReveal = useReveal(4)
   const currentDelegatesReveal = useReveal(4)
 
@@ -1091,12 +1107,26 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
             open={foldFiles.open()}
             count={projectFeed().files.length}
             diff={projectFilesStat()}
+            actions={[
+              {
+                label: "view all",
+                onPick: () =>
+                  openFileListDialog(
+                    props.api,
+                    "Files",
+                    projectFeed().files.map((f) => ({
+                      name: f.name,
+                      onSelect: () => openFileDetail(props.api, f, projectRoots(), colors()),
+                    })),
+                  ),
+              },
+            ]}
             colors={colors()}
             onToggle={foldFiles.toggle}
           >
             <RowList
               items={projectFeed().files}
-              budget={rowsFor("files", oes().fileRows) + projectFilesReveal.more()}
+              budget={rowsFor("files", oes().fileRows)}
               colors={colors()}
               renderItem={(f) => (
                 <Row
@@ -1108,7 +1138,6 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
                   onSelect={() => openFileDetail(props.api, f, projectRoots(), colors())}
                 />
               )}
-              more={{ onReveal: projectFilesReveal.reveal }}
             />
           </FoldSection>
         </Show>
@@ -1211,6 +1240,20 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
             open={foldFiles.open()}
             count={filesAll().length > 0 ? filesAll().length : undefined}
             diff={filesStat()}
+            actions={[
+              {
+                label: "view all",
+                onPick: () =>
+                  openFileListDialog(
+                    props.api,
+                    "Files",
+                    filesAll().map((f) => ({
+                      name: f.name,
+                      onSelect: () => openFileDetail(props.api, f, projectRoots(), colors()),
+                    })),
+                  ),
+              },
+            ]}
             colors={colors()}
             onToggle={foldFiles.toggle}
           >
@@ -1219,11 +1262,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
             ) : (
               <RowList
                 items={filesAll()}
-                budget={
-                  filesExpanded()
-                    ? Number.POSITIVE_INFINITY
-                    : rowsFor("files", oes().fileRows)
-                }
+                budget={rowsFor("files", oes().fileRows)}
                 colors={colors()}
                 renderItem={(f) => (
                   <Row
@@ -1235,14 +1274,53 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
                     onSelect={() => openFileDetail(props.api, f, projectRoots(), colors())}
                   />
                 )}
-                more={{
-                  onReveal: () => setFilesExpanded(true),
-                  expanded: filesExpanded(),
-                  onToggle: () => setFilesExpanded(false),
-                }}
               />
             )}
           </FoldSection>
+
+          <Show when={drafts().length > 0}>
+            <FoldSection
+              title="Drafts"
+              open={foldDrafts.open()}
+              count={draftsAll().length}
+              actions={[
+                {
+                  label: "view all",
+                  onPick: () =>
+                    openFileListDialog(
+                      props.api,
+                      "Drafts",
+                      draftsAll().map((d) => ({
+                        name: d.name,
+                        description: d.rel,
+                        onSelect: () => openDocDetail(props.api, d, projectRoots(), colors()),
+                      })),
+                    ),
+                },
+              ]}
+              colors={colors()}
+              onToggle={foldDrafts.toggle}
+            >
+              <RowList
+                items={drafts()}
+                budget={rowsFor("drafts", 5)}
+                colors={colors()}
+                renderItem={(d) => {
+                  const age = pulseAgeMs(now(), d.updatedAt)
+                  return (
+                    <Row
+                      kind={ROW_KIND_FILE}
+                      mark={composeMark({ ageMs: age })}
+                      glyph="•"
+                      name={d.name}
+                      suffix={formatAge(age)}
+                      onSelect={() => openDocDetail(props.api, d, projectRoots(), colors())}
+                    />
+                  )
+                }}
+              />
+            </FoldSection>
+          </Show>
             </box>
           ),
           perf: () => (

@@ -285,7 +285,7 @@ Plugin registration: `id = "opencode-extended-sidebar"`, load toast,
 | `sidebar.tsx` | the panel: groups, tabs, live rows; consumes plugin event bus | `SidebarPanel` |
 | `live.tsx` | host event adapter (`api.event.on`) → plugin event bus (`pware.oc.*`, `pware.oes.*`) | `startHostEventBridge()` |
 | `host.tsx` | UI host RPC wrappers (session switch/new session/start-work/approve) | `selectSession()`, `openSessionSwitcher()`, `newSession()`, `runStartWork()`, `approvePlan()` |
-| `menudialogs.tsx` | every popup via one `openDialog()` choke-point | `openFileDetail()`, `openToolDetail()`, `openWorkDetail()`, `openApprovalDialog()`, `openDocDetail()`, `openTextPreview()`, `openPerfLog()` |
+| `menudialogs.tsx` | every popup via one `openDialog()` choke-point | `openFileDetail()`, `openToolDetail()`, `openFileListDialog()`, `openApprovalDialog()`, `openDocDetail()`, `openTextPreview()`, `openPerfLog()` |
 | `glyphs.tsx` | status → character mappings | `workStatusGlyph()` (re-exported from core), `markGlyph()`, `flowGlyph()`, `spinnerFrame()`, `flowBlinkOn()`, `myWorkGlyph()`, `reviewLaneGlyph()`, `reviewStateSuffix()`, `fileLetterMark()`, `SPINNER_FRAMES`, `GROUP_GLYPH`, `THINK_GLYPH` |
 
 ## Tests
