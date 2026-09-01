@@ -5,6 +5,12 @@
  * omo file engine (`planFile.ts`), pinned to the `.omo/evidence/` document kind.
  */
 import type { SqlDb } from "../../pware.oc.core/pware.oc.core.sqlite.js"
+import { DOC_KIND_PROOF } from "../constants/pware.oc.omo.constants.docKind.js"
+import {
+  listOmoFiles,
+  type DocView,
+  type ListOmoFilesOptions,
+} from "./pware.oc.omo.resolver.doc.js"
 import {
   omoFileIndex,
   sessionForOmoFile,
@@ -23,4 +29,15 @@ export function proofSessionIndex(
 /** The session that last wrote a `.omo/evidence/` file, if any. */
 export function sessionForProofFile(db: SqlDb, relPath: string | null | undefined): string | null {
   return sessionForOmoFile(db, relPath, "proof")
+}
+
+/** Evidence files under `.omo/evidence/`, optionally filtered by writer session. */
+export const ProofFile = {
+  list(
+    projectRoot: string | null | undefined,
+    sessionId: string | null = null,
+    opts: ListOmoFilesOptions = {},
+  ): DocView[] {
+    return listOmoFiles(DOC_KIND_PROOF, projectRoot, { ...opts, sessionId })
+  },
 }

@@ -16,7 +16,7 @@ describe("packSections", () => {
     { key: "tools", want: 8, min: ROW_MIN.tools, rank: ROW_RANK.tools },
     { key: "files", want: 8, min: ROW_MIN.files, rank: ROW_RANK.files },
     { key: "delegates", want: 6, min: ROW_MIN.delegates, rank: ROW_RANK.delegates },
-    { key: "omo", want: 8, min: ROW_MIN.omo, rank: ROW_RANK.omo },
+    { key: "omo", want: 8, min: 3, rank: 3 },
   ] as const
 
   test("hands out every want when the budget is roomy", () => {

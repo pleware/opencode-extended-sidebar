@@ -23,7 +23,6 @@ export const ROW_MIN = {
   delegates: 2,
   files: 3,
   mywork: 2,
-  omo: 3,
   sessions: 2,
   tools: 3,
 } as const
@@ -31,14 +30,12 @@ export const ROW_MIN = {
 /**
  * Higher gives up rows first. Live activity outranks history: on Current the
  * tool feed survives longest, on Sessions the session list does. My work is a
- * queue of things awaiting the user, so it ties with Sessions. OMO ties with
- * Delegates so the optional group never starves the core on its own.
+ * queue of things awaiting the user, so it ties with Sessions.
  */
 export const ROW_RANK = {
   delegates: 3,
   files: 2,
   mywork: 1,
-  omo: 3,
   sessions: 1,
   tools: 1,
 } as const

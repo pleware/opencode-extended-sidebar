@@ -3,14 +3,9 @@ import { createEffect, createMemo, createSignal, For, on, Show, onCleanup, type 
 import { useTerminalDimensions } from "@opentui/solid"
 import type { TuiPluginApi, TuiTheme } from "@opencode-ai/plugin/tui"
 import {
-  currentTask,
   emptyOmo,
-  groupDocs,
   listApprovals,
-  readOmoDocs,
   sessionForPlanFile,
-  workRowView,
-  workStatusLabel,
 } from "../pware.oc.omo/resolver/index.js"
 import {
   delegatesForSession,
@@ -36,11 +31,7 @@ import {
   readProjectFeed,
   type ProjectFeed,
 } from "../pware.oc.opencode/resolver/index.js"
-import {
-  DOC_KIND_LABEL,
-  type DocKind,
-  type DocView,
-} from "../pware.oc.omo/resolver/pware.oc.omo.resolver.doc.js"
+import { type DocView } from "../pware.oc.omo/resolver/pware.oc.omo.resolver.doc.js"
 import type { DelegateView } from "../pware.oc.runtime/resolver/pware.oc.runtime.resolver.delegate.js"
 import { enrichApprovalSessionStates, planSessionStateLabel } from "../pware.oc.runtime/pware.oc.runtime.mywork-enrich.js"
 import {
@@ -53,10 +44,8 @@ import {
 } from "../pware.oc.core/pware.oc.core.layout.js"
 import { openReadonlyDb } from "../pware.oc.core/pware.oc.core.sqlite.js"
 import {
-  FLOW_TOOL,
   MARK_QUEUED,
   MARK_READY,
-  PULSE_IDLE,
   PULSE_LIVE,
   PULSE_STALE,
 } from "../pware.oc.core/constants/pware.oc.core.constants.pulse.js"
@@ -85,12 +74,7 @@ import {
   MY_WORK_GROUP_READY_START,
   MY_WORK_GROUP_RUNNING,
 } from "../pware.oc.core/constants/pware.oc.core.constants.myWork.js"
-import {
-  DOC_KIND_DRAFT,
-  DOC_KIND_NOTEPAD,
-  DOC_KIND_PLAN,
-  DOC_KIND_PROOF,
-} from "../pware.oc.omo/constants/pware.oc.omo.constants.docKind.js"
+import { DOC_KIND_DRAFT } from "../pware.oc.omo/constants/pware.oc.omo.constants.docKind.js"
 import {
   GROUP_GLYPH,
   fileLetterMark,
@@ -134,7 +118,7 @@ import {
 } from "../pware.oc.core/pware.oc.core.status.js"
 import { createEventBus } from "../pware.oc.core/pware.oc.core.bus.js"
 import { startRuntimeSource } from "../pware.oc.runtime/pware.oc.runtime.source.js"
-import { openApprovalDialog, openDocDetail, openFileDetail, openToolDetail, openWorkDetail } from "./pware.oc.ui.menudialogs.js"
+import { openApprovalDialog, openDocDetail, openFileDetail, openToolDetail } from "./pware.oc.ui.menudialogs.js"
 import { startHostEventBridge } from "./pware.oc.ui.live.js"
 import {
   approvePlan,
@@ -190,27 +174,16 @@ const KV_FOLD_DELEGATES = "oes.fold.delegates"
 const KV_FOLD_SESSIONS = "oes.fold.sessions"
 const KV_FOLD_TOOLS = "oes.fold.tools"
 const KV_FOLD_FILES = "oes.fold.files"
-const KV_FOLD_OMO = "oes.fold.omo"
 const KV_TAB = "oes.tab"
-const KV_OMO_TAB = "oes.omoTab"
 
-/** Docs groups are a fixed enum — the fold keys are stable. */
-  const DOC_KIND_ORDER: readonly DocKind[] = [DOC_KIND_PLAN, DOC_KIND_DRAFT, DOC_KIND_NOTEPAD, DOC_KIND_PROOF]
-
-/** Two independent groups: OES is the core, OMO is an optional add-on below it. */
 const OES_TABS = ["current", "mywork", "sessions", "perf"] as const
-const OMO_TABS = ["works", "boulder", "docs"] as const
 type OesTab = (typeof OES_TABS)[number]
-type OmoTab = (typeof OMO_TABS)[number]
 
 const TAB_LABELS: Record<string, string> = {
   mywork: "My work",
   sessions: "Project",
   current: "Session",
   perf: "Stats",
-  works: "Works",
-  boulder: "Boulder",
-  docs: "Docs",
 }
 
 function emptyRuntime(): RuntimeSnapshot {
@@ -235,9 +208,6 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   const [busy, setBusy] = createSignal<Record<string, boolean>>({})
   const [flow, setFlow] = createSignal<Record<string, FlowEntry>>({})
   const [tab, setTab] = createSignal<OesTab>(kvReadOne(props.api, KV_TAB, "current", OES_TABS))
-  const [omoTab, setOmoTab] = createSignal<OmoTab>(
-    kvReadOne(props.api, KV_OMO_TAB, "works", OMO_TABS),
-  )
   const dimensions = useTerminalDimensions()
   const [liveTools, setLiveTools] = createSignal<Record<string, ToolHit>>({})
   const [liveFiles, setLiveFiles] = createSignal<Record<string, FileView>>({})
@@ -579,7 +549,6 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   const foldSessions = useFold(props.api, KV_FOLD_SESSIONS, { after: requestRender })
   const foldTools = useFold(props.api, KV_FOLD_TOOLS, { after: requestRender })
   const foldFiles = useFold(props.api, KV_FOLD_FILES, { after: requestRender })
-  const foldOmo = useFold(props.api, KV_FOLD_OMO, { after: requestRender })
 
   const myWorkFold = {} as Record<MyWorkKind, ReturnType<typeof useFold>>
   for (const kind of MY_WORK_ORDER) {
@@ -590,23 +559,13 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     })
   }
 
-  // Reveal state is hoisted, not owned by GroupSection: the My work and Docs
-  // memos read the `now()` clock, so <For> reconciles them to fresh objects
+  // Reveal state is hoisted, not owned by GroupSection: the My work memos
+  // read the `now()` clock, so <For> reconciles them to fresh objects
   // every second — a reveal signal created inside the component would be
   // thrown away with it and the "… +N more" click would collapse on its own.
   const myWorkReveal = {} as Record<MyWorkKind, RevealState>
   for (const kind of MY_WORK_ORDER) {
     myWorkReveal[kind] = useReveal(2)
-  }
-
-  const docFold = {} as Record<DocKind, ReturnType<typeof useFold>>
-  for (const kind of DOC_KIND_ORDER) {
-    docFold[kind] = useFold(props.api, `oes.fold.docs.${kind}`, { after: requestRender })
-  }
-
-  const docReveal = {} as Record<DocKind, RevealState>
-  for (const kind of DOC_KIND_ORDER) {
-    docReveal[kind] = useReveal(2)
   }
 
   const oes = () => getOes(projectDir())
@@ -651,15 +610,6 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
       }
     }
     if (picked === "current" || picked === "perf") refresh()
-    requestRender()
-  }
-
-  const pickOmoTab = (next: string) => {
-    if (!(OMO_TABS as readonly string[]).includes(next)) return
-    const picked = next as OmoTab
-    setOmoTab(picked)
-    kvWriteOne(props.api, KV_OMO_TAB, picked)
-    refresh()
     requestRender()
   }
 
@@ -720,9 +670,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
 
   /**
    * Rows are handed out on every render: chrome that always costs a line is
-   * counted first, then `packSections` splits what is left. OMO shares the
-   * budget instead of pushing the core off screen, and folds itself to its
-   * summary line when even its minimum no longer fits.
+   * counted first, then `packSections` splits what is left.
    */
   const rowPlan = createMemo(() => {
     try {
@@ -771,13 +719,6 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
       }
       fixed += Math.max(0, blocks - 1) // one blank row between OES sections
 
-      if (omo) {
-        fixed += 2 // blank row above the group + its brand line
-        if (foldOmo.open() && o.omoRows > 0) {
-          sections.push({ key: "omo", want: o.omoRows, min: ROW_MIN.omo, rank: ROW_RANK.omo })
-        }
-      }
-
       const height = dimensions()?.height
       return packSections(panelRows(typeof height === "number" ? height : 24), fixed, sections)
     } catch (e) {
@@ -797,83 +738,9 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   const sessionsReveal = useReveal(SESSION_MORE_STEP)
   const projectToolsReveal = useReveal(Math.max(1, oes().toolRows))
   const toolsReveal = useReveal(Math.max(1, oes().toolRows))
-  const worksReveal = useReveal(4)
-  const boulderReveal = useReveal(4)
   const projectFilesReveal = useReveal(4)
   const delegateReveal = useReveal(4)
   const currentDelegatesReveal = useReveal(4)
-
-  const omoRows = createMemo(() => (omoPresent() ? rowsFor("omo", 0) : 0))
-  const omoOpen = createMemo(() => foldOmo.open() && omoRows() > 0)
-  const works = createMemo(() => snap().omo.works)
-
-  const workLines = createMemo((): RowData[] =>
-    works().map((w) => {
-      const row = workRowView(w, now())
-      return {
-        kind: ROW_KIND_AGENT,
-        mark: row.mark,
-        glyph: row.glyph ?? undefined,
-        name: w.name,
-        suffix: row.suffix,
-        current: w.current,
-        onSelect: () => openWorkDetail(props.api, w, projectRoots(), colors()),
-      }
-    }),
-  )
-
-  const omoSummary = createMemo(() => {
-    const b = snap().omo.boulder
-    const bits: string[] = []
-    if (b.name) bits.push(b.name)
-    if (b.counts.running > 0) bits.push(`${b.counts.running} run`)
-    else if (b.counts.total > 0) bits.push(`${b.counts.done}/${b.counts.total} done`)
-    const age = formatAge(pulseAgeMs(now(), b.updatedAt))
-    if (age) bits.push(age)
-    return clip(bits.join(" · ") || "no active work", oes().lineMax)
-  })
-
-  /** Boulder is the one place that knows where a plan lives. */
-  const planPaths = createMemo(() => {
-    const seen = new Set<string>()
-    for (const w of works()) if (w.planPath) seen.add(w.planPath)
-    return [...seen]
-  })
-
-  /** Scanned only while the tab is open; `readOmoDocs` caches for a few seconds. */
-  const docs = createMemo(() => {
-    if (!omoOpen() || omoTab() !== "docs") return []
-    now()
-    return readOmoDocs(projectDir(), planPaths())
-  })
-
-  const docGroups = createMemo(() => groupDocs(docs()))
-
-  const docBudgets = createMemo(() => {
-    try {
-      const open = docGroups().filter((g) => docFold[g.kind].open())
-      if (open.length === 0) return {} as Record<DocKind, number>
-      return packSections(
-        omoRows(),
-        0,
-        open.map((g) => ({ key: g.kind, want: g.items.length + 1, min: 1, rank: ROW_RANK.omo })),
-      )
-    } catch {
-      return {} as Record<DocKind, number>
-    }
-  }, {} as Record<DocKind, number>)
-
-  const docRow = (d: DocView): RowData => {
-    const age = pulseAgeMs(now(), d.updatedAt)
-    return {
-      kind: ROW_KIND_FILE,
-      mark: composeMark({ ageMs: age }),
-      glyph: "•",
-      name: d.name,
-      suffix: formatAge(age),
-      onSelect: () => openDocDetail(props.api, d, projectRoots(), colors()),
-    }
-  }
 
   const myWorkRow = (item: MyWorkItem): RowData => {
     if (item.kind === MY_WORK_GROUP_RUNNING) {
@@ -953,68 +820,6 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
       },
     }
   }
-
-  /** The cockpit is a flat row list, so the row budget can just slice it. */
-  const boulderLines = createMemo((): RowData[] => {
-    const b = snap().omo.boulder
-    if (!b.name && b.counts.total === 0 && b.sessions.length === 0) return []
-    const header = b.status
-      ? workRowView({ status: b.status, updatedAt: b.updatedAt }, now())
-      : { mark: PULSE_IDLE as AgentMark, glyph: undefined, suffix: formatAge(pulseAgeMs(now(), b.updatedAt)) }
-    const out: RowData[] = [
-      {
-        kind: ROW_KIND_AGENT,
-        mark: header.mark,
-        glyph: header.glyph ?? undefined,
-        name: b.name || "work",
-        suffix: header.suffix,
-        current: true,
-      },
-    ]
-
-    const meta = [b.agent, b.status ? workStatusLabel(b.status) : null]
-      .filter((s): s is string => Boolean(s))
-      .join(" · ")
-    if (meta) out.push({ kind: ROW_KIND_GROUP, mark: MARK_READY, glyph: " ", name: meta })
-
-    const task = currentTask(b)
-    if (task) {
-      out.push({
-        kind: ROW_KIND_TOOL,
-        mark: PULSE_LIVE,
-        name: task.label || task.title,
-        suffix:
-          task.startedAt != null ? formatDuration(Math.max(0, now() - task.startedAt)) : undefined,
-        flow: FLOW_TOOL,
-      })
-    }
-
-    if (b.counts.total > 0) {
-      const bits = [`${b.counts.running} run`, `${b.counts.done} done`]
-      if (b.counts.other > 0) bits.push(`${b.counts.other} other`)
-      out.push({ kind: ROW_KIND_GROUP, mark: MARK_READY, glyph: " ", name: bits.join(" · ") })
-    }
-
-    for (const s of b.sessions) {
-      const sess = snap().db.byId[s.id]
-      const archived = sess?.status === SESSION_STATUS_ARCHIVED
-      out.push({
-        kind: ROW_KIND_DELEGATE,
-        mark: rowMark(
-          archived ? STATUS_ARCHIVED : null,
-          archived,
-          Boolean(busy()[s.id]),
-          sess?.timeUpdated,
-          seen()[s.id],
-        ),
-        name: s.origin ? `${s.id.slice(0, 12)} · ${s.origin}` : s.id.slice(0, 12),
-        current: s.id === props.sessionId,
-        flow: rowFlow(s.id, Boolean(busy()[s.id])),
-        onSelect: () => goSession(s.id),
-      })
-    }
-    return out
-  })
 
   /** Perf SQLite scan runs only while this tab is open. */
   const perf = createMemo(() => {
@@ -1461,70 +1266,6 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
           ),
         }}
       />
-
-      <Show when={omoPresent()}>
-        <TabColumn
-          brand="OMO"
-          tabs={OMO_TABS}
-          labels={TAB_LABELS}
-          active={omoTab()}
-          colors={colors()}
-          onPick={pickOmoTab}
-          onBrand={foldOmo.toggle}
-          indentContent
-          gap={0}
-          collapsed={!omoOpen()}
-          summary={omoSummary()}
-          panels={{
-            works: () =>
-              workLines().length === 0 ? (
-                <text fg={colors().textMuted}>• none</text>
-              ) : (
-                <RowList
-                  items={workLines()}
-                  budget={omoRows() + worksReveal.more()}
-                  colors={colors()}
-                  renderItem={(r) => <Row {...r} />}
-                  more={{ onReveal: worksReveal.reveal }}
-                />
-              ),
-            boulder: () =>
-              boulderLines().length === 0 ? (
-                <text fg={colors().textMuted}>• no active work</text>
-              ) : (
-                <RowList
-                  items={boulderLines()}
-                  budget={omoRows() + boulderReveal.more()}
-                  colors={colors()}
-                  renderItem={(r) => <Row {...r} />}
-                  more={{ onReveal: boulderReveal.reveal }}
-                />
-              ),
-            docs: () => {
-              const groups = docGroups()
-              if (groups.length === 0) return <text fg={colors().textMuted}>• none</text>
-              return (
-                <box flexDirection="column" gap={1}>
-                  <For each={groups}>
-                    {(g) => (
-                      <GroupSection
-                        title={DOC_KIND_LABEL[g.kind]}
-                        open={docFold[g.kind].open()}
-                        onToggle={docFold[g.kind].toggle}
-                        colors={colors()}
-                        items={g.items}
-                        budget={rowsForPlan(docBudgets(), g.kind, 0)}
-                        reveal={docReveal[g.kind]}
-                        renderItem={(d) => <Row {...docRow(d)} />}
-                      />
-                    )}
-                  </For>
-                </box>
-              )
-            },
-          }}
-        />
-      </Show>
 
       {err() && snap().db.main ? (
         <text fg={colors().textMuted}>{err()}</text>

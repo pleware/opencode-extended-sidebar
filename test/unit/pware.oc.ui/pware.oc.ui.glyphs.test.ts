@@ -93,6 +93,11 @@ describe("myWorkGlyph", () => {
     expect(myWorkGlyph("ready-to-start")).toBe("▶")
     expect(myWorkGlyph("finished")).toBe("✓")
   })
+
+  test("interrupted is the circled slash, error the cross", () => {
+    expect(myWorkGlyph("interrupted")).toBe("⊘")
+    expect(myWorkGlyph("error")).toBe("×")
+  })
 })
 
 describe("reviewLaneGlyph", () => {

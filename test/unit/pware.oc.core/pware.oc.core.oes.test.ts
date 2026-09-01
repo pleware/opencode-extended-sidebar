@@ -26,14 +26,6 @@ describe("pick", () => {
   test("null raw returns the base", () => {
     expect(pick(null, OES_DEFAULTS)).toBe(OES_DEFAULTS)
   })
-  test("omoRows clamps to 0..20; 0 keeps the OMO group collapsed", () => {
-    expect(pick({ omoRows: 99 }, OES_DEFAULTS).omoRows).toBe(20)
-    expect(pick({ omoRows: 0 }, OES_DEFAULTS).omoRows).toBe(0)
-    expect(pick({ omoRows: -5 }, OES_DEFAULTS).omoRows).toBe(0)
-    expect(pick({ omoRows: "nope" } as Record<string, unknown>, OES_DEFAULTS).omoRows).toBe(
-      OES_DEFAULTS.omoRows,
-    )
-  })
 
   test("toolFetch is a separate history window, clamped to [toolRows, 80]", () => {
     expect(OES_DEFAULTS.toolFetch).toBe(20)

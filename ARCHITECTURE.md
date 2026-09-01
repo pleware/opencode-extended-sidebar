@@ -224,16 +224,16 @@ Plugin registration: `id = "opencode-extended-sidebar"`, load toast,
 |---|---|---|
 | `resolver/boulder.ts` | `boulder.json` → works/tasks/delegates/plan | `readOmo()`, `emptyOmo()`, `findBoulder()`, `findOmoWatchDirs()`, `isOmoPresent()`, `omoStamp()`, `currentTask()`, `workRowView()`, `workStatusLabel`, `planWorkStateByPlanName()` |
 | `resolver/plan.ts` | plan markdown frontmatter parsing | `parsePlanStatus()`, `parsePlanPendingAction()`, `parseReviewBlock()`, `approvalName()` |
-| `resolver/planFile.ts` | omo file → writer-session index (reads the OpenCode DB via `SqlDb`); one generic engine for every document kind | `planSessionIndex()`, `sessionForPlanFile()`, `PlanSessionIndex`, `omoFileIndex()`, `sessionForOmoFile()`, `OMO_FILE_KINDS`, `OmoFileKind`, `OmoFileIndex` |
-| `resolver/draftFile.ts` | draft-file → writer-session index (thin wrapper over `planFile.ts`) | `draftSessionIndex()`, `sessionForDraftFile()` |
-| `resolver/notepadsFile.ts` | notepad-file → writer-session index (thin wrapper over `planFile.ts`) | `notepadsSessionIndex()`, `sessionForNotepadFile()` |
-| `resolver/proofFile.ts` | evidence (proof) file → writer-session index (thin wrapper over `planFile.ts`) | `proofSessionIndex()`, `sessionForProofFile()` |
+| `resolver/planFile.ts` | omo file → writer-session index (reads the OpenCode DB via `SqlDb`); one generic engine for every document kind, plus the plan-file listing | `planSessionIndex()`, `sessionForPlanFile()`, `PlanSessionIndex`, `omoFileIndex()`, `sessionForOmoFile()`, `OMO_FILE_KINDS`, `OmoFileKind`, `OmoFileIndex`, `PlanFile.list()` |
+| `resolver/draftFile.ts` | draft-file → writer-session index (thin wrapper over `planFile.ts`) | `draftSessionIndex()`, `sessionForDraftFile()`, `DraftFile.list()` |
+| `resolver/notepadsFile.ts` | notepad-file → writer-session index (thin wrapper over `planFile.ts`) | `notepadsSessionIndex()`, `sessionForNotepadFile()`, `NotepadFile.list()` |
+| `resolver/proofFile.ts` | evidence (proof) file → writer-session index (thin wrapper over `planFile.ts`) | `proofSessionIndex()`, `sessionForProofFile()`, `ProofFile.list()` |
 | `resolver/rulesFile.ts` | rule-file → writer-session index (thin wrapper over `planFile.ts`) | `rulesSessionIndex()`, `sessionForRuleFile()` |
 | `resolver/runContinuationFile.ts` | run-continuation file → writer-session index (thin wrapper over `planFile.ts`) | `runContinuationSessionIndex()`, `sessionForRunContinuationFile()` |
 | `resolver/approval.ts` | the four "My work" approval buckets (ready-to-review / ready-to-start / finished / drafting; TTL, lazy) | `listApprovals()`, `resetApprovalsCache()` |
 | `resolver/approvalGroup.ts` | "My work" approval grouping from OMO plan status + draft path, reconciled against boulder + writer todos | `approvalGroup()`, `isDraftOf()`, `resolveApprovalGroup()`, `planWorkDone()`, `isDrafting()`, `isReadyToReview()`, `isReadyToStart()`, `isFinished()` |
 | `resolver/approvalState.ts` | `.omo/run-continuation` background-task marker | `readRunContinuationState()`, `firstRunContinuationDir()` |
-| `resolver/doc.ts` | docs index: plan/drafts/notepads/proof | `readOmoDocs()`, `groupDocs()`, `resetDocsCache()`, `DOC_KIND_LABEL` |
+| `resolver/doc.ts` | docs index: per-kind listing of plan/drafts/notepads/proof, with session + plan-status filters | `listOmoFiles()`, `ListOmoFilesOptions`, `resetDocsCache()`, `DOC_KIND_LABEL` |
 | `resolver/config.ts` | `oh-my-openagent.json` team mode | `readOmoConfig()` |
 | `resolver/index.ts` | aggregate | barrel |
 

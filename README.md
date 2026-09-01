@@ -48,17 +48,7 @@ OpenCode gives you one conversation at a time. Real work looks different: an orc
 
 ## ? My work — what is waiting on you
 
-> One queue of things that need **your** action, shown first in the core group. Open `question` tools anywhere in the project appear as rows — click to jump to the session and answer. Three states: `?` **Awaiting answer** (the agent is live and waiting), `◷` **Interrupted** (the question was aborted — answer never came, the reason shows on the row, still your call), and `×` **Errors** (the question tool genuinely failed — collapsed by default, expand for the error text). Then a **Running** group (`◔`) — your recent sessions still working or idle, each showing the title and its live status label on a two-glyph row, click to jump straight back in. OMO plans and drafts appear in four foldable groups by the action they need from you. Click a group header to fold it to its count line, and a trimmed group ends in a clickable `… +N more`: `Ready to review` (`!`, plans genuinely waiting for your sign-off), `Ready to start` (`▶`, approved plans you can launch), `Finished` (`✓`, done plans — an approved plan is auto-reconciled to Finished when its boulder work completed, or the writer session's todos are all done) and `Drafting` (`…` rows, drafts still being written — click for a picker: **Navigate to session** jumps to the session that wrote the draft, **Preview plan file** opens it as a preview). Click a plan row for a native, searchable picker: **Navigate to session** jumps to the session that wrote the plan (a muted reason is shown when no session is found), **Docs** opens the draft as a preview, and the **Plan options** group holds **Approve** — sending `ok` to that same session — plus **start work** rows (`start work`, `start work --make-pr`, `start work --ship`) that launch the OMO plan in the current session. Session activity is a row suffix, not a group: `working` (streaming), `waiting` (awaiting a background task), `idle`, `archived` or `unknown`. Review-required plans add the ulw-plan review state `R<round> <momus><independent>`, with per-lane glyphs `✓` approved, `!` changes requested, `?` inconclusive, `…` review live, `·` waiting. When `.omo/` is absent the approval section is simply gone; the question queue works on OpenCode alone.
-
-## ▤ OMO works, boulder and docs
-
-> When the project has oh-my-openagent — its `.omo/omo.jsonc` config marker — a second group appears below the core:
->
-> ```
-> OMO | Works | Boulder | Docs
-> ```
->
-> Without the marker the group is gone — no warning, no empty chrome. An installed omo with no active run still shows the group with empty **Works** and **Boulder** (`• none`, `• no active work`); the moment `boulder.json` appears the rows fill in. **Works** lists boulder runs. **Boulder** is the active run: plan, elapsed time, current task, bound sessions. **Docs** indexes the plan, drafts, notepads and evidence in foldable kind groups; click a text file to preview it. Click **OMO** to fold the group to one summary line.
+> One queue of things that need **your** action, shown first in the core group. Open `question` tools anywhere in the project appear as rows — click to jump to the session and answer. Three states: `?` **Awaiting answer** (the agent is live and waiting), `⊘` **Interrupted** (the question was aborted — answer never came, the reason shows on the row, still your call), and `×` **Errors** (the question tool genuinely failed — collapsed by default, expand for the error text). Then a **Running** group (`◔`) — your recent sessions still working or idle, each showing the title and its live status label on a two-glyph row, click to jump straight back in. OMO plans and drafts appear in four foldable groups by the action they need from you. Click a group header to fold it to its count line, and a trimmed group ends in a clickable `… +N more`: `Ready to review` (`!`, plans genuinely waiting for your sign-off), `Ready to start` (`▶`, approved plans you can launch), `Finished` (`✓`, done plans — an approved plan is auto-reconciled to Finished when its boulder work completed, or the writer session's todos are all done) and `Drafting` (`…` rows, drafts still being written — click for a picker: **Navigate to session** jumps to the session that wrote the draft, **Preview plan file** opens it as a preview). Click a plan row for a native, searchable picker: **Navigate to session** jumps to the session that wrote the plan (a muted reason is shown when no session is found), **Docs** opens the draft as a preview, and the **Plan options** group holds **Approve** — sending `ok` to that same session — plus **start work** rows (`start work`, `start work --make-pr`, `start work --ship`) that launch the OMO plan in the current session. Session activity is a row suffix, not a group: `working` (streaming), `waiting` (awaiting a background task), `idle`, `archived` or `unknown`. Review-required plans add the ulw-plan review state `R<round> <momus><independent>`, with per-lane glyphs `✓` approved, `!` changes requested, `?` inconclusive, `…` review live, `·` waiting. When `.omo/` is absent the approval section is simply gone; the question queue works on OpenCode alone.
 
 ## ◴ Where the time actually goes
 
@@ -66,18 +56,17 @@ OpenCode gives you one conversation at a time. Real work looks different: an orc
 >
 > A muted **self** line above the tab row — `self 0.4ms/ev · 1.2ms/sc · 59fps` — shows what the plugin itself costs: average event-handler ms, average scan (fingerprint + snapshot) ms, and the TUI renderer's FPS. It measures the plugin's own runtime, not the model's. `OES_DEBUG_OPENCODE=1` additionally writes `self`-tagged JSON lines to the debug log.
 
-## ▣ Two groups, seven views
+## ▣ One group, four views
 
 > ```
 > Session | My work | Project | Stats
-> OMO | Works | Boulder | Docs
 > ```
 >
 > **Session** is this agent, its delegates, tools and files. **My work** is the queue of things waiting on you — open questions and OMO plan approvals grouped by the action they need. **Project** is the project-wide view — recent sessions (Chat history) plus the tools and files every one of them touched. **Stats** is timing. Tabs and folds are remembered. Clickable labels underline on hover. While a tab waits for its data a transient status row sits at its top — a braille spinner with `switching · <id>` while a session switch is in flight, `loading` on a cold tab, or an error/empty note (`no turns yet` on Stats) — and disappears the moment the data lands, so a switch never reads as a broken panel.
 
 ## ⇕ Rows that fit the window
 
-> `oes.json` row counts are ceilings. A short terminal trims live activity last, then Files, then Delegates and OMO. Every list ends in a clickable `… +N more`: the Tool Calls feed reveals another `toolRows` per click (up to `toolFetch`); the Sessions list reveals four per click (up to `sessionFetch`); Files, My work groups, Docs kinds, OMO works/boulder and Delegates reveal more with each click too; a trimmed Files list instead expands to every file (`… less` folds back).
+> `oes.json` row counts are ceilings. A short terminal trims live activity last, then Files, then Delegates. Every list ends in a clickable `… +N more`: the Tool Calls feed reveals another `toolRows` per click (up to `toolFetch`); the Sessions list reveals four per click (up to `sessionFetch`); Files, My work groups and Delegates reveal more with each click too; a trimmed Files list instead expands to every file (`… less` folds back).
 
 ## ⊘ Privacy first
 
@@ -103,8 +92,7 @@ The glyph says *what* is happening; the colour says *how fresh* it is. Both come
 | `⧗`                             | queued — waiting for a concurrency slot                       |
 | `▾`                             | group header (`▼` is the section fold)                       |
 | `×`                             | failed                                                        |
-| `✓` `⧗` `║` `⊘` `○`             | Works: done / waiting / paused / abandoned / unknown        |
-| `?` `◷` `×` `◔` `!` `…` `▶` `✓` | My work: awaiting an answer / interrupted / errors / running / ready to review / drafting / ready to start / finished |
+| `?` `⊘` `×` `◔` `!` `…` `▶` `✓` | My work: awaiting an answer / interrupted / errors / running / ready to review / drafting / ready to start / finished |
 | `✓` `!` `?` `·`                 | Review lanes: approved / changes requested / inconclusive / waiting |
 | `M` `A` `D` `R` `C` `U` `T` `?` | Files: git status — same letters as `git status --short`      |
 | `V`                             | Files: viewed (session read only)                             |
@@ -160,7 +148,6 @@ Later files win:
 {
   "fileRows": 8,
   "lineMax": 31,
-  "omoRows": 8,
   "perfHistory": 3,
   "perfRows": 5,
   "perfTurns": 120,
@@ -176,7 +163,6 @@ Later files win:
 | --------------- | -------------------------------- | ----------------------------------------------------- |
 | `fileRows`      | `8`                              | most file rows shown                                  |
 | `lineMax`       | `31`                             | max characters per row                                |
-| `omoRows`       | `8`                              | most OMO rows; `0` keeps the group folded               |
 | `perfHistory`   | `3`                              | sessions under Perf → History; `0` hides it          |
 | `perfRows`      | `5`                              | rows per Perf section                                  |
 | `perfTurns`     | `120`                            | recent turns Perf measures                            |
@@ -217,7 +203,7 @@ The panel is a read-only view of data OpenCode already stores.
 | Source          | Path                                                          | Used for                         |
 | --------------- | ------------------------------------------------------------- | -------------------------------- |
 | OpenCode SQLite | `~/.local/share/opencode/opencode.db` (or `OPENCODE_DB`) | sessions, tools, files, timings  |
-| OMO             | `<project>/.omo/`                                            | works, boulder, docs — optional |
+| OMO             | `<project>/.omo/`                                            | plan approvals (My work) — optional |
 | `oes.json`      | plugin / user config / project                                 | display limits                    |
 | ignore files    | `<project>/.oesignore` (always) · `.gitignore` (with `skipGitignore`) | files hidden from the panel     |
 

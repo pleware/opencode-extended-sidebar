@@ -86,11 +86,7 @@ setNow(prev => (Date.now() - prev >= NOW_MS ? Date.now() : prev))
 │   ├─ mainMark / currentMark / delegateMark  ─ agent rows
 │   └─ session ages in JSX
 ├─ rowFlow() → activeFlow(..., now(), ...)
-├─ workLines      → workRowView(w, now())       ─ row arrays
-├─ boulderLines   → workRowView(..., now())
-├─ omoSummary     → pulseAgeMs(now, b.updatedAt)
 ├─ myWorkApprovals → re-scan plans (cache TTL 2s)
-├─ docs           → readOmoDocs (cache TTL 2s)
 ├─ tool rows      → formatDuration(now - startedAt)
 ├─ selfLine       → formatSelfLine(readSelfStats())
 └─ selfPhaseMs    → phaseAgeMs(flow, now, ...)

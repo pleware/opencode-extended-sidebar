@@ -1,13 +1,24 @@
-import { afterEach, describe, expect, test } from "bun:test"
+import { afterAll, afterEach, describe, expect, test } from "bun:test"
 import path from "node:path"
-import { groupDocs, readOmoDocs, resetDocsCache, type DocView } from "../../../../src/pware.oc.omo/resolver/pware.oc.omo.resolver.doc.js"
+import { listOmoFiles, resetDocsCache } from "../../../../src/pware.oc.omo/resolver/pware.oc.omo.resolver.doc.js"
+import { DraftFile } from "../../../../src/pware.oc.omo/resolver/pware.oc.omo.resolver.draftFile.js"
+import { NotepadFile } from "../../../../src/pware.oc.omo/resolver/pware.oc.omo.resolver.notepadsFile.js"
+import { ProofFile } from "../../../../src/pware.oc.omo/resolver/pware.oc.omo.resolver.proofFile.js"
+import { PlanFile } from "../../../../src/pware.oc.omo/resolver/pware.oc.omo.resolver.planFile.js"
+import { openReadonlyDb } from "../../../../src/pware.oc.core/pware.oc.core.sqlite.js"
 import { createFixtureProject, type FixtureProject } from "../../../helpers/project.js"
+import { createFixtureDb, toolPartData, type FixtureDb } from "../../../helpers/sqlite.js"
 import { assertPrivacy } from "../../../helpers/privacy.js"
 
 const held: FixtureProject[] = []
+const dbs: FixtureDb[] = []
 
 afterEach(() => {
   for (const p of held.splice(0)) p.dispose()
+})
+
+afterAll(() => {
+  for (const db of dbs.splice(0)) db.dispose()
 })
 
 function project(files: Record<string, string>, mtimes: Record<string, number> = {}): string {
@@ -16,50 +27,26 @@ function project(files: Record<string, string>, mtimes: Record<string, number> =
   return proj.root
 }
 
-const names = (docs: readonly DocView[], kind: string) =>
-  docs.filter((d) => d.kind === kind).map((d) => d.name)
+const names = (docs: readonly { name: string }[]) => docs.map((d) => d.name)
 
-describe("readOmoDocs", () => {
-  test("no project and no .omo are both an empty list, not a throw", () => {
-    expect(readOmoDocs(null)).toEqual([])
+describe("listOmoFiles", () => {
+  test("no project and no .omo are both empty, not a throw", () => {
+    expect(listOmoFiles("draft", null)).toEqual([])
     resetDocsCache()
-    expect(readOmoDocs(project({ "README.md": "hi" }))).toEqual([])
+    expect(listOmoFiles("draft", project({ "README.md": "hi" }))).toEqual([])
   })
 
-  test("collects drafts, notepads and evidence with their kinds", () => {
+  test("lists each kind from its own directory", () => {
     const root = project({
+      ".omo/plans/refactor.md": "plan",
       ".omo/drafts/auth-v2.md": "draft",
       ".omo/notepads/learnings.md": "notes",
-      ".omo/notepads/decisions.md": "notes",
       ".omo/evidence/login-fix/terminal.md": "proof",
-      ".omo/evidence/login-fix/shot.png": "binary",
     })
-    const docs = readOmoDocs(root)
-    expect(names(docs, "draft")).toEqual(["auth-v2.md"])
-    expect(names(docs, "notepad").sort()).toEqual(["decisions.md", "learnings.md"])
-    expect(names(docs, "proof").sort()).toEqual(["login-fix/shot.png", "login-fix/terminal.md"])
-  })
-
-  test("the plan comes from the works, not from a directory guess", () => {
-    const root = project({ "plans/refactor-auth.md": "- [ ] one" })
-    const docs = readOmoDocs(root, ["plans/refactor-auth.md"])
-    expect(names(docs, "plan")).toEqual(["refactor-auth.md"])
-    expect(docs[0]?.rel).toBe("plans/refactor-auth.md")
-  })
-
-  test("a plan path that no longer exists is dropped", () => {
-    const root = project({ ".omo/boulder.json": "{}" })
-    expect(readOmoDocs(root, ["plans/gone.md"])).toEqual([])
-  })
-
-  test("previewable follows the extension — a screenshot is not text", () => {
-    const root = project({
-      ".omo/evidence/fix/notes.md": "text",
-      ".omo/evidence/fix/shot.png": "binary",
-    })
-    const docs = readOmoDocs(root)
-    expect(docs.find((d) => d.name.endsWith("notes.md"))?.previewable).toBe(true)
-    expect(docs.find((d) => d.name.endsWith("shot.png"))?.previewable).toBe(false)
+    expect(names(listOmoFiles("plan", root))).toEqual(["refactor.md"])
+    expect(names(listOmoFiles("draft", root))).toEqual(["auth-v2.md"])
+    expect(names(listOmoFiles("notepad", root))).toEqual(["learnings.md"])
+    expect(names(listOmoFiles("proof", root))).toEqual(["login-fix/terminal.md"])
   })
 
   test("newest first inside a kind", () => {
@@ -76,7 +63,17 @@ describe("readOmoDocs", () => {
         ".omo/notepads/new.md": base + 20_000,
       },
     )
-    expect(names(readOmoDocs(root), "notepad")).toEqual(["new.md", "mid.md", "old.md"])
+    expect(names(listOmoFiles("notepad", root))).toEqual(["new.md", "mid.md", "old.md"])
+  })
+
+  test("sort by name and a limit cap", () => {
+    const root = project({
+      ".omo/drafts/b.md": "b",
+      ".omo/drafts/a.md": "a",
+      ".omo/drafts/c.md": "c",
+    })
+    expect(names(listOmoFiles("draft", root, { sort: "name" }))).toEqual(["a.md", "b.md", "c.md"])
+    expect(names(listOmoFiles("draft", root, { sort: "name", limit: 2 }))).toEqual(["a.md", "b.md"])
   })
 
   test("hidden files are skipped and nesting stops at the evidence change folder", () => {
@@ -86,17 +83,13 @@ describe("readOmoDocs", () => {
       ".omo/evidence/fix/deep/too-far.md": "no",
       ".omo/evidence/fix/kept.md": "yes",
     })
-    const docs = readOmoDocs(root)
-    expect(names(docs, "draft")).toEqual(["real.md"])
-    expect(names(docs, "proof")).toEqual(["fix/kept.md"])
+    expect(names(listOmoFiles("draft", root))).toEqual(["real.md"])
+    expect(names(listOmoFiles("proof", root))).toEqual(["fix/kept.md"])
   })
 
   test("paths stay project-relative — nothing absolute reaches the panel", () => {
-    const root = project({
-      ".omo/drafts/auth.md": "draft",
-      ".omo/evidence/fix/terminal.md": "proof",
-    })
-    const docs = readOmoDocs(root)
+    const root = project({ ".omo/drafts/auth.md": "draft" })
+    const docs = listOmoFiles("draft", root)
     expect(docs.length).toBeGreaterThan(0)
     for (const d of docs) expect(path.isAbsolute(d.rel)).toBe(false)
     assertPrivacy({ docs })
@@ -104,33 +97,72 @@ describe("readOmoDocs", () => {
 
   test("the legacy .sisyphus directory is read too", () => {
     const root = project({ ".sisyphus/notepads/learnings.md": "notes" })
-    expect(names(readOmoDocs(root), "notepad")).toEqual(["learnings.md"])
+    expect(names(listOmoFiles("notepad", root))).toEqual(["learnings.md"])
   })
 })
 
-describe("groupDocs", () => {
-  test("keeps display order and drops empty kinds", () => {
+describe("per-kind list wrappers", () => {
+  test("each resolver lists its own directory", () => {
     const root = project({
-      ".omo/notepads/learnings.md": "n",
-      ".omo/evidence/fix/proof.md": "p",
-    })
-    const groups = groupDocs(readOmoDocs(root))
-    expect(groups.map((g) => g.kind)).toEqual(["notepad", "proof"])
-    expect(groups[0]?.items.length).toBe(1)
-  })
-
-  test("plan sorts ahead of drafts, notepads and proof", () => {
-    const root = project({
-      "plans/p.md": "plan",
+      ".omo/plans/p.md": "plan",
       ".omo/drafts/d.md": "draft",
       ".omo/notepads/n.md": "note",
       ".omo/evidence/c/e.md": "proof",
     })
-    const groups = groupDocs(readOmoDocs(root, ["plans/p.md"]))
-    expect(groups.map((g) => g.kind)).toEqual(["plan", "draft", "notepad", "proof"])
+    expect(names(PlanFile.list(root))).toEqual(["p.md"])
+    expect(names(DraftFile.list(root))).toEqual(["d.md"])
+    expect(names(NotepadFile.list(root))).toEqual(["n.md"])
+    expect(names(ProofFile.list(root))).toEqual(["c/e.md"])
   })
 
-  test("an empty index is an empty grouping", () => {
-    expect(groupDocs([])).toEqual([])
+  test("DraftFile.list filters to the writer session when given a db", () => {
+    const root = project({ ".omo/drafts/a.md": "a", ".omo/drafts/b.md": "b" })
+    const t0 = 2_100_000_000_000
+    const fix = createFixtureDb({
+      sessions: [{ id: "ses_writer", project_id: "proj_1", time_updated: t0 + 900 }],
+      parts: [
+        {
+          id: "p_a",
+          session_id: "ses_writer",
+          time_created: t0 + 50,
+          data: toolPartData({
+            tool: "write",
+            filePath: "D:/proj/.omo/drafts/a.md",
+            start: t0 + 50,
+            end: t0 + 50,
+            callID: "call_a",
+          }),
+        },
+      ],
+    })
+    dbs.push(fix)
+    const db = openReadonlyDb(fix.dbPath)!
+    expect(names(DraftFile.list(root, "ses_writer", { db }))).toEqual(["a.md"])
+    expect(names(DraftFile.list(root, "other", { db }))).toEqual([])
+  })
+
+  test("status filter reconciles frontmatter against boulder work state", () => {
+    const proj = createFixtureProject({
+      files: {
+        ".omo/plans/approved.md": "---\nstatus: approved\n---\nplan",
+        ".omo/plans/done.md": "---\nstatus: done\n---\nplan",
+        ".omo/plans/stale.md": "---\nstatus: approved\n---\nplan",
+      },
+      boulder: {
+        works: {
+          work_stale: { plan_name: "stale", status: "completed", updated_at: 1_000 },
+        },
+      },
+    })
+    held.push(proj)
+    const root = proj.root
+
+    expect(names(listOmoFiles("plan", root, { status: "approved" }))).toEqual(["approved.md"])
+    expect(names(listOmoFiles("plan", root, { status: "done" })).sort()).toEqual([
+      "done.md",
+      "stale.md",
+    ])
+    expect(names(listOmoFiles("plan", root, { status: "drafting" }))).toEqual([])
+    expect(names(listOmoFiles("plan", root))).toHaveLength(3)
   })
 })

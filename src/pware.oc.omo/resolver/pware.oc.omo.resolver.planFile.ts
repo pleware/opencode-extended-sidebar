@@ -15,6 +15,12 @@
 import { createStampCache } from "../../pware.oc.core/pware.oc.core.cache.js"
 import { basenameOf, str } from "../../pware.oc.core/pware.oc.core.paths.js"
 import type { SqlDb } from "../../pware.oc.core/pware.oc.core.sqlite.js"
+import { DOC_KIND_PLAN } from "../constants/pware.oc.omo.constants.docKind.js"
+import {
+  listOmoFiles,
+  type DocView,
+  type ListOmoFilesOptions,
+} from "./pware.oc.omo.resolver.doc.js"
 
 /** An OMO on-disk document kind (the subdirectory under `.omo/` / `.sisyphus/`). */
 export type OmoFileKind =
@@ -303,4 +309,15 @@ export function sessionForOmoFile(
   const base = basenameOf(relPath ?? "")
   if (!base || base === "file") return null
   return omoFileIndex(db, null, null, kind).fileWriter.get(base)?.sessionId ?? null
+}
+
+/** Plan files under `.omo/plans/`, optionally filtered by writer session. */
+export const PlanFile = {
+  list(
+    projectRoot: string | null | undefined,
+    sessionId: string | null = null,
+    opts: ListOmoFilesOptions = {},
+  ): DocView[] {
+    return listOmoFiles(DOC_KIND_PLAN, projectRoot, { ...opts, sessionId })
+  },
 }

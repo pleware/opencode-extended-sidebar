@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 /**
- * All popups for the panel: detail dialogs for Files, Tools, Works, OMO
+ * All popups for the panel: detail dialogs for Files, Tools, OMO
  * documents, Perf logs, the pending-approval menu, and the text/markdown
  * preview. Every popup goes through the single `openDialog()` choke-point —
  * nothing outside this module touches `api.ui.dialog`.
@@ -19,8 +19,6 @@ import { asciiTrend, perfStatLine, waitHistogram, shareGauge, shareDonut } from 
 import { formatDiffStat } from "../pware.oc.opencode/pware.oc.opencode.files.js"
 import type { DocView } from "../pware.oc.omo/resolver/pware.oc.omo.resolver.doc.js"
 import { DOC_KIND_LABEL } from "../pware.oc.omo/resolver/pware.oc.omo.resolver.doc.js"
-import type { WorkView } from "../pware.oc.omo/resolver/pware.oc.omo.resolver.boulder.js"
-import { workStatusLabel } from "../pware.oc.omo/resolver/index.js"
 import type { StartWorkMode } from "../pware.oc.runtime/pware.oc.runtime.mywork.js"
 import { startWorkCommand } from "../pware.oc.runtime/pware.oc.runtime.mywork.js"
 import { TOOL_STATUS_RUNNING } from "../pware.oc.core/constants/pware.oc.core.constants.status.js"
@@ -365,44 +363,6 @@ export function openToolDetail(api: TuiPluginApi, tool: ToolView, colors: ThemeC
       <DetailLine text={`Started: ${formatWhen(tool.startedAt)}`} colors={colors} muted />
       <DetailLine text={`Duration: ${dur || "—"}`} colors={colors} muted />
       <DetailLine text={`Status: ${tool.status}`} colors={colors} muted />
-      <box flexDirection="column" gap={0} paddingTop={1}>
-        <ActionRow label="Close" colors={colors} onPick={() => closeDialog(api)} />
-      </box>
-    </DialogPad>
-  ))
-}
-
-export function openWorkDetail(
-  api: TuiPluginApi,
-  work: WorkView,
-  projectRoot: string | readonly string[] | null | undefined,
-  colors: ThemeColors,
-): void {
-  const found = work.planPath ? resolveProjectFile(projectRoot, work.planPath) : null
-  const rel = found?.rel ?? work.planPath
-  const abs = found?.abs ?? null
-  if (abs && canPreviewPath(abs)) {
-    openTextPreview(api, colors, work.name, rel, abs)
-    return
-  }
-  toast(api, work.planPath ? "File not found on disk" : "No plan file linked", "warning")
-  const status = workStatusLabel(work.status)
-  const age = work.updatedAt != null ? formatAge(Math.max(0, Date.now() - work.updatedAt)) : ""
-  const updated = age ? `${age} ago` : "—"
-  const agent = work.agent ? ` · ${work.agent}` : ""
-
-  openDialog(api, "medium", () => (
-    <DialogPad>
-      <text fg={colors.text} attributes={textAttrs(true)}>
-        {`Work: ${work.name}`}
-      </text>
-      {divider(colors)}
-      <DetailLine text={`Status: ${status}${agent}`} colors={colors} />
-      <DetailLine text={`Work id: ${work.workId}`} colors={colors} muted />
-      <DetailLine text={`Updated: ${updated}`} colors={colors} muted />
-      <Show when={work.planPath}>
-        <DetailLine text={work.planPath!} colors={colors} muted />
-      </Show>
       <box flexDirection="column" gap={0} paddingTop={1}>
         <ActionRow label="Close" colors={colors} onPick={() => closeDialog(api)} />
       </box>

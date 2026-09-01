@@ -114,7 +114,7 @@ export function rowGlyphs(
 
 export function myWorkGlyph(kind: MyWorkKind): string {
   if (kind === QUESTION_KIND_QUESTION) return "?"
-  if (kind === QUESTION_KIND_INTERRUPTED) return "◷"
+  if (kind === QUESTION_KIND_INTERRUPTED) return "⊘"
   if (kind === QUESTION_KIND_ERROR) return "×"
   if (kind === MY_WORK_GROUP_RUNNING) return "◔"
   if (kind === MY_WORK_GROUP_READY_REVIEW) return "!"
