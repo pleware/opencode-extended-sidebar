@@ -1,5 +1,6 @@
 # Changelog
 
+- **0.2.61** (2026-09-02) Expose a shared new-session prompt as.
 - **0.2.60** (2026-09-02) Switch the tok/s sparkline to ASCII output and align chart docs and tests.
 - **0.2.59** (2026-09-02) Add a Dismissed questions My work group and route dismissed-question errors into it.
 - **0.2.58** (2026-09-02) Add a GitHub Actions CI workflow that typechecks, tests with coverage, and benchmarks on push.

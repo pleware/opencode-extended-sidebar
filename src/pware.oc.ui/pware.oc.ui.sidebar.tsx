@@ -124,11 +124,11 @@ import {
 } from "../pware.oc.core/pware.oc.core.status.js"
 import { createEventBus } from "../pware.oc.core/pware.oc.core.bus.js"
 import { startRuntimeSource } from "../pware.oc.runtime/pware.oc.runtime.source.js"
-import { openApprovalDialog, openDocDetail, openFileDetail, openFileListDialog, openNewSessionDialog, openQuestionDialog, openToolDetail } from "./pware.oc.ui.menudialogs.js"
+import { openApprovalDialog, openDocDetail, openFileDetail, openFileListDialog, openQuestionDialog, openToolDetail } from "./pware.oc.ui.menudialogs.js"
 import { startHostEventBridge } from "./pware.oc.ui.live.js"
 import {
   approvePlan,
-  newSessionWithPrompt,
+  openNewSessionPrompt,
   openSessionSwitcher,
   runStartWork,
   selectSession,
@@ -1103,7 +1103,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
             open={foldSessions.open()}
             actions={[
               { label: "switch", onPick: () => openSessionSwitcher(props.api) },
-              { label: "new", onPick: () => openNewSessionDialog(props.api, { onSubmit: (text) => newSessionWithPrompt(props.api, projectDir(), text) }) },
+              { label: "new", onPick: () => openNewSessionPrompt(props.api, projectDir()) },
             ]}
             colors={colors()}
             onToggle={foldSessions.toggle}

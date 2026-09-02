@@ -6,6 +6,7 @@ import {
   START_WORK_SHIP,
 } from "../pware.oc.omo/constants/pware.oc.omo.constants.startWork.js"
 import { startWorkCommand, type StartWorkMode } from "../pware.oc.runtime/pware.oc.runtime.mywork.js"
+import { openNewSessionDialog } from "./pware.oc.ui.menudialogs.js"
 
 export function selectSession(api: TuiPluginApi, sessionId: string | null | undefined): void {
   if (!sessionId) return
@@ -86,6 +87,15 @@ export function newSessionWithPrompt(
     }
   }
   void profileAsync("rpc.newSession", go)
+}
+
+export function openNewSessionPrompt(
+  api: TuiPluginApi,
+  directory: string | null | undefined,
+): void {
+  openNewSessionDialog(api, {
+    onSubmit: (text) => newSessionWithPrompt(api, directory, text),
+  })
 }
 
 export function runStartWork(

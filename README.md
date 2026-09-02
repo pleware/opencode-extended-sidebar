@@ -26,7 +26,7 @@ OpenCode gives you one conversation at a time. Real work looks different: an orc
 
 ## ⇄ Session switcher
 
-> Recent sessions, one click away. Title, age, and whether it is still alive. The current session is tagged `[C]`. The header is `Sessions` — no count — with two labels: `switch` opens the host session switcher (the same `/sessions` command) and `new` opens a prompt — Enter creates the session and sends it, an empty prompt is blocked. Empty sessions that were never prompted are hidden from the list. When more sessions were fetched, a clickable `… +N more` reveals the next four per click. Below the list, tools and files rolled up from those same recent sessions.
+> Recent sessions, one click away. Title, age, and whether it is still alive. The current session is tagged `[C]`. The header is `Sessions` — no count — with two labels: `switch` opens the host session switcher (the same `/sessions` command) and `new` opens a prompt — Enter creates the session and sends it, an empty prompt is blocked. The command palette exposes `nw`, and slash autocomplete exposes `/nw` (alias `/new`); both open that exact same prompt flow. Empty sessions that were never prompted are hidden from the list. When more sessions were fetched, a clickable `… +N more` reveals the next four per click. Below the list, tools and files rolled up from those same recent sessions.
 
 ## ⊚ Live activity pulse
 
