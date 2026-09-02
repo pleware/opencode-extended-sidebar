@@ -1,15 +1,56 @@
+# Dependencies
 node_modules/
+
+# Build output
 dist/
 *.tgz
-.DS_Store
-Thumbs.db
+
+# Logs
 *.log
+
+# Environment
 .env
 .env.*
+
+# OS — macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# OS — Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# OS — Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# Local project notes
 backlog.md
 myworkspace/
+
+# Cursor — keep rules, ignore the rest
 .cursor/*
 !.cursor/rules/
+
+# Agents
 .agents/
 .hidden/
 skills-lock.json

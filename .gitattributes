@@ -1,7 +1,11 @@
-# Line endings: CRLF everywhere by default (Windows-first project), except
-# shell scripts where CRLF would break the shebang.
-* text=auto eol=crlf
+# Line endings: normalize across platforms. Git stores LF in the repo and
+# writes the native EOL on checkout — CRLF on Windows, LF on macOS/Linux —
+# so every OS sees clean diffs and no accidental CRLF/LF churn.
+* text=auto
 
-# Bash scripts must stay LF — a CRLF `#!/bin/sh` shebang fails.
+# Shell scripts must stay LF — a CRLF `#!/bin/sh` shebang fails.
 .githooks/** text eol=lf
 *.sh text eol=lf
+
+# Binary assets — never normalize line endings, never diff.
+*.png binary
