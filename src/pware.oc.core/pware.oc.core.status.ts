@@ -142,6 +142,18 @@ export function tabStatusLine(status: TabStatus): TabStatusLine {
   return { label: status.label, tone: "loading", glyph: null }
 }
 
+/** Tone of the global status bar: loading/error/muted, or "ready" when a tab is done. */
+export type StatusBarTone = TabTone | "ready"
+
+/** Global status-bar line: a ready tab (`null`) still renders — as a static dot. */
+export type StatusBarLine = { label: string; tone: StatusBarTone }
+
+export function statusBarLine(status: TabStatus): StatusBarLine {
+  const line = tabStatusLine(status)
+  if (!line) return { label: "", tone: "ready" }
+  return { label: line.label, tone: line.tone }
+}
+
 /** Queued / waiting work — boulder writes no `status` while a task waits for a slot. */
 export function isPendingWork(status: string | null | undefined): boolean {
   return normalizeStatus(status) === STATUS_PENDING

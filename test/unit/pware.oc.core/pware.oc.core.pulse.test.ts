@@ -2,9 +2,12 @@ import { describe, expect, test } from "bun:test"
 import {
   applyFlow,
   composeMark,
+  deltaTextFromEvent,
+  estimateTokens,
   flowFromEvent,
   formatDuration,
   formatSpan,
+  formatTokenRate,
   formatTokens,
   formatWhen,
   timeSummary,
@@ -15,7 +18,9 @@ import {
   packChips,
   packStackedRow,
   preferToolLabel,
+  pushTokenTick,
   shortToolLabel,
+  tokenRate,
 } from "../../../src/pware.oc.core/pware.oc.core.pulse.js"
 
 describe("toEpochMs / stampMs", () => {
@@ -176,5 +181,69 @@ describe("shortToolLabel / preferToolLabel", () => {
     expect(panel.length).toBeLessThan(log.length)
     expect(log).toContain("bun test")
     expect(log).toContain("--reporter spec")
+  })
+})
+
+describe("deltaTextFromEvent", () => {
+  test("reads the explicit delta field", () => {
+    expect(
+      deltaTextFromEvent({
+        type: "message.part.updated",
+        properties: { part: { type: "text" }, delta: "hello " },
+      }),
+    ).toBe("hello ")
+  })
+  test("reads a bare text only on a delta-type event", () => {
+    expect(
+      deltaTextFromEvent({ type: "session.next.text.delta", properties: { text: "world" } }),
+    ).toBe("world")
+  })
+  test("ignores a full message/part body", () => {
+    expect(deltaTextFromEvent({ type: "message.updated", properties: { info: { text: "big" } } })).toBeNull()
+    expect(
+      deltaTextFromEvent({ type: "message.part.updated", properties: { part: { type: "text", text: "big" } } }),
+    ).toBeNull()
+    expect(deltaTextFromEvent({ type: "tool.called", sessionID: "s1" })).toBeNull()
+    expect(deltaTextFromEvent(null)).toBeNull()
+  })
+})
+
+describe("estimateTokens", () => {
+  test("code points / 4, min 1 for non-empty", () => {
+    expect(estimateTokens("")).toBe(0)
+    expect(estimateTokens("abcd")).toBe(1)
+    expect(estimateTokens("abcdefgh")).toBe(2)
+    expect(estimateTokens("ab")).toBe(1)
+  })
+})
+
+describe("pushTokenTick / tokenRate", () => {
+  const WINDOW = 5_000
+  test("rate over the sliding window", () => {
+    const t0 = 1_000
+    let ticks = pushTokenTick([], t0, 40, WINDOW)
+    ticks = pushTokenTick(ticks, t0 + 1_000, 60, WINDOW)
+    expect(tokenRate(ticks, t0 + 1_000, WINDOW)).toBeCloseTo(100)
+  })
+  test("drops ticks older than the window", () => {
+    const t0 = 1_000
+    let ticks = pushTokenTick([], t0, 40, WINDOW)
+    ticks = pushTokenTick(ticks, t0 + 1_000, 60, WINDOW)
+    const pruned = pushTokenTick(ticks, t0 + 6_000, 10, WINDOW)
+    expect(pruned.map((t) => t.at)).toEqual([t0 + 1_000, t0 + 6_000])
+  })
+  test("single tick has no span", () => {
+    const ticks = pushTokenTick([], 1_000, 40, WINDOW)
+    expect(tokenRate(ticks, 1_000, WINDOW)).toBeNull()
+  })
+})
+
+describe("formatTokenRate", () => {
+  test("empty, then 50 tok/s", () => {
+    expect(formatTokenRate(null)).toBe("")
+    expect(formatTokenRate(0)).toBe("")
+    expect(formatTokenRate(50)).toBe("50 tok/s")
+    expect(formatTokenRate(50.4)).toBe("50.4 tok/s")
+    expect(formatTokenRate(120)).toBe("120 tok/s")
   })
 })

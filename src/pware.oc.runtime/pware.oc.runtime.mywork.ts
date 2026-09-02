@@ -39,6 +39,7 @@ export type { ApprovalGroupKind, OpenQuestionKind, StartWorkMode }
 export type MyWorkItem =
   | {
       kind: OpenQuestionKind
+      partId: string
       sessionId: string
       title: string
       startedAt: number | null
@@ -127,6 +128,7 @@ export function groupMyWork(
 export function toQuestionItems(questions: readonly OpenQuestion[]): MyWorkItem[] {
   return questions.map((q) => ({
     kind: q.kind,
+    partId: q.partId,
     sessionId: q.sessionId,
     title: q.title,
     startedAt: q.startedAt,
@@ -171,4 +173,30 @@ export function toRunningItems(
       status: s.status,
       timeUpdated: s.timeUpdated,
     }))
+}
+
+/** Parse the persisted dismissed-question set (a JSON array of part ids) from the kv store. */
+export function parseDismissed(raw: string | null | undefined): ReadonlySet<string> {
+  if (!raw) return new Set()
+  try {
+    const value = JSON.parse(raw)
+    if (!Array.isArray(value)) return new Set()
+    return new Set(value.filter((x): x is string => typeof x === "string" && x.length > 0))
+  } catch {
+    return new Set()
+  }
+}
+
+/** Serialize a dismissed-question id set back to the JSON string the kv store holds. */
+export function formatDismissed(ids: ReadonlySet<string>): string {
+  return JSON.stringify([...ids])
+}
+
+/** Drop question items whose part id is in the dismissed set; every other item passes through. */
+export function dropDismissed(
+  items: readonly MyWorkItem[],
+  dismissed: ReadonlySet<string>,
+): MyWorkItem[] {
+  if (dismissed.size === 0) return items.slice()
+  return items.filter((i) => !("partId" in i && dismissed.has(i.partId)))
 }

@@ -4,6 +4,7 @@ import {
   EV_OC_FILES_TOUCHED,
   EV_OC_FLOW,
   EV_OC_SESSION_ACTIVITY,
+  EV_OC_TOKENS_DELTA,
   EV_OC_TOOL_HIT,
 } from "../../../src/pware.oc.opencode/constants/pware.oc.opencode.constants.eventName.js"
 
@@ -39,5 +40,20 @@ describe("hostEventToOcEvents", () => {
 
     const flow = events.find((e) => e.type === EV_OC_FLOW)
     expect(flow?.data.dir).toBe("clear")
+  })
+
+  test("maps a text delta to a tokens-delta event", () => {
+    const events = hostEventToOcEvents(
+      {
+        type: "session.next.text.delta",
+        properties: { sessionID: "ses_main", text: "hello world this is text" },
+      },
+      { sessionId: "ses_main", projectRoot: null },
+    )
+
+    const delta = events.find((e) => e.type === EV_OC_TOKENS_DELTA)
+    expect(delta).toBeDefined()
+    expect(delta?.data.sessionId).toBe("ses_main")
+    expect(delta?.data.tokens).toBeGreaterThan(0)
   })
 })

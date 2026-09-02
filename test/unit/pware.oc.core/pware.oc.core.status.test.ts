@@ -4,6 +4,7 @@ import {
   isRunningLifecycle,
   normalizeStatus,
   sessionStatusLabel,
+  statusBarLine,
   tabStatus,
   tabStatusLine,
   taskRank,
@@ -221,6 +222,27 @@ describe("tabStatusLine", () => {
       label: "loading · my work",
       tone: "loading",
       glyph: null,
+    })
+  })
+})
+
+describe("statusBarLine", () => {
+  test("a ready tab renders as a static dot (ready tone, no label)", () => {
+    expect(statusBarLine(null)).toEqual({ label: "", tone: "ready" })
+  })
+
+  test("loading / error / muted tones pass through with their label", () => {
+    expect(statusBarLine({ label: "switching · x", tone: "loading" })).toEqual({
+      label: "switching · x",
+      tone: "loading",
+    })
+    expect(statusBarLine({ label: "db missing", tone: "error" })).toEqual({
+      label: "db missing",
+      tone: "error",
+    })
+    expect(statusBarLine({ label: "no turns yet", tone: "muted" })).toEqual({
+      label: "no turns yet",
+      tone: "muted",
     })
   })
 })

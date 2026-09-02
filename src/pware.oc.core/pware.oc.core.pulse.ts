@@ -361,6 +361,72 @@ export function formatRate(perSec: number | null | undefined): string {
   return perSec >= 100 ? `${Math.round(perSec)}/s` : `${perSec.toFixed(1)}/s`
 }
 
+/** `formatRate` with a token-specific unit and no trailing ".0": "50 tok/s". */
+export function formatTokenRate(perSec: number | null | undefined): string {
+  const r = formatRate(perSec)
+  if (!r) return ""
+  const num = r.replace(/\/s$/, "")
+  return `${num.endsWith(".0") ? num.slice(0, -2) : num} tok/s`
+}
+
+/**
+ * The streaming chunk of a text/reasoning delta event. Only the explicit
+ * `delta` field (message.part.updated / message.part.delta) or, on a delta-type
+ * event, a bare `text` (session.next.text.delta / reasoning.delta). Never reads
+ * a full message or part body — the count, not the content, is what matters.
+ */
+export function deltaTextFromEvent(evt: unknown): string | null {
+  if (!evt || typeof evt !== "object") return null
+  const type = eventType(evt)
+  const bags = eventBags(evt)
+  for (const bag of bags) {
+    const d = bag.delta
+    if (typeof d === "string" && d.trim()) return d
+  }
+  if (!type.includes(".delta")) return null
+  for (const bag of bags) {
+    const t = bag.text
+    if (typeof t === "string" && t.trim()) return t
+  }
+  return null
+}
+
+/** Rough token count from a text chunk: code points / charsPerToken (≈4). */
+export function estimateTokens(text: string, charsPerToken = 4): number {
+  const t = (text || "").replace(/\s+/g, " ").trim()
+  if (!t) return 0
+  return Math.max(1, Math.ceil([...t].length / charsPerToken))
+}
+
+/** A single streaming token-count sample: `n` estimated tokens at `at`. */
+export type TokenTick = { at: number; n: number }
+
+/** Append a tick and drop samples older than the sliding window (immutable). */
+export function pushTokenTick(
+  ticks: readonly TokenTick[],
+  at: number,
+  n: number,
+  windowMs: number,
+): TokenTick[] {
+  if (!Number.isFinite(n) || n <= 0) return [...ticks]
+  const next = [...ticks, { at, n }]
+  return next.filter((t) => at - t.at <= windowMs)
+}
+
+/** Live rate over the window: tokens per second, or null when the span is too short. */
+export function tokenRate(
+  ticks: readonly TokenTick[],
+  at: number,
+  windowMs: number,
+): number | null {
+  const win = ticks.filter((t) => at - t.at <= windowMs)
+  if (win.length < 2) return null
+  const sum = win.reduce((s, t) => s + t.n, 0)
+  const spanMs = at - win[0]!.at
+  if (spanMs <= 0) return null
+  return (sum / spanMs) * 1000
+}
+
 export function formatPercent(share: number | null | undefined): string {
   if (share == null || !Number.isFinite(share) || share < 0) return ""
   const pct = share * 100

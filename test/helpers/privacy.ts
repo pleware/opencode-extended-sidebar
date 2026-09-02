@@ -14,6 +14,7 @@ const INTERNAL = new Set([
   "scanStamp",
   "sessionId",
   "parentId",
+  "partId",
   "taskKey",
   "callId",
 ])

@@ -16,6 +16,7 @@ import {
 import {
   MY_WORK_ORDER,
   approvalContinueHint,
+  dropDismissed,
   groupMyWork,
   myWorkLabel,
   toApprovalItems,
@@ -67,6 +68,7 @@ import {
 } from "../pware.oc.core/constants/pware.oc.core.constants.rowKind.js"
 import {
   QUESTION_KIND_ERROR,
+  QUESTION_KIND_INTERRUPTED,
   QUESTION_KIND_QUESTION,
 } from "../pware.oc.opencode/constants/pware.oc.opencode.constants.questionKind.js"
 import {
@@ -83,14 +85,14 @@ import {
   myWorkGlyph,
   reviewStateSuffix,
 } from "./pware.oc.ui.glyphs.js"
-import { kvReadOne, kvWriteOne, type ThemeColors } from "./pware.oc.ui.chrome.js"
+import { dismissQuestion, kvReadOne, kvWriteOne, readDismissedQuestions, type ThemeColors } from "./pware.oc.ui.chrome.js"
 import {
   AgentLine,
   FoldSection,
   GroupSection,
   RowList,
   TabColumn,
-  TabStatusRow,
+  OesStatusRow,
   agentDisplayName,
   clip,
   useFold,
@@ -119,7 +121,7 @@ import {
 } from "../pware.oc.core/pware.oc.core.status.js"
 import { createEventBus } from "../pware.oc.core/pware.oc.core.bus.js"
 import { startRuntimeSource } from "../pware.oc.runtime/pware.oc.runtime.source.js"
-import { openApprovalDialog, openDocDetail, openFileDetail, openFileListDialog, openToolDetail } from "./pware.oc.ui.menudialogs.js"
+import { openApprovalDialog, openDocDetail, openFileDetail, openFileListDialog, openQuestionDialog, openToolDetail } from "./pware.oc.ui.menudialogs.js"
 import { startHostEventBridge } from "./pware.oc.ui.live.js"
 import {
   approvePlan,
@@ -136,6 +138,7 @@ import {
   NOW_MS,
   SWITCH_TIMEOUT_MS,
   TICK_MS,
+  TOKEN_RATE_WINDOW_MS,
 } from "../pware.oc.core/pware.oc.core.timing.js"
 import {
   activeFlow,
@@ -143,14 +146,18 @@ import {
   composeMark,
   formatAge,
   formatDuration,
+  formatTokenRate,
   hottestMark,
   phaseAgeMs,
   pulseAgeMs,
+  pushTokenTick,
+  tokenRate,
   toolFlow,
   toolMark,
   type AgentMark,
   type FlowDir,
   type FlowEntry,
+  type TokenTick,
   type ToolHit,
 } from "../pware.oc.core/pware.oc.core.pulse.js"
 import {
@@ -161,6 +168,7 @@ import {
   EV_OC_FILES_TOUCHED,
   EV_OC_FLOW,
   EV_OC_SESSION_ACTIVITY,
+  EV_OC_TOKENS_DELTA,
   EV_OC_TOOL_HIT,
 } from "../pware.oc.opencode/constants/pware.oc.opencode.constants.eventName.js"
 
@@ -213,6 +221,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   const dimensions = useTerminalDimensions()
   const [liveTools, setLiveTools] = createSignal<Record<string, ToolHit>>({})
   const [liveFiles, setLiveFiles] = createSignal<Record<string, FileView>>({})
+  const [tokenTicks, setTokenTicks] = createSignal<readonly TokenTick[]>([])
   const [gitTick, setGitTick] = createSignal(0)
   const [switching, setSwitching] = createSignal<{ id: string; at: number } | null>(null)
   const [coldTab, setColdTab] = createSignal<string | null>(null)
@@ -312,6 +321,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
       watchedId = id
       setLiveTools({})
       setLiveFiles({})
+      setTokenTicks([])
       source.setSession(id)
       queueMicrotask(hydrateDiff)
     })
@@ -385,6 +395,14 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     const sessionId = typeof payload.sessionId === "string" && payload.sessionId ? payload.sessionId : props.sessionId
     bumpSeen(sessionId)
     ingestFiles(files as FileView[])
+  })
+
+  const offTokensDelta = bus.on(EV_OC_TOKENS_DELTA, (evt) => {
+    const data = evt.data
+    if (!data || typeof data !== "object") return
+    const tokens = (data as Record<string, unknown>).tokens
+    if (typeof tokens !== "number" || !Number.isFinite(tokens) || tokens <= 0) return
+    setTokenTicks((prev) => pushTokenTick(prev, Date.now(), tokens, TOKEN_RATE_WINDOW_MS))
   })
 
   const offSessionSelect = bus.on(EV_OES_SESSION_SELECT, () => remount())
@@ -462,6 +480,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     offFlow()
     offToolHit()
     offFilesTouched()
+    offTokensDelta()
     offSessionSelect()
     source.stop()
     offGit()
@@ -634,7 +653,10 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     if (tab() !== "mywork" || coldTab() === "mywork") return []
     const db = snap().db
     try {
-      return toQuestionItems(listOpenQuestions({ dbPath: db.dbPath, projectId: db.projectId }))
+      return dropDismissed(
+        toQuestionItems(listOpenQuestions({ dbPath: db.dbPath, projectId: db.projectId })),
+        readDismissedQuestions(props.api),
+      )
     } catch (e) {
       dbg("mywork.questions", "error", String(e))
       return []
@@ -692,7 +714,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
       const t = tab()
       const omo = omoPresent()
       const sections: { key: string; want: number; min: number; rank: number }[] = []
-      let fixed = 3 // self status line + OES brand line + panel top padding
+      let fixed = 4 // OES status bar + self status line + OES brand line + panel top padding
       if (modeLine()) fixed += 1 // debug/profile flag row
       if (modeDirLine()) fixed += 1
       let blocks = 0
@@ -780,6 +802,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     if ("sessionId" in item) {
       const age = pulseAgeMs(now(), item.startedAt)
       const reason = item.reason ? ` · ${item.reason}` : ""
+      const dismissible = item.kind === QUESTION_KIND_INTERRUPTED || item.kind === QUESTION_KIND_ERROR
       return {
         kind: ROW_KIND_AGENT,
         mark: item.kind === QUESTION_KIND_ERROR ? STATUS_ERROR : MARK_READY,
@@ -787,7 +810,18 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
         name: item.title,
         suffix: `${formatAge(age)}${reason}`,
         waiting: item.kind === QUESTION_KIND_QUESTION,
-        onSelect: () => goSession(item.sessionId),
+        onSelect: dismissible
+          ? () =>
+              openQuestionDialog(props.api, {
+                title: item.title,
+                sessionId: item.sessionId,
+                onNavigate: (sid) => goSession(sid),
+                onDismiss: () => {
+                  dismissQuestion(props.api, item.partId)
+                  requestRender()
+                },
+              })
+          : () => goSession(item.sessionId),
       }
     }
     const sessionLabel = planSessionStateLabel(item.sessionState)
@@ -935,6 +969,12 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     />
   )
 
+  /** Live token rate — recomputes on each token delta and once a second (decay). */
+  const liveTokenRate = createMemo(() => {
+    now()
+    return tokenRate(tokenTicks(), Date.now(), TOKEN_RATE_WINDOW_MS)
+  })
+
   /** Live self-cost line — reads the tick clock so the Solid insert re-evaluates every tick. */
   const selfLine = createMemo(() => {
     now()
@@ -964,6 +1004,12 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
       <Show when={modeDirLine()}>
         <text fg={colors().textMuted}>{modeDirLine()}</text>
       </Show>
+      <OesStatusRow
+        status={tabStatusFor(tab())}
+        rate={formatTokenRate(liveTokenRate())}
+        colors={colors()}
+        glyphFrame={glyphFrame}
+      />
       <text fg={colors().textMuted}>{selfLine()}</text>
       <TabColumn
         brand=""
@@ -981,7 +1027,6 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
               if (!status && groups.length === 0) return <text fg={colors().textMuted}>• nothing</text>
               return (
                 <box flexDirection="column" gap={1}>
-                  <TabStatusRow status={status} colors={colors()} glyphFrame={glyphFrame} />
                   <For each={groups}>
                     {(g) => (
                       <GroupSection
@@ -1005,7 +1050,6 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
           },
           sessions: () => (
             <box flexDirection="column" gap={1}>
-              <TabStatusRow status={tabStatusFor("sessions")} colors={colors()} glyphFrame={glyphFrame} />
               <FoldSection title="Agents" open={foldAgents.open()} colors={colors()} onToggle={foldAgents.toggle}>
                 {snap().db.main ? (
                   <Row
@@ -1161,7 +1205,6 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
           ),
           current: () => (
             <box flexDirection="column" gap={1}>
-              <TabStatusRow status={tabStatusFor("current")} colors={colors()} glyphFrame={glyphFrame} />
               <FoldSection title="Agents" open={foldAgents.open()} colors={colors()} onToggle={foldAgents.toggle}>
                 {currentRow() ? (
                   <Row
@@ -1324,7 +1367,6 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
           ),
           perf: () => (
             <box flexDirection="column" gap={1}>
-              <TabStatusRow status={tabStatusFor("perf")} colors={colors()} glyphFrame={glyphFrame} />
               <PerfPanel
                 api={props.api}
                 perf={perf()}

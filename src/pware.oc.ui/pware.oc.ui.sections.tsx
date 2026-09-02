@@ -27,7 +27,7 @@ import {
 } from "./pware.oc.ui.glyphs.js"
 import { profile } from "../pware.oc.core/pware.oc.core.debug.js"
 import { moreRevealVisible, sliceShown } from "../pware.oc.core/pware.oc.core.layout.js"
-import { tabStatusLine, type TabStatus } from "../pware.oc.core/pware.oc.core.status.js"
+import { statusBarLine, type TabStatus } from "../pware.oc.core/pware.oc.core.status.js"
 import {
   flowColor,
   formatTokens,
@@ -86,25 +86,31 @@ export function useReveal(step: number): RevealState {
 }
 
 /**
- * The one place a tab's transient status line is drawn. `null` status renders
- * nothing, so a ready tab costs zero rows. Loading reads `glyphFrame` only in
- * this leaf — the spinner steps on the fast tick without rebuilding the panel.
+ * The global OES status bar: `OES {glyph} {label}  {rate}`. Always renders one
+ * row — a ready tab shows a static `•`. Loading reads `glyphFrame` only in this
+ * leaf, so the spinner steps on the fast tick without rebuilding the panel.
  */
-export function TabStatusRow(props: {
+export function OesStatusRow(props: {
   status: TabStatus
+  rate: string
   colors: ThemeColors
   glyphFrame: () => number
-}): JSX.Element | null {
-  const line = tabStatusLine(props.status)
-  if (!line) return null
-  const prefix = line.glyph ?? spinnerFrame(props.glyphFrame())
+}): JSX.Element {
+  const line = statusBarLine(props.status)
+  const glyph =
+    line.tone === "loading"
+      ? spinnerFrame(props.glyphFrame())
+      : line.tone === "error"
+        ? "×"
+        : "•"
   const fg =
     line.tone === "error"
       ? props.colors.error || props.colors.text
-      : line.tone === "muted"
-        ? props.colors.textMuted
-        : props.colors.primary || props.colors.text
-  return <text fg={fg}>{`${prefix} ${line.label}`}</text>
+      : line.tone === "loading"
+        ? props.colors.primary || props.colors.text
+        : props.colors.textMuted
+  const text = `OES ${glyph}${line.label ? ` ${line.label}` : ""}${props.rate ? `  ${props.rate}` : ""}`
+  return <text fg={fg}>{text}</text>
 }
 
 /** Clickable truncation line: "… +N more", or "… less" in expand-all (toggle) mode. */

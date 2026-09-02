@@ -1,9 +1,12 @@
 import { describe, expect, test } from "bun:test"
 import {
   approvalContinueHint,
+  dropDismissed,
+  formatDismissed,
   groupMyWork,
   myWorkLabel,
   MY_WORK_ORDER,
+  parseDismissed,
   startWorkCommand,
   toApprovalItems,
   toQuestionItems,
@@ -13,6 +16,7 @@ import {
 
 const question: MyWorkItem = {
   kind: "question",
+  partId: "prt_1",
   sessionId: "ses_1",
   title: "hello",
   startedAt: 1_000,
@@ -43,17 +47,57 @@ describe("myWorkLabel", () => {
 })
 
 describe("toQuestionItems", () => {
-  test("carries session id, title, start, kind and reason through from the row", () => {
+  test("carries part id, session id, title, start, kind and reason through from the row", () => {
     const items = toQuestionItems([
-      { sessionId: "ses_1", title: "Plan approval?", startedAt: 1_000, kind: "question", reason: null },
-      { sessionId: "ses_2", title: "Which lib?", startedAt: null, kind: "interrupted", reason: "Tool execution aborted" },
-      { sessionId: "ses_3", title: "Bad question", startedAt: 2_000, kind: "error", reason: "boom" },
+      { partId: "prt_1", sessionId: "ses_1", title: "Plan approval?", startedAt: 1_000, kind: "question", reason: null },
+      { partId: "prt_2", sessionId: "ses_2", title: "Which lib?", startedAt: null, kind: "interrupted", reason: "Tool execution aborted" },
+      { partId: "prt_3", sessionId: "ses_3", title: "Bad question", startedAt: 2_000, kind: "error", reason: "boom" },
     ])
     expect(items).toEqual([
-      { kind: "question", sessionId: "ses_1", title: "Plan approval?", startedAt: 1_000, reason: null },
-      { kind: "interrupted", sessionId: "ses_2", title: "Which lib?", startedAt: null, reason: "Tool execution aborted" },
-      { kind: "error", sessionId: "ses_3", title: "Bad question", startedAt: 2_000, reason: "boom" },
+      { kind: "question", partId: "prt_1", sessionId: "ses_1", title: "Plan approval?", startedAt: 1_000, reason: null },
+      { kind: "interrupted", partId: "prt_2", sessionId: "ses_2", title: "Which lib?", startedAt: null, reason: "Tool execution aborted" },
+      { kind: "error", partId: "prt_3", sessionId: "ses_3", title: "Bad question", startedAt: 2_000, reason: "boom" },
     ])
+  })
+})
+
+describe("dismissed questions", () => {
+  test("parseDismissed turns a JSON array of ids into a set", () => {
+    expect(parseDismissed('["prt_1","prt_2"]')).toEqual(new Set(["prt_1", "prt_2"]))
+  })
+
+  test("parseDismissed tolerates empty, malformed, and non-array input", () => {
+    expect(parseDismissed(null)).toEqual(new Set())
+    expect(parseDismissed(undefined)).toEqual(new Set())
+    expect(parseDismissed("")).toEqual(new Set())
+    expect(parseDismissed("{broken")).toEqual(new Set())
+    expect(parseDismissed('{"a":1}')).toEqual(new Set())
+  })
+
+  test("parseDismissed keeps only non-empty string ids", () => {
+    expect(parseDismissed('["prt_1", 42, "", null, true]')).toEqual(new Set(["prt_1"]))
+  })
+
+  test("formatDismissed round-trips through parseDismissed", () => {
+    expect(parseDismissed(formatDismissed(new Set(["prt_1", "prt_2"])))).toEqual(new Set(["prt_1", "prt_2"]))
+  })
+
+  test("dropDismissed removes matching question items and leaves the rest", () => {
+    const items: MyWorkItem[] = [
+      { kind: "question", partId: "prt_1", sessionId: "ses_1", title: "a", startedAt: null, reason: null },
+      { kind: "error", partId: "prt_2", sessionId: "ses_2", title: "b", startedAt: null, reason: "boom" },
+      { kind: "running", sessionId: "ses_9", title: "c", status: "running", timeUpdated: 1_000 },
+      { kind: "ready-to-review", name: "plan", rel: "plans/plan.md", pendingAction: null, updatedAt: null, sessionState: null, review: null },
+    ]
+    const out = dropDismissed(items, new Set(["prt_1"]))
+    expect(out.map((i) => ("partId" in i ? i.partId : "sessionId" in i ? i.sessionId : i.name))).toEqual(["prt_2", "ses_9", "plan"])
+  })
+
+  test("dropDismissed passes everything through when the set is empty", () => {
+    const items: MyWorkItem[] = [
+      { kind: "question", partId: "prt_1", sessionId: "ses_1", title: "a", startedAt: null, reason: null },
+    ]
+    expect(dropDismissed(items, new Set())).toEqual(items)
   })
 })
 

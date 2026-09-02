@@ -3,6 +3,7 @@
 import { createSignal, For, Show, type JSX } from "solid-js"
 import { TextAttributes } from "@opentui/core"
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
+import { formatDismissed, parseDismissed } from "../pware.oc.runtime/pware.oc.runtime.mywork.js"
 
 /** OpenTUI has no bold/underline props on `<text>` — only the `attributes` bitmask. */
 export function textAttrs(bold?: boolean, underline?: boolean): number {
@@ -89,6 +90,29 @@ export function kvWriteOne(api: TuiPluginApi, key: string, value: string): void 
   try {
     const kv = (api as TuiPluginApi & { kv?: { set: (k: string, v: string) => void } }).kv
     kv?.set(key, value)
+  } catch {
+    // no kv in older hosts
+  }
+}
+
+const KV_DISMISSED_QUESTIONS = "oes.dismissed.questions"
+
+export function readDismissedQuestions(api: TuiPluginApi): ReadonlySet<string> {
+  try {
+    const kv = (api as TuiPluginApi & { kv?: { get: (k: string, d?: unknown) => unknown } }).kv
+    const raw = kv?.get(KV_DISMISSED_QUESTIONS, null)
+    return parseDismissed(typeof raw === "string" ? raw : null)
+  } catch {
+    return new Set()
+  }
+}
+
+export function dismissQuestion(api: TuiPluginApi, partId: string): void {
+  try {
+    const ids = new Set(readDismissedQuestions(api))
+    ids.add(partId)
+    const kv = (api as TuiPluginApi & { kv?: { set: (k: string, v: string) => void } }).kv
+    kv?.set(KV_DISMISSED_QUESTIONS, formatDismissed(ids))
   } catch {
     // no kv in older hosts
   }

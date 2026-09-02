@@ -1,5 +1,6 @@
 # Changelog
 
+- **0.2.55** (2026-09-02) Add a live token-rate status bar and auto-resolve or dismiss stale interrupted My work questions.
 - **0.2.54** (2026-09-02) Normalize OS-specific ignore rules and cross-platform line endings for consistent multi-OS development.
 - **0.2.53** (2026-09-01) Drop the redundant queued glyph on delegate rows so a pending task shows one hourglass.
 - **0.2.52** (2026-09-01) Indent delegate children one glyph column under their agent header.

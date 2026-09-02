@@ -1,4 +1,6 @@
 import {
+  deltaTextFromEvent,
+  estimateTokens,
   flowFromEvent,
   sessionBusyFromEvent,
   sessionIdFromEvent,
@@ -15,6 +17,7 @@ import {
   EV_OC_FILES_TOUCHED,
   EV_OC_FLOW,
   EV_OC_SESSION_ACTIVITY,
+  EV_OC_TOKENS_DELTA,
   EV_OC_TOOL_HIT,
 } from "./constants/pware.oc.opencode.constants.eventName.js"
 
@@ -53,7 +56,21 @@ export type OcFilesTouchedEvent = {
   }
 }
 
-export type OcEvent = OcSessionActivityEvent | OcFlowEvent | OcToolHitEvent | OcFilesTouchedEvent
+export type OcTokensDeltaEvent = {
+  type: typeof EV_OC_TOKENS_DELTA
+  ts: number
+  data: {
+    sessionId: string
+    tokens: number
+  }
+}
+
+export type OcEvent =
+  | OcSessionActivityEvent
+  | OcFlowEvent
+  | OcToolHitEvent
+  | OcFilesTouchedEvent
+  | OcTokensDeltaEvent
 
 export function hostEventToOcEvents(
   evt: unknown,
@@ -110,6 +127,21 @@ export function hostEventToOcEvents(
         files,
       },
     })
+  }
+
+  const delta = deltaTextFromEvent(evt)
+  if (delta) {
+    const tokens = estimateTokens(delta)
+    if (tokens > 0) {
+      out.push({
+        type: EV_OC_TOKENS_DELTA,
+        ts,
+        data: {
+          sessionId: eventSessionId,
+          tokens,
+        },
+      })
+    }
   }
 
   return out

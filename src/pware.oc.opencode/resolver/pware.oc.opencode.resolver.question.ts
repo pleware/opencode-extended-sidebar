@@ -3,11 +3,12 @@
  *
  * Open `question` tool parts across a project — the "waiting on my answer"
  * queue. A question is open while its state has no end time and its status is
- * running or pending. Scanned **project-wide** (every non-archived session of
- * the project), not just the current+recent window, so an open question keeps
- * showing after a restart or a session switch. Lazy read, gated on the My work
- * tab; soft-fails to [] on a missing/locked DB. The question text and options
- * stay in the `part.data` blob — never read, never shown.
+ * running or pending, or while it is a still-unanswered error/interrupted
+ * part. Scanned **project-wide** (every non-archived session of the project),
+ * not just the current+recent window, so an open question keeps showing after
+ * a restart or a session switch. Lazy read, gated on the My work tab;
+ * soft-fails to [] on a missing/locked DB. The question text and options stay
+ * in the `part.data` blob — never read, never shown.
  */
 import fs from "node:fs"
 import { str } from "../../pware.oc.core/pware.oc.core.paths.js"
@@ -32,6 +33,7 @@ import {
 export type { OpenQuestionKind }
 
 export type OpenQuestion = {
+  partId: string
   sessionId: string
   /** The session's own title — the question's session may sit outside the recent window. */
   title: string
@@ -42,6 +44,7 @@ export type OpenQuestion = {
 }
 
 type OpenQuestionRow = {
+  id: string
   session_id: string
   title: string | null
   time_created: number
@@ -63,7 +66,8 @@ export function listOpenQuestions(opts: {
     let rows: OpenQuestionRow[] = []
     try {
       rows = db.all<OpenQuestionRow>(
-        `SELECT p.session_id,
+        `SELECT p.id AS id,
+                p.session_id,
                 s.title AS title,
                 p.time_created,
                 json_extract(p.data,'$.state.status') AS status,
@@ -93,6 +97,10 @@ export function listOpenQuestions(opts: {
       )
       if (status !== TOOL_STATUS_RUNNING && status !== TOOL_STATUS_PENDING && status !== TOOL_STATUS_ERROR) continue
       const interrupted = row.interrupted === 1
+      // An interrupted question that terminated (has an end time) is resolved:
+      // the abort closed the tool and no answer is pending. Only a still-open
+      // interrupted part (no end time) stays "your call".
+      if (interrupted && end != null) continue
       const reason = str(row.error) || null
       const kind: OpenQuestionKind =
         status === TOOL_STATUS_ERROR
@@ -101,6 +109,7 @@ export function listOpenQuestions(opts: {
             : QUESTION_KIND_ERROR
           : QUESTION_KIND_QUESTION
       out.push({
+        partId: row.id,
         sessionId: row.session_id,
         title: str(row.title) || "untitled",
         startedAt: start ?? toEpochMs(row.time_created),

@@ -70,7 +70,23 @@ describe("listOpenQuestions", () => {
             status: "error",
             error: "Tool execution aborted",
             metadata: { interrupted: true },
-            time: { start: t0 + 450, end: t0 + 550 },
+            time: { start: t0 + 450 },
+          },
+        },
+      },
+      {
+        id: "prt_interrupted_ended",
+        session_id: "ses_q1",
+        time_created: t0 + 460,
+        data: {
+          type: "tool",
+          tool: "question",
+          callID: "call_interrupted_ended",
+          state: {
+            status: "error",
+            error: "Tool execution aborted",
+            metadata: { interrupted: true },
+            time: { start: t0 + 460, end: t0 + 560 },
           },
         },
       },
@@ -112,13 +128,20 @@ describe("listOpenQuestions", () => {
     expect(q?.title).toBe("Q1")
     expect(q?.startedAt).toBe(t0 + 100)
     expect(q?.reason).toBeNull()
+    expect(q?.partId).toBe("prt_open")
   })
 
-  test("an interrupted question stays in the queue with its reason", () => {
+  test("an interrupted question without an end time stays in the queue with its reason", () => {
     const out = listOpenQuestions({ dbPath: fix.dbPath, projectId: "proj_1" })
     const q = out.find((x) => x.kind === "interrupted")
+    expect(q?.partId).toBe("prt_interrupted")
     expect(q?.sessionId).toBe("ses_q1")
     expect(q?.reason).toBe("Tool execution aborted")
+  })
+
+  test("an interrupted question that terminated is resolved and dropped", () => {
+    const out = listOpenQuestions({ dbPath: fix.dbPath, projectId: "proj_1" })
+    expect(out.some((q) => q.partId === "prt_interrupted_ended")).toBe(false)
   })
 
   test("a genuinely failed question is its own error kind with the error text", () => {

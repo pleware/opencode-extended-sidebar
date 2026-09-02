@@ -470,6 +470,40 @@ export function openApprovalDialog(
   openDialog(api, "medium", () => <api.ui.DialogSelect title={opts.title} options={options} />)
 }
 
+type QuestionAction = "continue" | "dismiss"
+
+export function openQuestionDialog(
+  api: TuiPluginApi,
+  opts: {
+    title: string
+    sessionId: string
+    onNavigate: (sessionId: string) => void
+    onDismiss: () => void
+  },
+): void {
+  const options: TuiDialogSelectOption<QuestionAction>[] = [
+    {
+      title: "Navigate to session",
+      value: "continue",
+      onSelect: () => {
+        closeDialog(api)
+        opts.onNavigate(opts.sessionId)
+      },
+    },
+    {
+      title: "Dismiss",
+      value: "dismiss",
+      description: "Hide this question — remembered for this project.",
+      onSelect: () => {
+        closeDialog(api)
+        opts.onDismiss()
+        toast(api, "Dismissed", "success")
+      },
+    },
+  ]
+  openDialog(api, "medium", () => <api.ui.DialogSelect title={opts.title} options={options} />)
+}
+
 function formatBytes(n: number): string {
   if (!Number.isFinite(n) || n < 0) return "—"
   if (n < 1024) return `${n} B`
