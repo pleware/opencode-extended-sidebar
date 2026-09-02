@@ -197,6 +197,7 @@ describe("rateSparkline", () => {
     expect(out).toHaveLength(2)
     for (const line of out) {
       expect(line).not.toContain("\x1b[")
+      expect(line).not.toMatch(/[\u2800-\u28FF]/)
       expect(line.length).toBeGreaterThan(0)
     }
   })

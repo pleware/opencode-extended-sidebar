@@ -218,10 +218,19 @@ export function rateSparkline(
   const max = Math.max(1, ...smoothed)
   const rows = smoothed.map((v, i) => ({ x: i, y: v }))
   const out = renderToString(
-    chart({ width: opts.width + 8, height, charset: "braille" })
+    chart({ width: opts.width + 8, height, charset: "ascii" })
       .data(rows, { xKey: "x" })
       .line({ key: "y" })
       .yDomain([0, max]),
   )
-  return out.split("\n").map((line) => line.slice(8))
+  return out.split("\n").map((line) => toAsciiOnly(line.slice(8)))
+}
+
+function toAsciiOnly(line: string): string {
+  let out = ""
+  for (const ch of line) {
+    const code = ch.codePointAt(0) ?? 0
+    out += code >= 32 && code <= 126 ? ch : "*"
+  }
+  return out
 }
