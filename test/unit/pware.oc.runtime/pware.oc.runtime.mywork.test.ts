@@ -34,7 +34,7 @@ const approval: MyWorkItem = {
 }
 
 describe("myWorkLabel", () => {
-  test("labels map to the eight actionable groups", () => {
+  test("labels map to the My work groups", () => {
     expect(myWorkLabel("question")).toBe("Awaiting answer")
     expect(myWorkLabel("interrupted")).toBe("Interrupted")
     expect(myWorkLabel("error")).toBe("Errors")
@@ -42,6 +42,7 @@ describe("myWorkLabel", () => {
     expect(myWorkLabel("ready-to-review")).toBe("Ready to review")
     expect(myWorkLabel("ready-to-start")).toBe("Ready to start")
     expect(myWorkLabel("finished")).toBe("Finished")
+    expect(myWorkLabel("dismissed")).toBe("Dismissed questions")
     expect(myWorkLabel("drafting")).toBe("Drafting")
   })
 })
@@ -82,7 +83,7 @@ describe("dismissed questions", () => {
     expect(parseDismissed(formatDismissed(new Set(["prt_1", "prt_2"])))).toEqual(new Set(["prt_1", "prt_2"]))
   })
 
-  test("dropDismissed removes matching question items and leaves the rest", () => {
+  test("dropDismissed moves matching question items to dismissed and leaves the rest", () => {
     const items: MyWorkItem[] = [
       { kind: "question", partId: "prt_1", sessionId: "ses_1", title: "a", startedAt: null, reason: null },
       { kind: "error", partId: "prt_2", sessionId: "ses_2", title: "b", startedAt: null, reason: "boom" },
@@ -90,14 +91,58 @@ describe("dismissed questions", () => {
       { kind: "ready-to-review", name: "plan", rel: "plans/plan.md", pendingAction: null, updatedAt: null, sessionState: null, review: null },
     ]
     const out = dropDismissed(items, new Set(["prt_1"]))
-    expect(out.map((i) => ("partId" in i ? i.partId : "sessionId" in i ? i.sessionId : i.name))).toEqual(["prt_2", "ses_9", "plan"])
+    expect(out).toEqual([
+      { kind: "dismissed", partId: "prt_1", sessionId: "ses_1", title: "a", startedAt: null, reason: null },
+      { kind: "error", partId: "prt_2", sessionId: "ses_2", title: "b", startedAt: null, reason: "boom" },
+      { kind: "running", sessionId: "ses_9", title: "c", status: "running", timeUpdated: 1_000 },
+      { kind: "ready-to-review", name: "plan", rel: "plans/plan.md", pendingAction: null, updatedAt: null, sessionState: null, review: null },
+    ])
   })
 
-  test("dropDismissed passes everything through when the set is empty", () => {
+  test("dropDismissed passes non-dismissed rows through when the set is empty", () => {
     const items: MyWorkItem[] = [
       { kind: "question", partId: "prt_1", sessionId: "ses_1", title: "a", startedAt: null, reason: null },
     ]
     expect(dropDismissed(items, new Set())).toEqual(items)
+  })
+
+  test("dropDismissed moves dismissed-question errors into dismissed even without kv ids", () => {
+    const items: MyWorkItem[] = [
+      {
+        kind: "error",
+        partId: "prt_1",
+        sessionId: "ses_1",
+        title: "a",
+        startedAt: null,
+        reason: "The user dismissed this question",
+      },
+      {
+        kind: "error",
+        partId: "prt_2",
+        sessionId: "ses_2",
+        title: "b",
+        startedAt: null,
+        reason: "Tool execution aborted",
+      },
+    ]
+    expect(dropDismissed(items, new Set())).toEqual([
+      {
+        kind: "dismissed",
+        partId: "prt_1",
+        sessionId: "ses_1",
+        title: "a",
+        startedAt: null,
+        reason: "The user dismissed this question",
+      },
+      {
+        kind: "error",
+        partId: "prt_2",
+        sessionId: "ses_2",
+        title: "b",
+        startedAt: null,
+        reason: "Tool execution aborted",
+      },
+    ])
   })
 })
 
@@ -238,9 +283,10 @@ describe("groupMyWork", () => {
     }
     const readyStart: MyWorkItem = { ...approval, kind: "ready-to-start" }
     const finished: MyWorkItem = { ...approval, kind: "finished" }
+    const dismissed: MyWorkItem = { ...question, kind: "dismissed", reason: "The user dismissed this question" }
     const drafting: MyWorkItem = { ...approval, kind: "drafting" }
     expect(
-      groupMyWork([finished, approval, readyStart, drafting, question, interrupted, errored, running]).map(
+      groupMyWork([finished, dismissed, approval, readyStart, drafting, question, interrupted, errored, running]).map(
         (g) => g.kind,
       ),
     ).toEqual([
@@ -251,6 +297,7 @@ describe("groupMyWork", () => {
       "ready-to-review",
       "ready-to-start",
       "finished",
+      "dismissed",
       "drafting",
     ])
     expect(groupMyWork([question]).map((g) => g.kind)).toEqual(["question"])
@@ -266,6 +313,7 @@ describe("groupMyWork", () => {
       "ready-to-review",
       "ready-to-start",
       "finished",
+      "dismissed",
       "drafting",
     ])
   })

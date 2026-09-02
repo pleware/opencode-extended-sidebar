@@ -34,6 +34,7 @@ import {
   STATUS_ERROR,
 } from "../pware.oc.core/constants/pware.oc.core.constants.status.js"
 import {
+  MY_WORK_GROUP_DISMISSED,
   MY_WORK_GROUP_DRAFTING,
   MY_WORK_GROUP_FINISHED,
   MY_WORK_GROUP_READY_REVIEW,
@@ -121,6 +122,7 @@ export function myWorkGlyph(kind: MyWorkKind): string {
   if (kind === MY_WORK_GROUP_DRAFTING) return "…"
   if (kind === MY_WORK_GROUP_READY_START) return "▶"
   if (kind === MY_WORK_GROUP_FINISHED) return "✓"
+  if (kind === MY_WORK_GROUP_DISMISSED) return "⊘"
   return "!"
 }
 

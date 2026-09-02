@@ -73,6 +73,7 @@ import {
   QUESTION_KIND_QUESTION,
 } from "../pware.oc.opencode/constants/pware.oc.opencode.constants.questionKind.js"
 import {
+  MY_WORK_GROUP_DISMISSED,
   MY_WORK_GROUP_DRAFTING,
   MY_WORK_GROUP_FINISHED,
   MY_WORK_GROUP_READY_REVIEW,
@@ -594,7 +595,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     // The Errors group is noise until you want it — start collapsed.
     myWorkFold[kind] = useFold(props.api, `oes.fold.mywork.${kind}`, {
       after: requestRender,
-      defaultOpen: kind !== QUESTION_KIND_ERROR,
+      defaultOpen: kind !== QUESTION_KIND_ERROR && kind !== MY_WORK_GROUP_DISMISSED,
     })
   }
 

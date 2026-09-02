@@ -13,6 +13,7 @@ import type {
 import type { ReviewState } from "../pware.oc.omo/resolver/pware.oc.omo.resolver.plan.js"
 import type { EnrichedApproval } from "./pware.oc.runtime.mywork-enrich.js"
 import {
+  MY_WORK_GROUP_DISMISSED,
   MY_WORK_GROUP_DRAFTING,
   MY_WORK_GROUP_FINISHED,
   MY_WORK_GROUP_READY_REVIEW,
@@ -36,9 +37,11 @@ import {
 
 export type { ApprovalGroupKind, OpenQuestionKind, StartWorkMode }
 
+export type QuestionGroupKind = OpenQuestionKind | typeof MY_WORK_GROUP_DISMISSED
+
 export type MyWorkItem =
   | {
-      kind: OpenQuestionKind
+      kind: QuestionGroupKind
       partId: string
       sessionId: string
       title: string
@@ -73,6 +76,7 @@ export const MY_WORK_ORDER: readonly MyWorkKind[] = [
   MY_WORK_GROUP_READY_REVIEW,
   MY_WORK_GROUP_READY_START,
   MY_WORK_GROUP_FINISHED,
+  MY_WORK_GROUP_DISMISSED,
   MY_WORK_GROUP_DRAFTING,
 ]
 
@@ -84,6 +88,7 @@ const MY_WORK_LABELS: Record<MyWorkKind, string> = {
   [MY_WORK_GROUP_READY_REVIEW]: "Ready to review",
   [MY_WORK_GROUP_READY_START]: "Ready to start",
   [MY_WORK_GROUP_FINISHED]: "Finished",
+  [MY_WORK_GROUP_DISMISSED]: "Dismissed questions",
   [MY_WORK_GROUP_DRAFTING]: "Drafting",
 }
 
@@ -192,11 +197,17 @@ export function formatDismissed(ids: ReadonlySet<string>): string {
   return JSON.stringify([...ids])
 }
 
-/** Drop question items whose part id is in the dismissed set; every other item passes through. */
 export function dropDismissed(
   items: readonly MyWorkItem[],
   dismissed: ReadonlySet<string>,
 ): MyWorkItem[] {
-  if (dismissed.size === 0) return items.slice()
-  return items.filter((i) => !("partId" in i && dismissed.has(i.partId)))
+  return items.map((i) => {
+    if (!("partId" in i)) return i
+    const byId = dismissed.has(i.partId)
+    const byReason = i.kind === QUESTION_KIND_ERROR
+      && typeof i.reason === "string"
+      && i.reason.toLowerCase().includes("dismissed this question")
+    if (!byId && !byReason) return i
+    return { ...i, kind: MY_WORK_GROUP_DISMISSED }
+  })
 }

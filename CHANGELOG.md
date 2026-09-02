@@ -1,5 +1,6 @@
 # Changelog
 
+- **0.2.59** (2026-09-02) Add a Dismissed questions My work group and route dismissed-question errors into it.
 - **0.2.58** (2026-09-02) Add a GitHub Actions CI workflow that typechecks, tests with coverage, and benchmarks on push.
 - **0.2.57** (2026-09-02) Smooth the OES token-rate sparkline by bucket-averaging and window-averaging the series before rendering.
 - **0.2.56** (2026-09-02) Fix the stuck OES status bar, add a live braille token-rate sparkline, normalize prefixed session IDs, and hide empty ghost sessions.
