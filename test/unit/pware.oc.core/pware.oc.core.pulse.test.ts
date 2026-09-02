@@ -20,6 +20,7 @@ import {
   preferToolLabel,
   pushTokenTick,
   shortToolLabel,
+  stripSessionPrefix,
   tokenRate,
 } from "../../../src/pware.oc.core/pware.oc.core.pulse.js"
 
@@ -60,12 +61,12 @@ describe("tokenSummary", () => {
 })
 
 describe("timeSummary", () => {
-  test("turns and wall; err/abort only when non-zero", () => {
-    expect(timeSummary({ turns: 38, wallMs: 22 * 60_000 })).toBe("38 turns · 22m")
-    expect(timeSummary({ turns: 2, wallMs: 5_000, errors: 1, aborts: 2 })).toBe(
+  test("turns and duration; err/abort only when non-zero", () => {
+    expect(timeSummary({ turns: 38, durationMs: 22 * 60_000 })).toBe("38 turns · 22m")
+    expect(timeSummary({ turns: 2, durationMs: 5_000, errors: 1, aborts: 2 })).toBe(
       "2 turns · 5s · 1 err · 2 abort",
     )
-    expect(timeSummary({ turns: 1, wallMs: 1_000, errors: 0, aborts: 0 })).toBe("1 turns · 1s")
+    expect(timeSummary({ turns: 1, durationMs: 1_000, errors: 0, aborts: 0 })).toBe("1 turns · 1s")
   })
 })
 
@@ -239,11 +240,24 @@ describe("pushTokenTick / tokenRate", () => {
 })
 
 describe("formatTokenRate", () => {
-  test("empty, then 50 tok/s", () => {
-    expect(formatTokenRate(null)).toBe("")
-    expect(formatTokenRate(0)).toBe("")
+  test("integer-rounded, always present — 0 tok/s when idle", () => {
+    expect(formatTokenRate(null)).toBe("0 tok/s")
+    expect(formatTokenRate(0)).toBe("0 tok/s")
     expect(formatTokenRate(50)).toBe("50 tok/s")
-    expect(formatTokenRate(50.4)).toBe("50.4 tok/s")
+    expect(formatTokenRate(50.4)).toBe("50 tok/s")
+    expect(formatTokenRate(50.5)).toBe("51 tok/s")
     expect(formatTokenRate(120)).toBe("120 tok/s")
+  })
+})
+
+describe("stripSessionPrefix", () => {
+  test("strips the opencode: prefix, leaves bare ids untouched", () => {
+    expect(stripSessionPrefix("opencode:ses_abc123")).toBe("ses_abc123")
+    expect(stripSessionPrefix("ses_abc123")).toBe("ses_abc123")
+    expect(stripSessionPrefix("  opencode:ses_abc123  ")).toBe("ses_abc123")
+    expect(stripSessionPrefix("")).toBeNull()
+    expect(stripSessionPrefix("   ")).toBeNull()
+    expect(stripSessionPrefix(null)).toBeNull()
+    expect(stripSessionPrefix(undefined)).toBeNull()
   })
 })

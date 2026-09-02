@@ -1,5 +1,5 @@
 import { plot } from "asciichart"
-import { sparkBar, sparkHistogram, sparkGauge, sparkDonut } from "@crafter/charts"
+import { chart, renderToString, sparkBar, sparkHistogram, sparkGauge, sparkDonut } from "@crafter/charts"
 import { quantileSorted, sampleStandardDeviation } from "simple-statistics"
 
 /**
@@ -195,4 +195,29 @@ export function shareDonut(
   opts?: { label?: string },
 ): string {
   return stripAnsi(sparkDonut(share ?? 0, 1, { label: opts?.label }))
+}
+
+/**
+ * Braille line sparkline for the OES status bar's live token rate. Returns one
+ * string per row (empty input → `[]`), `height` rows tall (default 2). Renders
+ * through `@crafter/charts` `chart().line()` (braille 4x2 sub-pixel), pins the
+ * y-domain to `[0, max]` (rates are never negative), and drops the 8-column
+ * y-axis gutter so the line spans the full requested width — the TUI colours it
+ * via the `fg` prop, no ANSI.
+ */
+export function rateSparkline(
+  values: number[],
+  opts: { width: number; height?: number },
+): string[] {
+  if (values.length === 0) return []
+  const height = Math.max(2, Math.round(opts.height ?? 2))
+  const max = Math.max(1, ...values)
+  const rows = values.map((v, i) => ({ x: i, y: v }))
+  const out = renderToString(
+    chart({ width: opts.width + 8, height, charset: "braille" })
+      .data(rows, { xKey: "x" })
+      .line({ key: "y" })
+      .yDomain([0, max]),
+  )
+  return out.split("\n").map((line) => line.slice(8))
 }

@@ -26,7 +26,7 @@ OpenCode gives you one conversation at a time. Real work looks different: an orc
 
 ## ⇄ Session switcher
 
-> Recent sessions, one click away. Title, age, and whether it is still alive. The current session is tagged `[C]`. The header is `Sessions` — no count — with two labels: `switch` opens the host session switcher (the same `/sessions` command) and `new` starts a fresh session in the current project. When more sessions were fetched, a clickable `… +N more` reveals the next four per click. Below the list, tools and files rolled up from those same recent sessions.
+> Recent sessions, one click away. Title, age, and whether it is still alive. The current session is tagged `[C]`. The header is `Sessions` — no count — with two labels: `switch` opens the host session switcher (the same `/sessions` command) and `new` opens a prompt — Enter creates the session and sends it, an empty prompt is blocked. Empty sessions that were never prompted are hidden from the list. When more sessions were fetched, a clickable `… +N more` reveals the next four per click. Below the list, tools and files rolled up from those same recent sessions.
 
 ## ⊚ Live activity pulse
 
@@ -54,14 +54,14 @@ OpenCode gives you one conversation at a time. Real work looks different: an orc
 
 > **Perf** splits the wall clock into wait, think, stream and tools, then ranks models and slow calls. Click a phase, a section title, or a tool row for a dated column log. The scan runs only while this tab is open.
 >
-> A single **OES status bar** sits at the very top of the panel — `OES • 50 tok/s`. The glyph is a braille spinner while a tab loads or a session switch is in flight, `×` on a real error (with the message), and a static `•` once ready. The trailing number is a **live token-rate estimate**: streaming text deltas are counted (≈ code points ÷ 4) over a rolling 5-second window, so it reads `50 tok/s` while tokens stream in and disappears when idle. No prompt or output text ever leaves the panel — only the count.
+> A single **OES status bar** sits at the very top of the panel — `OES • 50 tok/s`. The glyph is a braille spinner while a tab loads or a session switch is in flight, `×` on a real error (with the message), and a static `•` once ready. The trailing number is a **live token-rate estimate**: streaming text deltas are counted (≈ code points ÷ 4) over a rolling 5-second window, so it reads `50 tok/s` while tokens stream in and settles to `0 tok/s` when idle — the rate is always shown, rounded to whole tokens. No prompt or output text ever leaves the panel — only the count. A two-row **rate sparkline** (braille line) sits right below the bar, charting that rate over the last few minutes so a stream is visible as a rising curve instead of a lone number.
 >
 > A muted **self** line above the tab row — `self 0.4ms/ev · 1.2ms/sc · 59fps` — shows what the plugin itself costs: average event-handler ms, average scan (fingerprint + snapshot) ms, and the TUI renderer's FPS. It measures the plugin's own runtime, not the model's. `OES_DEBUG_OPENCODE=1` additionally writes `self`-tagged JSON lines to the debug log.
 
 ## ▣ One group, four views
 
 > ```
-> Session | My work | Project | Stats
+> My work | Session | Project | Stats
 > ```
 >
 > **Session** is this agent, its delegates, tools, files and — with OMO — the last five drafts behind a `view all` picker. **My work** is the queue of things waiting on you — open questions and OMO plan approvals grouped by the action they need. **Project** is the project-wide view — recent sessions (Chat history) plus the tools and files every one of them touched. **Stats** is timing. Tabs and folds are remembered. Clickable labels underline on hover. While a tab waits for its data a transient status row sits at its top — a braille spinner with `switching · <id>` while a session switch is in flight, `loading` on a cold tab, or an error/empty note (`no turns yet` on Stats) — and disappears the moment the data lands, so a switch never reads as a broken panel.
@@ -154,22 +154,30 @@ Later files win:
   "sessionFetch": 20,
   "skipGitignore": false,
   "toolRows": 5,
-  "toolFetch": 20
+  "toolFetch": 20,
+  "charts": {
+    "rate": {
+      "sampleMs": 55,
+      "windowMs": 240000
+    }
+  }
 }
 ```
 
-| Key             | Default                          | What it controls                                      |
-| --------------- | -------------------------------- | ----------------------------------------------------- |
-| `fileRows`      | `8`                              | most file rows shown                                  |
-| `lineMax`       | `31`                             | max characters per row                                |
-| `perfHistory`   | `3`                              | sessions under Perf → History; `0` hides it          |
-| `perfRows`      | `5`                              | rows per Perf section                                  |
-| `perfTurns`     | `120`                            | recent turns Perf measures                            |
-| `sessionRows`   | `6`                              | sessions shown before the `… +N more` revealer |
-| `sessionFetch`  | `20`                             | sessions fetched for the switcher window; distinct from `sessionRows` |
-| `skipGitignore` | `false`                          | also honour the project's root `.gitignore` (`.oesignore` is always honoured) |
-| `toolRows`      | `5`                              | most tool-call rows shown; the `… +N more` control reveals another `toolRows` per click |
-| `toolFetch`     | `20`                             | tool-call history kept behind the `… +N more` revealer; distinct from `toolRows` |
+| Key                      | Default                          | What it controls                                      |
+| ------------------------ | -------------------------------- | ----------------------------------------------------- |
+| `fileRows`               | `8`                              | most file rows shown                                  |
+| `lineMax`                | `31`                             | max characters per row                                |
+| `perfHistory`            | `3`                              | sessions under Perf → History; `0` hides it          |
+| `perfRows`               | `5`                              | rows per Perf section                                  |
+| `perfTurns`              | `120`                            | recent turns Perf measures                            |
+| `sessionRows`            | `6`                              | sessions shown before the `… +N more` revealer |
+| `sessionFetch`           | `20`                             | sessions fetched for the switcher window; distinct from `sessionRows` |
+| `skipGitignore`          | `false`                          | also honour the project's root `.gitignore` (`.oesignore` is always honoured) |
+| `toolRows`               | `5`                              | most tool-call rows shown; the `… +N more` control reveals another `toolRows` per click |
+| `toolFetch`              | `20`                             | tool-call history kept behind the `… +N more` revealer; distinct from `toolRows` |
+| `charts.rate.sampleMs`   | `55`                             | how often the OES rate sparkline samples the token rate (ms) |
+| `charts.rate.windowMs`   | `240000`                         | how much rate-sparkline history is kept (ms) |
 
 Row counts are ceilings: a short terminal trims below them. Changes apply on the next refresh — no restart.
 

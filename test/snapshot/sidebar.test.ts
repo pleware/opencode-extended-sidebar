@@ -95,6 +95,33 @@ describe("no .omo — SQLite only", () => {
   })
 })
 
+describe("ghost sessions", () => {
+  test("empty shell sessions are excluded from the recent list", () => {
+    projFix = createFixtureProject({})
+    dbFix = createFixtureDb({
+      sessions: [
+        { id: "ses_real", project_id: "proj_a", title: "real", parent_id: null, time_updated: NOW },
+        { id: "ses_ghost", project_id: "proj_a", title: "New session", parent_id: null, time_updated: NOW - 1_000 },
+      ],
+      parts: [
+        {
+          id: "prt_1",
+          session_id: "ses_real",
+          time_created: NOW,
+          data: toolPartData({ tool: "bash", command: "ls", pad: false }),
+        },
+      ],
+    })
+    const snap = readRuntimeSnapshot({
+      sessionId: "ses_real",
+      projectRoot: projFix.root,
+      dbPath: dbFix.dbPath,
+    })
+    expect(snap.db.recent.map((s) => s.id)).toEqual(["ses_real"])
+    expect(snap.db.recent[0]?.hasContent).toBe(true)
+  })
+})
+
 describe("foreign boulder parent", () => {
   test("Session tab does not inherit another run's tasks", () => {
     projFix = createFixtureProject({

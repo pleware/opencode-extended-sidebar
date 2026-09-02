@@ -5,6 +5,7 @@ import {
   downsampleAvg,
   interpolateSeries,
   perfStatLine,
+  rateSparkline,
   shareBar,
   shareDonut,
   shareGauge,
@@ -183,5 +184,31 @@ describe("shareDonut", () => {
     const out = shareDonut(0.5)
     expect(out).not.toContain("\x1b[")
     expect(out).toContain("●")
+  })
+})
+
+describe("rateSparkline", () => {
+  test("empty input returns no lines", () => {
+    expect(rateSparkline([], { width: 20 })).toEqual([])
+  })
+
+  test("returns two ANSI-free lines", () => {
+    const out = rateSparkline([0, 10, 20, 30, 20, 10, 0], { width: 20, height: 2 })
+    expect(out).toHaveLength(2)
+    for (const line of out) {
+      expect(line).not.toContain("\x1b[")
+      expect(line.length).toBeGreaterThan(0)
+    }
+  })
+
+  test("downsamples long input to the requested width", () => {
+    const data = Array.from({ length: 200 }, (_, i) => i % 10)
+    const out = rateSparkline(data, { width: 20, height: 2 })
+    expect(out).toHaveLength(2)
+    for (const line of out) expect(line.length).toBe(20)
+  })
+
+  test("height is honoured", () => {
+    expect(rateSparkline([0, 5, 10], { width: 10, height: 3 })).toHaveLength(3)
   })
 })

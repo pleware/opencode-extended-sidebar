@@ -277,6 +277,7 @@ export function PerfPanel(props: PerfPanelProps): JSX.Element {
 
   const totals = () => props.perf.totals
   const wall = () => Math.max(1, totals().wallMs)
+  const activeTimeMs = () => Math.max(0, totals().wallMs - totals().phases.idle)
   const phases = () =>
     PHASES.map((p) => ({ ...p, ms: totals().phases[p.key] })).filter(
       (p) => p.ms > 0 || p.key === PERF_PHASE_WAIT || p.key === PERF_PHASE_TOOL,
@@ -358,7 +359,12 @@ export function PerfPanel(props: PerfPanelProps): JSX.Element {
           <FoldSection
             title="Time"
             open={foldTime.open()}
-            suffix={timeSummary(totals())}
+            suffix={timeSummary({
+              turns: totals().turns,
+              durationMs: activeTimeMs(),
+              errors: totals().errors,
+              aborts: totals().aborts,
+            })}
             colors={props.colors}
             onToggle={foldTime.toggle}
             onDetail={() => openLog(PERF_LOG_KIND_TIME)}

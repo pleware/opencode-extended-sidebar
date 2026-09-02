@@ -169,7 +169,7 @@ Plugin registration: `id = "opencode-extended-sidebar"`, load toast,
 | `oes.ts` | `oes.json` merge + clamp | `OesOptions`, `OES_DEFAULTS`, `pick()`, `getOes()`, `oesStamp()`, `resetOesCache()` |
 | `paths.ts` | OpenCode path resolution, path folding | `getOpenCodeDbPath()`, `pluginRoot()`, `resolveProjectFile()`, `basenameOf()`, `fileStamp()`, `dbStamp()`, `str()`, `finiteNum()` |
 | `preview.ts` | text/markdown preview limits | `previewViewportRows()`, `canPreviewPath()`, `isMarkdownPath()`, `readTextPreview()` |
-| `pulse.ts` | agent marks, flow, time/token formatting | `toEpochMs()`, `pulseAgeMs()`, `composeMark()`, `hottestMark()`, `activeFlow()`, `applyFlow()`, `flowFromEvent()`, `sessionBusyFromEvent()`, `sessionIdFromEvent()`, `shortToolLabel()`, `toolHitFromEvent()`, `formatAge()`, `formatDuration()`, `formatTokens()`, `formatUsd()`, `packChips()` |
+| `pulse.ts` | agent marks, flow, time/token formatting | `toEpochMs()`, `pulseAgeMs()`, `composeMark()`, `hottestMark()`, `activeFlow()`, `applyFlow()`, `flowFromEvent()`, `sessionBusyFromEvent()`, `sessionIdFromEvent()`, `stripSessionPrefix()`, `shortToolLabel()`, `toolHitFromEvent()`, `formatAge()`, `formatDuration()`, `formatTokens()`, `formatUsd()`, `packChips()` |
 | `sqlite.ts` | readonly `bun:sqlite` / `node:sqlite` handle, fail-fast busy timeout (logs `sql.busy`) | `openReadonlyDb()`, `withDbRead()`, `resetReadonlyDb()`, `uniqueIds()`, `isBusyError()` |
 | `status.ts` | canonical lifecycle/tool/work status | `normalizeStatus()`, `toToolStatus()`, `toWorkLabel()`, `workStatusGlyph()`, `isPendingWork()`, `workIsTerminal()`, `taskRank()` |
 | `timing.ts` | panel clock budgets | `TICK_MS`, `NOW_MS`, `FPS_READ_EVERY_TICKS`, `BLINK_TICKS`, `MONITOR_POLL_MS`, `MONITOR_WATCH_DEBOUNCE_MS`, `EVENT_SCAN_DEBOUNCE_MS` |
@@ -202,7 +202,7 @@ Plugin registration: `id = "opencode-extended-sidebar"`, load toast,
 |---|---|---|
 | `files.ts` | `FileView`: basename + diff stats only | `FileView`, `FileLetter`, `filesFromEvent()`, `filesFromPatchJson()`, `fileHitFromExtracted()`, `decorateFiles()`, `mergeFiles()`, `sumDiff()`, `shortFileName()`, `formatDiffStat()` |
 | `events.ts` | host-event translation to OpenCode domain bus events | `hostEventToOcEvents()`, `OcEvent` |
-| `resolver/session.ts` | session rows → `SessionView`, hierarchy queries | `toSessionView()`, `inferStatus()`, `sessionActivityState()`, `getSessionById()`, `listChildSessions()`, `listRecentMainSessions()`, `getSessionsByIds()`, `sessionScanStamp()` |
+| `resolver/session.ts` | session rows → `SessionView`, hierarchy queries | `toSessionView()`, `inferStatus()`, `isRealSession()`, `sessionActivityState()`, `getSessionById()`, `listChildSessions()`, `listRecentMainSessions()`, `getSessionsByIds()`, `sessionScanStamp()` |
 | `resolver/tool.ts` | tool parts → `ToolView`, metadata only | `listToolEvents()`, `listRecentToolEvents()`, `mergeTools()`, `normalizeToolStatus` |
 | `resolver/file.ts` | file-touch parts → `FileView` | `listSessionFiles()`, `listRecentSessionFiles()` |
 | `resolver/question.ts` | open `question` queue | `listOpenQuestions()` |
@@ -284,8 +284,8 @@ Plugin registration: `id = "opencode-extended-sidebar"`, load toast,
 | `sections.tsx` | shared sidebar primitives: kv-persisted fold state, foldable sections, the base row renderer + budget-sliced `RowList`, brand+tabs+panel columns | `useFold()`, `FoldSection`, `GroupSection`, `RowList`, `MoreReveal`, `useReveal()`, `AgentLine`, `RowData`, `TabColumn` |
 | `sidebar.tsx` | the panel: groups, tabs, live rows; consumes plugin event bus | `SidebarPanel` |
 | `live.tsx` | host event adapter (`api.event.on`) → plugin event bus (`pware.oc.*`, `pware.oes.*`) | `startHostEventBridge()` |
-| `host.tsx` | UI host RPC wrappers (session switch/new session/start-work/approve) | `selectSession()`, `openSessionSwitcher()`, `newSession()`, `runStartWork()`, `approvePlan()` |
-| `menudialogs.tsx` | every popup via one `openDialog()` choke-point | `openFileDetail()`, `openToolDetail()`, `openFileListDialog()`, `openApprovalDialog()`, `openDocDetail()`, `openTextPreview()`, `openPerfLog()` |
+| `host.tsx` | UI host RPC wrappers (session switch/new session/start-work/approve) | `selectSession()`, `openSessionSwitcher()`, `newSessionWithPrompt()`, `runStartWork()`, `approvePlan()` |
+| `menudialogs.tsx` | every popup via one `openDialog()` choke-point | `openFileDetail()`, `openToolDetail()`, `openFileListDialog()`, `openApprovalDialog()`, `openQuestionDialog()`, `openNewSessionDialog()`, `openDocDetail()`, `openTextPreview()`, `openPerfLog()` |
 | `glyphs.tsx` | status → character mappings | `workStatusGlyph()` (re-exported from core), `markGlyph()`, `flowGlyph()`, `spinnerFrame()`, `flowBlinkOn()`, `myWorkGlyph()`, `reviewLaneGlyph()`, `reviewStateSuffix()`, `fileLetterMark()`, `SPINNER_FRAMES`, `GROUP_GLYPH`, `THINK_GLYPH` |
 
 ## Tests

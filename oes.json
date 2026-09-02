@@ -8,5 +8,11 @@
   "sessionFetch": 20,
   "skipGitignore": false,
   "toolRows": 5,
-  "toolFetch": 20
+  "toolFetch": 20,
+  "charts": {
+    "rate": {
+      "sampleMs": 55,
+      "windowMs": 240000
+    }
+  }
 }

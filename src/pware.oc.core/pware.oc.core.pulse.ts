@@ -303,14 +303,14 @@ export function tokenSummary(tokens: {
   return parts.join(" ")
 }
 
-/** Time header: turns · wall · optional err/abort. */
+/** Time header: turns · duration · optional err/abort. The caller decides what span to show. */
 export function timeSummary(totals: {
   turns: number
-  wallMs: number
+  durationMs: number
   errors?: number
   aborts?: number
 }): string {
-  const parts = [`${totals.turns} turns`, formatSpan(totals.wallMs)]
+  const parts = [`${totals.turns} turns`, formatSpan(totals.durationMs)]
   if ((totals.errors ?? 0) > 0) parts.push(`${totals.errors} err`)
   if ((totals.aborts ?? 0) > 0) parts.push(`${totals.aborts} abort`)
   return parts.join(" · ")
@@ -361,12 +361,10 @@ export function formatRate(perSec: number | null | undefined): string {
   return perSec >= 100 ? `${Math.round(perSec)}/s` : `${perSec.toFixed(1)}/s`
 }
 
-/** `formatRate` with a token-specific unit and no trailing ".0": "50 tok/s". */
+/** Token rate for the status bar: integer-rounded and always present — "0 tok/s" when idle. */
 export function formatTokenRate(perSec: number | null | undefined): string {
-  const r = formatRate(perSec)
-  if (!r) return ""
-  const num = r.replace(/\/s$/, "")
-  return `${num.endsWith(".0") ? num.slice(0, -2) : num} tok/s`
+  const n = perSec == null || !Number.isFinite(perSec) || perSec < 0 ? 0 : perSec
+  return `${Math.round(n)} tok/s`
 }
 
 /**
@@ -677,4 +675,11 @@ export function sessionIdFromEvent(evt: unknown): string | null {
     return null
   }
   return walk(evt, 0)
+}
+
+export function stripSessionPrefix(id: string | null | undefined): string | null {
+  if (!id || typeof id !== "string") return null
+  const s = id.trim()
+  if (!s) return null
+  return s.startsWith("opencode:") ? s.slice("opencode:".length) : s
 }

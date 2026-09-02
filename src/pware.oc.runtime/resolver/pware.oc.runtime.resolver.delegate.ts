@@ -19,7 +19,7 @@ import {
   SESSION_STATUS_IDLE,
   SESSION_STATUS_RUNNING,
 } from "../../pware.oc.opencode/constants/pware.oc.opencode.constants.sessionStatus.js"
-import type { DbSnapshot, SessionView } from "../../pware.oc.opencode/resolver/index.js"
+import { isRealSession, type DbSnapshot, type SessionView } from "../../pware.oc.opencode/resolver/index.js"
 import type { RuntimeSnapshot } from "./index.js"
 
 export type DelegateView = Delegate & {
@@ -129,6 +129,7 @@ export function delegatesForSession(snap: RuntimeSnapshot, sessionId: string): D
   }
 
   for (const c of snap.db.children) {
+    if (!isRealSession(c)) continue
     push({
       taskKey: c.id,
       title: c.title,

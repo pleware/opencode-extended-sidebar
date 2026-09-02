@@ -1,6 +1,8 @@
 import { afterAll, describe, expect, test } from "bun:test"
 import {
   inferStatus,
+  isRealSession,
+  listRecentMainSessions,
   refreshSessionStatus,
   sessionActivityState,
   toSessionView,
@@ -25,6 +27,7 @@ function row(over: Partial<SessionRow> = {}): SessionRow {
     time_created: 1,
     time_updated: 1_000,
     time_archived: null,
+    has_content: 1,
     ...over,
   }
 }
@@ -58,12 +61,42 @@ describe("toSessionView", () => {
     expect(v.tokensTotal).toBe(35)
     expect(v.isMain).toBe(true)
     expect(v.parentId).toBeNull()
+    expect(v.hasContent).toBe(true)
   })
   test("child is not main; empty title/agent fall back", () => {
     const v = toSessionView(row({ parent_id: "ses_p", title: "  ", agent: "  " }), 2_000)
     expect(v.isMain).toBe(false)
     expect(v.title).toBe("untitled")
     expect(v.agent).toBe("unknown")
+  })
+  test("has_content 0 maps to hasContent false (ghost)", () => {
+    expect(toSessionView(row({ has_content: 0 }), 2_000).hasContent).toBe(false)
+  })
+})
+
+describe("isRealSession", () => {
+  test("real when hasContent, ghost when not", () => {
+    expect(isRealSession({ hasContent: true })).toBe(true)
+    expect(isRealSession({ hasContent: false })).toBe(false)
+  })
+})
+
+describe("listRecentMainSessions", () => {
+  const t0 = 1_700_000_000_000
+  const fix = createFixtureDb({
+    sessions: [
+      { id: "ses_real", project_id: "proj_1", parent_id: null, time_updated: t0 },
+      { id: "ses_ghost", project_id: "proj_1", parent_id: null, time_updated: t0 - 1_000 },
+    ],
+    parts: [{ id: "prt_1", session_id: "ses_real", time_created: t0, data: { type: "text" } }],
+  })
+
+  afterAll(() => fix.dispose())
+
+  test("excludes ghosts (sessions with no parts) from recent", () => {
+    const db = openReadonlyDb(fix.dbPath)!
+    const ids = listRecentMainSessions(db, { projectId: "proj_1" }).map((r) => r.id)
+    expect(ids).toEqual(["ses_real"])
   })
 })
 

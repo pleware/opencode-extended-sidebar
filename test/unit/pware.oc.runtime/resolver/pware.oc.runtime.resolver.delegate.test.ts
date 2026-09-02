@@ -21,6 +21,7 @@ function agent(over: Partial<SessionView> & { id: string }): SessionView {
     cost: 0,
     timeUpdated: 1,
     ageMs: 0,
+    hasContent: true,
     ...over,
   }
 }

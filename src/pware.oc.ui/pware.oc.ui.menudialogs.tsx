@@ -504,6 +504,25 @@ export function openQuestionDialog(
   openDialog(api, "medium", () => <api.ui.DialogSelect title={opts.title} options={options} />)
 }
 
+export function openNewSessionDialog(
+  api: TuiPluginApi,
+  opts: { onSubmit: (text: string) => void },
+): void {
+  openDialog(api, "medium", () => (
+    <api.ui.DialogPrompt
+      title="New session"
+      placeholder="Type a prompt…"
+      onConfirm={(value: string) => {
+        const text = value.trim()
+        if (!text) return
+        closeDialog(api)
+        opts.onSubmit(text)
+      }}
+      onCancel={() => closeDialog(api)}
+    />
+  ))
+}
+
 function formatBytes(n: number): string {
   if (!Number.isFinite(n) || n < 0) return "—"
   if (n < 1024) return `${n} B`

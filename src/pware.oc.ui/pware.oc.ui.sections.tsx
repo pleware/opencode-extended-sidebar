@@ -9,7 +9,7 @@
  * Row budgets stay in the caller — these components render, they do not
  * re-decide how many rows fit (`layout.packSections` still owns that).
  */
-import { createSignal, Show, For, type Accessor, type JSX } from "solid-js"
+import { createMemo, createSignal, Show, For, type Accessor, type JSX } from "solid-js"
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import {
   BrandTabs,
@@ -89,6 +89,10 @@ export function useReveal(step: number): RevealState {
  * The global OES status bar: `OES {glyph} {label}  {rate}`. Always renders one
  * row — a ready tab shows a static `•`. Loading reads `glyphFrame` only in this
  * leaf, so the spinner steps on the fast tick without rebuilding the panel.
+ *
+ * Everything derives through `createMemo` — a plain body computation would
+ * freeze the row at its first render (`waiting for session`, frame `⠋`, empty
+ * rate), because SolidJS only re-runs JSX expressions, not the component body.
  */
 export function OesStatusRow(props: {
   status: TabStatus
@@ -96,21 +100,25 @@ export function OesStatusRow(props: {
   colors: ThemeColors
   glyphFrame: () => number
 }): JSX.Element {
-  const line = statusBarLine(props.status)
-  const glyph =
-    line.tone === "loading"
+  const line = createMemo(() => statusBarLine(props.status))
+  const glyph = createMemo(() =>
+    line().tone === "loading"
       ? spinnerFrame(props.glyphFrame())
-      : line.tone === "error"
+      : line().tone === "error"
         ? "×"
-        : "•"
-  const fg =
-    line.tone === "error"
+        : "•",
+  )
+  const fg = createMemo(() =>
+    line().tone === "error"
       ? props.colors.error || props.colors.text
-      : line.tone === "loading"
+      : line().tone === "loading"
         ? props.colors.primary || props.colors.text
-        : props.colors.textMuted
-  const text = `OES ${glyph}${line.label ? ` ${line.label}` : ""}${props.rate ? `  ${props.rate}` : ""}`
-  return <text fg={fg}>{text}</text>
+        : props.colors.textMuted,
+  )
+  const text = createMemo(
+    () => `OES ${glyph()}${line().label ? ` ${line().label}` : ""}${props.rate ? `  ${props.rate}` : ""}`,
+  )
+  return <text fg={fg()}>{text()}</text>
 }
 
 /** Clickable truncation line: "… +N more", or "… less" in expand-all (toggle) mode. */

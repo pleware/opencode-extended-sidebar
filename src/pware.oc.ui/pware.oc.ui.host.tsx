@@ -58,7 +58,13 @@ export function openSessionSwitcher(api: TuiPluginApi): void {
   }
 }
 
-export function newSession(api: TuiPluginApi, directory: string | null | undefined): void {
+export function newSessionWithPrompt(
+  api: TuiPluginApi,
+  directory: string | null | undefined,
+  text: string,
+): void {
+  const prompt = text.trim()
+  if (!prompt) return
   const go = async () => {
     try {
       const created = await api.client.session.create({
@@ -66,7 +72,16 @@ export function newSession(api: TuiPluginApi, directory: string | null | undefin
       })
       const res = created as { data?: { id?: string }; id?: string } | null | undefined
       const id = res?.data?.id ?? res?.id
-      if (id) selectSession(api, id)
+      if (!id) return
+      selectSession(api, id)
+      try {
+        await api.client.session.promptAsync({
+          sessionID: id,
+          parts: [{ type: PART_TYPE_TEXT, text: prompt }],
+        })
+      } catch {
+        // the prompt failed after create+select — the session exists, just empty
+      }
     } catch {
     }
   }

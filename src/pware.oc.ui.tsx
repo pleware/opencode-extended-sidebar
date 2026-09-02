@@ -1,5 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 import type { TuiPlugin } from "@opencode-ai/plugin/tui"
+import { stripSessionPrefix } from "./pware.oc.core/pware.oc.core.pulse.js"
 import { SidebarPanel } from "./pware.oc.ui/pware.oc.ui.sidebar.js"
 
 const id = "opencode-extended-sidebar" as const
@@ -23,7 +24,7 @@ const tui: TuiPlugin = async (api) => {
           try {
             return (
               <SidebarPanel
-                sessionId={props.session_id}
+                sessionId={stripSessionPrefix(props.session_id) ?? ""}
                 api={api}
                 theme={api.theme}
               />

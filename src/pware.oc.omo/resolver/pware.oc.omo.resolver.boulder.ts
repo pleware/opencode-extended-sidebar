@@ -9,7 +9,7 @@ import fs from "node:fs"
 import path from "node:path"
 import { canonicalizePath, fileStamp, resolveProjectFile } from "../../pware.oc.core/pware.oc.core.paths.js"
 import { profile } from "../../pware.oc.core/pware.oc.core.debug.js"
-import { composeMark, formatAge, pulseAgeMs, toEpochMs, type AgentMark } from "../../pware.oc.core/pware.oc.core.pulse.js"
+import { composeMark, formatAge, pulseAgeMs, stripSessionPrefix, toEpochMs, type AgentMark } from "../../pware.oc.core/pware.oc.core.pulse.js"
 import {
   normalizeStatus,
   taskRank,
@@ -191,13 +191,6 @@ export function omoStamp(projectRoot?: string | null): string {
     }
     return parts.join("|") || "0"
   })
-}
-
-function stripSessionPrefix(id: string | null | undefined): string | null {
-  if (!id || typeof id !== "string") return null
-  const s = id.trim()
-  if (!s) return null
-  return s.startsWith("opencode:") ? s.slice("opencode:".length) : s
 }
 
 function lastSessionId(ids: string[] | undefined): string | null {

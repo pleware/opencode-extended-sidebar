@@ -28,6 +28,7 @@ import {
 import {
   emptyDb,
   emptyProjectFeed,
+  isRealSession,
   listOpenQuestions,
   mergeTools,
   readProjectFeed,
@@ -102,6 +103,7 @@ import {
 } from "./pware.oc.ui.sections.js"
 import { emptyPerf, readPerfSnapshot } from "../pware.oc.perf/pware.oc.perf.reader.js"
 import { PerfPanel } from "../pware.oc.perf/pware.oc.perf.view.js"
+import { rateSparkline } from "../pware.oc.perf/pware.oc.perf.charts.js"
 import { formatSelfLine, readRendererFps, readSelfStats, resetSelfStats, selfTime, setSelfFps } from "../pware.oc.perf/pware.oc.perf.self.js"
 import {
   decorateFiles,
@@ -121,11 +123,11 @@ import {
 } from "../pware.oc.core/pware.oc.core.status.js"
 import { createEventBus } from "../pware.oc.core/pware.oc.core.bus.js"
 import { startRuntimeSource } from "../pware.oc.runtime/pware.oc.runtime.source.js"
-import { openApprovalDialog, openDocDetail, openFileDetail, openFileListDialog, openQuestionDialog, openToolDetail } from "./pware.oc.ui.menudialogs.js"
+import { openApprovalDialog, openDocDetail, openFileDetail, openFileListDialog, openNewSessionDialog, openQuestionDialog, openToolDetail } from "./pware.oc.ui.menudialogs.js"
 import { startHostEventBridge } from "./pware.oc.ui.live.js"
 import {
   approvePlan,
-  newSession,
+  newSessionWithPrompt,
   openSessionSwitcher,
   runStartWork,
   selectSession,
@@ -186,7 +188,7 @@ const KV_FOLD_FILES = "oes.fold.files"
 const KV_FOLD_DRAFTS = "oes.fold.drafts"
 const KV_TAB = "oes.tab"
 
-const OES_TABS = ["current", "mywork", "sessions", "perf"] as const
+const OES_TABS = ["mywork", "current", "sessions", "perf"] as const
 type OesTab = (typeof OES_TABS)[number]
 
 const TAB_LABELS: Record<string, string> = {
@@ -222,6 +224,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   const [liveTools, setLiveTools] = createSignal<Record<string, ToolHit>>({})
   const [liveFiles, setLiveFiles] = createSignal<Record<string, FileView>>({})
   const [tokenTicks, setTokenTicks] = createSignal<readonly TokenTick[]>([])
+  const [sparkHistory, setSparkHistory] = createSignal<readonly number[]>([])
   const [gitTick, setGitTick] = createSignal(0)
   const [switching, setSwitching] = createSignal<{ id: string; at: number } | null>(null)
   const [coldTab, setColdTab] = createSignal<string | null>(null)
@@ -322,6 +325,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
       setLiveTools({})
       setLiveFiles({})
       setTokenTicks([])
+      setSparkHistory([])
       source.setSession(id)
       queueMicrotask(hydrateDiff)
     })
@@ -438,6 +442,18 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   /** Fast glyph heartbeat — spinners and direction flows step at `GLYPH_TICK_MS`. */
   const glyphTick = setInterval(() => setGlyphFrame((n) => n + 1), GLYPH_TICK_MS)
 
+  // Rate sparkline: sample the live token rate into a bounded history ring.
+  const sparkCfg = getOes(projectDir()).charts.rate
+  const sparkSampleMs = sparkCfg.sampleMs
+  const sparkMax = Math.max(1, Math.round(sparkCfg.windowMs / sparkSampleMs))
+  const sparkTick = setInterval(() => {
+    const rate = tokenRate(tokenTicks(), Date.now(), TOKEN_RATE_WINDOW_MS) ?? 0
+    setSparkHistory((prev) => {
+      const next = [...prev, rate]
+      return next.length > sparkMax ? next.slice(next.length - sparkMax) : next
+    })
+  }, sparkSampleMs)
+
   const offGit = onGitMarksChange(() => {
     profile("git", () => {
       setGitTick((n) => n + 1)
@@ -474,6 +490,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   onCleanup(() => {
     clearInterval(tick)
     clearInterval(glyphTick)
+    clearInterval(sparkTick)
     bridge.stop()
     offSnapshot()
     offSessionActivity()
@@ -714,7 +731,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
       const t = tab()
       const omo = omoPresent()
       const sections: { key: string; want: number; min: number; rank: number }[] = []
-      let fixed = 4 // OES status bar + self status line + OES brand line + panel top padding
+      let fixed = 6 // OES status bar + 2-row sparkline + self status line + OES brand line + panel top padding
       if (modeLine()) fixed += 1 // debug/profile flag row
       if (modeDirLine()) fixed += 1
       let blocks = 0
@@ -975,6 +992,11 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     return tokenRate(tokenTicks(), Date.now(), TOKEN_RATE_WINDOW_MS)
   })
 
+  /** Two-line rate sparkline under the OES bar; empty until the first samples land. */
+  const sparkLines = createMemo(() =>
+    rateSparkline([...sparkHistory()], { width: oes().lineMax, height: 2 }),
+  )
+
   /** Live self-cost line — reads the tick clock so the Solid insert re-evaluates every tick. */
   const selfLine = createMemo(() => {
     now()
@@ -1010,6 +1032,9 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
         colors={colors()}
         glyphFrame={glyphFrame}
       />
+      <For each={sparkLines()}>
+        {(line) => <text fg={colors().textMuted}>{line}</text>}
+      </For>
       <text fg={colors().textMuted}>{selfLine()}</text>
       <TabColumn
         brand=""
@@ -1051,7 +1076,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
           sessions: () => (
             <box flexDirection="column" gap={1}>
               <FoldSection title="Agents" open={foldAgents.open()} colors={colors()} onToggle={foldAgents.toggle}>
-                {snap().db.main ? (
+                {isRealSession(snap().db.main) ? (
                   <Row
                     kind={ROW_KIND_AGENT}
                     mark={mainMark()}
@@ -1077,7 +1102,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
             open={foldSessions.open()}
             actions={[
               { label: "switch", onPick: () => openSessionSwitcher(props.api) },
-              { label: "new", onPick: () => newSession(props.api, projectDir()) },
+              { label: "new", onPick: () => openNewSessionDialog(props.api, { onSubmit: (text) => newSessionWithPrompt(props.api, projectDir(), text) }) },
             ]}
             colors={colors()}
             onToggle={foldSessions.toggle}
@@ -1206,7 +1231,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
           current: () => (
             <box flexDirection="column" gap={1}>
               <FoldSection title="Agents" open={foldAgents.open()} colors={colors()} onToggle={foldAgents.toggle}>
-                {currentRow() ? (
+                {isRealSession(currentRow()) ? (
                   <Row
                     kind={ROW_KIND_AGENT}
                     mark={currentMark()}

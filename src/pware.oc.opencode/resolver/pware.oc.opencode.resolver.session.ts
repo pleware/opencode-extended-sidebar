@@ -36,6 +36,8 @@ export type SessionRow = {
   time_created: number
   time_updated: number
   time_archived: number | null
+  /** 1 when the session has at least one part, 0 for an empty shell (ghost). */
+  has_content: number
 }
 
 /** Finer-grained "is this session still working" state for approval rows. */
@@ -56,6 +58,7 @@ export type SessionView = {
   cost: number
   timeUpdated: number
   ageMs: number
+  hasContent: boolean
 }
 
 const RUNNING_MS = 2 * 60 * 1000
@@ -63,7 +66,8 @@ const RUNNING_MS = 2 * 60 * 1000
 const SESSION_SELECT = `
   id, project_id, parent_id, directory, title, agent, model,
   cost, tokens_input, tokens_output, tokens_reasoning,
-  time_created, time_updated, time_archived
+  time_created, time_updated, time_archived,
+  EXISTS (SELECT 1 FROM part WHERE part.session_id = session.id) AS has_content
 `
 
 export function inferStatus(row: SessionRow, now = Date.now()): AgentStatus {
@@ -90,7 +94,13 @@ export function toSessionView(row: SessionRow, now = Date.now()): SessionView {
     cost: row.cost || 0,
     timeUpdated: row.time_updated,
     ageMs: Math.max(0, now - (row.time_updated || 0)),
+    hasContent: row.has_content === 1,
   }
+}
+
+/** A session with real content (≥1 part). A ghost — created but never prompted — is false. */
+export function isRealSession(view: Pick<SessionView, "hasContent"> | null | undefined): boolean {
+  return Boolean(view?.hasContent)
 }
 
 /**
@@ -164,6 +174,7 @@ export function listRecentMainSessions(
        WHERE parent_id IS NULL
          AND (time_archived IS NULL OR time_archived = 0)
          AND project_id = ?
+         AND EXISTS (SELECT 1 FROM part WHERE part.session_id = session.id)
        ORDER BY time_updated DESC
        LIMIT ${limit}`,
       opts.projectId,
