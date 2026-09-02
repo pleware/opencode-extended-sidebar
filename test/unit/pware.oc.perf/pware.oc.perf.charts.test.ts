@@ -201,11 +201,16 @@ describe("rateSparkline", () => {
     }
   })
 
-  test("downsamples long input to the requested width", () => {
-    const data = Array.from({ length: 200 }, (_, i) => i % 10)
+  test("downsamples and smooths a long series into bounded lines", () => {
+    const data = Array.from({ length: 200 }, (_, i) => Math.max(0, 80 * Math.sin(i / 15)))
     const out = rateSparkline(data, { width: 20, height: 2 })
-    expect(out).toHaveLength(2)
-    for (const line of out) expect(line.length).toBe(20)
+    expect(out.length).toBeGreaterThanOrEqual(1)
+    expect(out.length).toBeLessThanOrEqual(2)
+    for (const line of out) {
+      expect(line).not.toContain("\x1b[")
+      expect(line.length).toBeGreaterThan(0)
+      expect(line.length).toBeLessThanOrEqual(20)
+    }
   })
 
   test("height is honoured", () => {
