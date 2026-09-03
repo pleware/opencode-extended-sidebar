@@ -129,6 +129,26 @@ export function normalizeIncomingPath(p: string): string {
   return t
 }
 
+/**
+ * Fold an absolute path/directory into one comparison key so two spellings of
+ * the same location compare equal: posix separators (`D:/` and `D:\`), a
+ * git-bash drive prefix (`/d/…`), trailing slashes, and drive-letter case
+ * (`d:/` from git-bash vs `D:/`). Path case is folded only on Windows, where
+ * the filesystem is case-insensitive.
+ */
+export function foldPathKey(p: string | null | undefined): string {
+  if (!p) return ""
+  let t = normalizeIncomingPath(p).replace(/\/+$/, "")
+  const drive = t.match(/^([a-z]):\//)
+  if (drive) t = `${drive[1]!.toUpperCase()}:${t.slice(2)}`
+  return process.platform === "win32" ? t.toLowerCase() : t
+}
+
+/** True when two directory/file paths point at the same location. */
+export function samePath(a: string | null | undefined, b: string | null | undefined): boolean {
+  return foldPathKey(a) === foldPathKey(b)
+}
+
 function isInsideRoot(root: string, abs: string): boolean {
   const rel = path.relative(root, abs)
   if (!rel || path.isAbsolute(rel)) return false

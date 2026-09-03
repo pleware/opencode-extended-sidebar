@@ -7,6 +7,8 @@ import {
   getOpenCodeDbPath,
   localAgentizeDbPath,
   pluginRoot,
+  foldPathKey,
+  samePath,
 } from "../../../src/pware.oc.core/pware.oc.core.paths.js"
 
 // ── getDataDir ──────────────────────────────────────────────────────────────
@@ -129,5 +131,42 @@ describe("getOpenCodeDbPath", () => {
     fs.mkdirSync(dir, { recursive: true })
     fs.writeFileSync(db, "")
     expect(getOpenCodeDbPath({}, "/home/x", pr)).toBe(db)
+  })
+})
+
+// ── foldPathKey / samePath ──────────────────────────────────────────────────
+
+describe("foldPathKey / samePath", () => {
+  test("D:/ and D:\\ spellings of one directory compare equal", () => {
+    expect(samePath("D:/proj/src", "D:\\proj\\src")).toBe(true)
+    expect(samePath("D:/proj", "D:/proj")).toBe(true)
+  })
+
+  test("a git-bash /d/ prefix is the same location as D:/", () => {
+    expect(samePath("/d/proj/src", "D:/proj/src")).toBe(true)
+  })
+
+  test("trailing slashes do not split one directory", () => {
+    expect(samePath("D:/proj/src/", "D:/proj/src")).toBe(true)
+  })
+
+  test("different paths stay different", () => {
+    expect(samePath("D:/proj/src", "D:/proj/lib")).toBe(false)
+    expect(samePath("D:/proj", "C:/proj")).toBe(false)
+  })
+
+  test("null or empty is only equal to null or empty", () => {
+    expect(samePath(null, null)).toBe(true)
+    expect(samePath("", undefined)).toBe(true)
+    expect(samePath("D:/proj", null)).toBe(false)
+  })
+
+  test("on Windows the key folds case; elsewhere it keeps it", () => {
+    const win = process.platform === "win32"
+    if (win) {
+      expect(foldPathKey("D:/Proj/README.md")).toBe("d:/proj/readme.md")
+    } else {
+      expect(foldPathKey("D:/Proj/README.md")).toBe("D:/Proj/README.md")
+    }
   })
 })

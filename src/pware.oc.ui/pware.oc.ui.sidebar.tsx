@@ -139,7 +139,7 @@ import {
   selectSession,
 } from "./pware.oc.ui.host.js"
 import { dbg, debugActive, debugActiveDir, profile, profileActive, profileActiveDir, profileAsync, writeProfileSummary } from "../pware.oc.core/pware.oc.core.debug.js"
-import { getOpenCodeDbPath } from "../pware.oc.core/pware.oc.core.paths.js"
+import { getOpenCodeDbPath, samePath } from "../pware.oc.core/pware.oc.core.paths.js"
 import {
   FPS_READ_EVERY_TICKS,
   GLYPH_TICK_MS,
@@ -455,7 +455,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
       ) => unknown
       const off = on("session.updated", (evt, meta) => {
         const dir = projectDir()
-        if (dir && meta?.directory && String(meta.directory) !== dir) return
+        if (dir && meta?.directory && !samePath(String(meta.directory), dir)) return
         handler(evt)
       })
       return typeof off === "function" ? () => off() : () => {}
