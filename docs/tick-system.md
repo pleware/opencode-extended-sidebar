@@ -248,9 +248,12 @@ watch cover the rest.
 | `now` (ages/marks) | 1×/s (`NOW_MS`) | row arrays, ages, marks | folded into the 1×/s tick |
 | realtime grid (tokens/cache/CPU/RAM) | every 300ms tick | one `StatRealtimeSnapshot` into the shared timeline | folded into the tick |
 | scan (DB re-read) | on real change only + refresh hints | full snapshot (`pware.oes.snapshot`) | HIT ~5-20ms, MISS ~30-150ms+ |
-| fps read | every 6th tick | `self` line fps | negligible |
+| fps read | every 6th tick — only while a debug/profile logger is on | `self` line fps | negligible |
 
-The `self` line shows the real cost: `0.2ms/ev · 1.2ms/sc · 59fps` instead
+The `self` line (and the `selfTime()` measurement + FPS read behind it) runs
+only while `OES_DEBUG_OPENCODE` or `OES_DEBUG_PROFILE` is active — in normal
+operation it renders nothing and times nothing. When it does show, it reflects
+the real cost: `0.2ms/ev · 1.2ms/sc · 59fps` instead
 of `0.2ms/ev · 353.4ms/sc · 285.3ms/tk · 3fps`. With the 80ms glyph tick the
 renderer now runs ~12 frames/s of glyph-only work, so the measured fps reads
 closer to that figure — each frame stays cheap because rows are untouched.

@@ -69,6 +69,42 @@ export function myWorkGlyph(kind: MyWorkKind): GlyphSpec {
   return { char: "!", tone: "warning" }
 }
 
+/**
+ * Neutral tab-header light: a small muted bullet, shown when nothing is
+ * waiting on the user (and for every non-My-work tab).
+ */
+export const TAB_NEUTRAL_GLYPH: GlyphSpec = { char: "•", tone: "textMuted" }
+
+/** One item the My-work tab light reasons about. `ended` marks a terminated part. */
+export type TabAttentionItem = {
+  kind: MyWorkKind
+  /** True when the part already has a terminal end time — history, not live. */
+  ended?: boolean
+}
+
+/**
+ * The tab light's winner list, most urgent first. A live open question beats
+ * everything; an *ended* error is history (the panel still lists it in Errors)
+ * and never lights the tab; running/drafting/finished are not waiting on you.
+ */
+const TAB_ATTENTION_PRIORITY: readonly ((i: TabAttentionItem) => boolean)[] = [
+  (i) => i.kind === QUESTION_KIND_QUESTION,
+  (i) => i.kind === QUESTION_KIND_ERROR && !i.ended,
+  (i) => i.kind === MY_WORK_GROUP_READY_REVIEW,
+  (i) => i.kind === MY_WORK_GROUP_READY_START,
+  (i) => i.kind === QUESTION_KIND_INTERRUPTED && !i.ended,
+]
+
+/** The My-work tab light: the most urgent live waiting item, or a neutral bullet. */
+export function tabAttentionGlyph(items: readonly TabAttentionItem[]): GlyphSpec {
+  for (const match of TAB_ATTENTION_PRIORITY) {
+    for (const item of items) {
+      if (match(item)) return myWorkGlyph(item.kind)
+    }
+  }
+  return TAB_NEUTRAL_GLYPH
+}
+
 /** A git-status letter as a glyph: added green, deleted red, modified yellow, rest muted. */
 export function fileLetterGlyph(letter: FileLetter | null): GlyphSpec {
   const char = letter ?? "•"

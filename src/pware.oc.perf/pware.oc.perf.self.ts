@@ -7,6 +7,7 @@ import {
   SELF_PHASE_TICK,
   type SelfPhase,
 } from "../pware.oc.core/constants/pware.oc.core.constants.phase.js"
+import { debugActive, profileActive } from "../pware.oc.core/pware.oc.core.debug.js"
 
 export type { SelfPhase }
 
@@ -33,8 +34,29 @@ const buckets: Record<SelfPhase, SelfBucket> = {
 let fps: number | null = null
 let frameMs: number | null = null
 
-/** Measures fn with performance.now(), accumulates into bucket `label`, returns fn's result. Throws propagate. */
+/** Test override for the diagnostic gate — null delegates to the env-driven loggers. */
+let selfDiagForced: boolean | null = null
+
+/**
+ * True while a debug or profile logger is active. Self-cost instrumentation is
+ * purely diagnostic, so production (neither env var set) pays nothing for it.
+ */
+export function selfDiagActive(): boolean {
+  return selfDiagForced ?? (debugActive() || profileActive())
+}
+
+/** Test hook — force the gate on/off without touching process.env. */
+export function setSelfDiagForced(on: boolean | null): void {
+  selfDiagForced = on
+}
+
+/**
+ * Measures fn with performance.now(), accumulates into bucket `label`, returns fn's result.
+ * When neither the debug nor the profile logger is active the fn runs bare — no clock read,
+ * no accumulator writes. Throws propagate.
+ */
 export function selfTime<T>(label: SelfPhase, fn: () => T): T {
+  if (!selfDiagActive()) return fn()
   const start = performance.now()
   try {
     return fn()

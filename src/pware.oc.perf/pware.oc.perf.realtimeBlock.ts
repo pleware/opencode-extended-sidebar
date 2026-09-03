@@ -46,7 +46,7 @@ export const STAT_REALTIME_BLOCK: StatRealtimeBlock = {
   tabs: [
     {
       id: "tokens",
-      label: "Tokens",
+      label: "Tok",
       unit: "tok/s",
       rows: [
         { key: "sum", label: "sum", read: (s) => sumSeries(s.tokens.in, s.tokens.out) },
@@ -75,7 +75,7 @@ export const STAT_REALTIME_BLOCK: StatRealtimeBlock = {
     },
     {
       id: "network",
-      label: "Network",
+      label: "Net",
       unit: "kbit/s",
       rows: [
         { key: "in", label: "in", read: (s) => s.network.in },

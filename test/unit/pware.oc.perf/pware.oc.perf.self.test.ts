@@ -1,10 +1,12 @@
-import { describe, expect, test } from "bun:test"
+import { beforeEach, afterEach, describe, expect, test } from "bun:test"
 import {
   formatSelfLine,
   readRendererFps,
   readSelfStats,
   resetSelfStats,
+  selfDiagActive,
   selfTime,
+  setSelfDiagForced,
   setSelfFps,
   type SelfStats,
 } from "../../../src/pware.oc.perf/pware.oc.perf.self.js"
@@ -18,6 +20,43 @@ function fresh(): SelfStats {
     frameMs: null,
   }
 }
+
+// Unit tests measure in isolation; the env-driven gate is off by default here.
+beforeEach(() => {
+  resetSelfStats()
+  setSelfDiagForced(true)
+})
+afterEach(() => setSelfDiagForced(null))
+
+describe("diagnostic gate", () => {
+  test("selfDiagActive follows the forced override", () => {
+    setSelfDiagForced(false)
+    expect(selfDiagActive()).toBe(false)
+    setSelfDiagForced(true)
+    expect(selfDiagActive()).toBe(true)
+    setSelfDiagForced(null)
+    expect(typeof selfDiagActive()).toBe("boolean")
+  })
+
+  test("selfTime with the gate off runs the fn bare and records nothing", () => {
+    setSelfDiagForced(false)
+    resetSelfStats()
+    const out = selfTime("scan", () => 7)
+    expect(out).toBe(7)
+    expect(readSelfStats()).toEqual(fresh())
+  })
+
+  test("a throwing fn still propagates when the gate is off, without recording", () => {
+    setSelfDiagForced(false)
+    resetSelfStats()
+    expect(() =>
+      selfTime("tick", () => {
+        throw new Error("boom")
+      }),
+    ).toThrow("boom")
+    expect(readSelfStats()).toEqual(fresh())
+  })
+})
 
 describe("selfTime", () => {
   test("accumulates per phase and returns the fn result", () => {

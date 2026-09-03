@@ -1,9 +1,12 @@
 import { describe, expect, test } from "bun:test"
 import {
+  TAB_NEUTRAL_GLYPH,
   fileLetterGlyph,
   myWorkGlyph,
   reviewLaneGlyph,
   reviewStateSuffix,
+  tabAttentionGlyph,
+  type TabAttentionItem,
 } from "../../../src/pware.oc.ui/pware.oc.ui.glyphs.js"
 
 describe("myWorkGlyph", () => {
@@ -26,6 +29,51 @@ describe("myWorkGlyph", () => {
 
   test("running is the primary ◔", () => {
     expect(myWorkGlyph("running")).toEqual({ char: "◔", tone: "primary" })
+  })
+})
+
+describe("tabAttentionGlyph", () => {
+  const item = (kind: TabAttentionItem["kind"], ended?: boolean): TabAttentionItem => ({
+    kind,
+    ended,
+  })
+
+  test("nothing waiting on the user is a neutral bullet", () => {
+    expect(tabAttentionGlyph([])).toEqual(TAB_NEUTRAL_GLYPH)
+    expect(TAB_NEUTRAL_GLYPH).toEqual({ char: "•", tone: "textMuted" })
+  })
+
+  test("running, drafting and finished never light the tab", () => {
+    expect(
+      tabAttentionGlyph([item("running"), item("drafting"), item("finished")]),
+    ).toEqual(TAB_NEUTRAL_GLYPH)
+  })
+
+  test("an ended error is history and never lights the tab", () => {
+    expect(tabAttentionGlyph([item("error", true)])).toEqual(TAB_NEUTRAL_GLYPH)
+  })
+
+  test("a live open question wins over everything, including stale ended errors", () => {
+    expect(
+      tabAttentionGlyph([item("error", true), item("question")]),
+    ).toEqual({ char: "?", tone: "warning" })
+  })
+
+  test("the most urgent live waiting item wins", () => {
+    expect(tabAttentionGlyph([item("running"), item("error"), item("ready-to-review")])).toEqual({
+      char: "×",
+      tone: "error",
+    })
+    expect(tabAttentionGlyph([item("ready-to-review"), item("ready-to-start")])).toEqual({
+      char: "!",
+      tone: "warning",
+    })
+    expect(tabAttentionGlyph([item("ready-to-start")])).toEqual({ char: "▶", tone: "primary" })
+    expect(tabAttentionGlyph([item("interrupted")])).toEqual({ char: "⊘", tone: "textMuted" })
+  })
+
+  test("an ended interrupted part never lights the tab", () => {
+    expect(tabAttentionGlyph([item("interrupted", true)])).toEqual(TAB_NEUTRAL_GLYPH)
   })
 })
 

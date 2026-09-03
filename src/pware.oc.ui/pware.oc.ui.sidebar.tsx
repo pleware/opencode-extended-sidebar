@@ -81,6 +81,8 @@ import {
 import { DOC_KIND_DRAFT } from "../pware.oc.omo/constants/pware.oc.omo.constants.docKind.js"
 import {
   GROUP_GLYPH,
+  TAB_NEUTRAL_GLYPH,
+  tabAttentionGlyph,
   engageDone,
   engageFill,
   fileLetterGlyph,
@@ -88,6 +90,8 @@ import {
   myWorkGlyph,
   reviewStateSuffix,
   spinnerFrame,
+  type GlyphSpec,
+  type TabAttentionItem,
 } from "./pware.oc.ui.glyphs.js"
 import { dismissQuestion, kvReadOne, kvWriteOne, readDismissedQuestions, ClickText, type ThemeColors } from "./pware.oc.ui.chrome.js"
 import {
@@ -143,6 +147,8 @@ import { getOpenCodeDbPath, samePath } from "../pware.oc.core/pware.oc.core.path
 import {
   FPS_READ_EVERY_TICKS,
   GLYPH_TICK_MS,
+  MYWORK_BADGE_COOLDOWN_MS,
+  MYWORK_BADGE_MS,
   NOW_MS,
   SWITCH_TIMEOUT_MS,
   TICK_MS,
@@ -488,6 +494,9 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
         setSelfFps(r.fps, r.frameMs)
       }
     })
+    // Periodic floor for the My-work tab light — outside `profile("tick")` so
+    // the scan never pollutes the tick budget; snapshot changes rescan sooner.
+    maybeScanBadge(MYWORK_BADGE_MS)
   }, TICK_MS)
 
   /** Fast glyph heartbeat — spinners and direction flows step at `GLYPH_TICK_MS`. */
@@ -779,6 +788,49 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   ])
 
   const myWorkGroups = createMemo(() => groupMyWork(myWorkItems()))
+
+  /** My-work tab light — one scan pipeline for every tab (see `maybeScanBadge`). */
+  const [myWorkAttn, setMyWorkAttn] = createSignal<readonly TabAttentionItem[]>([])
+  let lastMyWorkScan = 0
+
+  const scanMyWorkBadge = () => {
+    const db = snap().db
+    const items: TabAttentionItem[] = []
+    try {
+      const dismissed = readDismissedQuestions(props.api)
+      const open = listOpenQuestions({ dbPath: db.dbPath, projectId: db.projectId })
+      for (const q of open) {
+        if (dismissed.has(q.partId)) continue
+        items.push({ kind: q.kind, ended: q.ended })
+      }
+    } catch (e) {
+      dbg("mywork.badge", "error", String(e))
+    }
+    if (omoPresent()) {
+      try {
+        const buckets = listApprovals(projectDir())
+        if (buckets.readyReview.length > 0) items.push({ kind: MY_WORK_GROUP_READY_REVIEW })
+        if (buckets.readyStart.length > 0) items.push({ kind: MY_WORK_GROUP_READY_START })
+      } catch (e) {
+        dbg("mywork.badge", "error", String(e))
+      }
+    }
+    setMyWorkAttn(items)
+  }
+
+  const maybeScanBadge = (minGapMs: number) => {
+    const at = Date.now()
+    if (at - lastMyWorkScan < minGapMs) return
+    lastMyWorkScan = at
+    scanMyWorkBadge()
+  }
+
+  const myWorkTabGlyph = createMemo<GlyphSpec>(() => tabAttentionGlyph(myWorkAttn()))
+
+  createEffect(() => {
+    snap()
+    maybeScanBadge(MYWORK_BADGE_COOLDOWN_MS)
+  })
 
   /**
    * Rows are handed out on every render: chrome that always costs a line is
@@ -1142,7 +1194,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
                 setRtRow(t.rows[0]!.key)
               }}
             >
-              {t.label}
+              {`${TAB_NEUTRAL_GLYPH.char}${t.label}`}
             </ClickText>
           )}
         </For>
@@ -1188,6 +1240,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
         active={tab()}
         colors={colors()}
         onPick={pickTab}
+        glyph={(key) => (key === "mywork" ? myWorkTabGlyph() : TAB_NEUTRAL_GLYPH)}
         panels={{
           mywork: () => {
             try {

@@ -3,7 +3,7 @@
 import { createSignal, For, Show, type JSX } from "solid-js"
 import { TextAttributes } from "@opentui/core"
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
-import type { ToneKey } from "../pware.oc.core/pware.oc.core.glyph.js"
+import type { GlyphSpec, ToneKey } from "../pware.oc.core/pware.oc.core.glyph.js"
 import { formatDismissed, parseDismissed } from "../pware.oc.runtime/pware.oc.runtime.mywork.js"
 
 /** OpenTUI has no bold/underline props on `<text>` — only the `attributes` bitmask. */
@@ -254,6 +254,11 @@ export function BrandTabs(props: {
   colors: ThemeColors
   onPick: (tab: string) => void
   onBrand?: () => void
+  /**
+   * Per-tab leading glyph replacing the `|` separator between tabs — the tab's
+   * status light. The glyph doubles as spacing, so headers read `• My work • Session …`.
+   */
+  glyph?: (tab: string) => GlyphSpec
 }): JSX.Element {
   const brand = () => props.colors.primary || props.colors.text
   const tabFg = (tab: string) =>
@@ -268,16 +273,23 @@ export function BrandTabs(props: {
         </box>
       </Show>
       <For each={props.tabs}>
-        {(tab: string, i) => (
-          <box flexDirection="row" gap={1} onMouseUp={() => props.onPick(tab)}>
-            <Show when={Boolean(props.brand) || i() > 0}>
-              <text fg={props.colors.textMuted}>|</text>
-            </Show>
-            <ClickText fg={tabFg(tab)} bold={props.active === tab} underline>
-              {props.labels[tab] ?? tab}
-            </ClickText>
-          </box>
-        )}
+        {(tab: string, i) => {
+          const glyph = props.glyph ? props.glyph(tab) : null
+          return (
+            <box flexDirection="row" gap={1} onMouseUp={() => props.onPick(tab)}>
+              {glyph ? (
+                <text fg={toneColor(glyph.tone, props.colors)}>{glyph.char}</text>
+              ) : (
+                <Show when={Boolean(props.brand) || i() > 0}>
+                  <text fg={props.colors.textMuted}>|</text>
+                </Show>
+              )}
+              <ClickText fg={tabFg(tab)} bold={props.active === tab} underline>
+                {props.labels[tab] ?? tab}
+              </ClickText>
+            </box>
+          )
+        }}
       </For>
     </box>
   )

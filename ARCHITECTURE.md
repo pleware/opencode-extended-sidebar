@@ -275,7 +275,7 @@ Plugin registration: `id = "opencode-extended-sidebar"`, load toast,
 | Module | Responsibility | Key exports |
 |---|---|---|
 | `reader.ts` | wall-clock split per model/tool, dated logs | `readPerfSnapshot()`, `emptyPerf()`, `aggregate()`, `readPerfLog()`, `formatPerfLog()`, `collectPerfLogRows()`, `formatColumns()`, `toolLogCall()` |
-| `self.ts` | plugin self-cost: event/scan/tick latency + renderer FPS | `selfTime()`, `readSelfStats()`, `resetSelfStats()`, `setSelfFps()`, `readRendererFps()`, `formatSelfLine()`, `SelfStats` |
+| `self.ts` | plugin self-cost (gated on the debug/profile loggers): event/scan/tick latency + renderer FPS | `selfTime()`, `selfDiagActive()`, `setSelfDiagForced()`, `readSelfStats()`, `resetSelfStats()`, `setSelfFps()`, `readRendererFps()`, `formatSelfLine()`, `SelfStats` |
 | `charts.ts` | pure chart/stat helpers: null-fill, smoothing, downsampling, ANSI strip, bars, trends, histograms, gauges | `interpolateSeries()`, `smoothSeries()`, `downsampleAvg()`, `stripAnsi()`, `asciiTrend()`, `shareBar()`, `perfStatLine()`, `waitHistogram()`, `shareGauge()`, `shareDonut()` |
 | `realtime.ts` | realtime metric samples (tokens/cache/cpu·ram/network) + pure history push/prune | `StatRealtimeSnapshot`, `StatRealtimeSnapshotHistory`, `StatRealtimeTokensSeries`, `StatRealtimeCacheSeries`, `StatRealtimeCpuRamSeries`, `StatRealtimeNetworkSeries`, `sumSeries()`, `tokenRateToKbit()`, `NETWORK_BYTES_PER_TOKEN`, `emptyStatRealtimeSnapshot()`, `pushStatRealtimeHistory()` |
 | `realtimeBlock.ts` | static definition of the OES realtime widget: tabs, selector rows, series readers | `StatRealtimeBlock`, `StatRealtimeTab`, `StatRealtimeRowTab`, `StatRealtimeTabId`, `StatRealtimeSeriesKey`, `seriesValues()`, `STAT_REALTIME_BLOCK` |
@@ -298,7 +298,7 @@ Plugin registration: `id = "opencode-extended-sidebar"`, load toast,
 | `live.tsx` | host event adapter (`api.event.on`) → plugin event bus (`pware.oc.*`, `pware.oes.*`) | `startHostEventBridge()` |
 | `host.tsx` | UI host RPC wrappers (session switch/new session/start-work/approve) | `selectSession()`, `openSessionSwitcher()`, `openNewSessionPrompt()`, `runStartWork()`, `approvePlan()` |
 | `menudialogs.tsx` | every popup via one `openDialog()` choke-point | `openFileDetail()`, `openToolDetail()`, `openFileListDialog()`, `openApprovalDialog()`, `openQuestionDialog()`, `openDocDetail()`, `openTextPreview()`, `openPerfLog()` |
-| `glyphs.tsx` | domain glyphs (My work kinds, git letters, review lanes) as `GlyphSpec`; re-exports core glyph primitives | `workStatusGlyph()` (re-exported from core), `myWorkGlyph()`, `fileLetterGlyph()`, `reviewLaneGlyph()`, `reviewStateSuffix()`, `GROUP_GLYPH`, `THINK_GLYPH` |
+| `glyphs.tsx` | domain glyphs (My work kinds, git letters, review lanes, tab status lights) as `GlyphSpec`; re-exports core glyph primitives | `workStatusGlyph()` (re-exported from core), `myWorkGlyph()`, `tabAttentionGlyph()`, `TAB_NEUTRAL_GLYPH`, `fileLetterGlyph()`, `reviewLaneGlyph()`, `reviewStateSuffix()`, `GROUP_GLYPH`, `THINK_GLYPH` |
 
 ## Tests
 

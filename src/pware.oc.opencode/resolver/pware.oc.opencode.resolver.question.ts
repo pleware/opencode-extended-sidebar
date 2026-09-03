@@ -41,6 +41,12 @@ export type OpenQuestion = {
   kind: OpenQuestionKind
   /** `state.error` text for interrupted/error parts; null for an open question. */
   reason: string | null
+  /**
+   * True when the part has a terminal end time. An ended plain error is kept in
+   * the queue for the Errors group, but it is no longer "live" — the tab light
+   * must not treat it as something happening right now. Absent = still live.
+   */
+  ended?: boolean
 }
 
 type OpenQuestionRow = {
@@ -115,6 +121,7 @@ export function listOpenQuestions(opts: {
         startedAt: start ?? toEpochMs(row.time_created),
         kind,
         reason: kind === QUESTION_KIND_QUESTION ? null : reason,
+        ended: end != null,
       })
     }
     return out

@@ -35,6 +35,18 @@ export const MONITOR_POLL_MS = 1_500
 /** Monitor: fs-watch → emit debounce. */
 export const MONITOR_WATCH_DEBOUNCE_MS = 120
 
+/**
+ * My-work attention scan cadence while the tab is quiet — the periodic floor.
+ * DB-change-driven rescans (see MYWORK_BADGE_COOLDOWN_MS) refresh it sooner.
+ */
+export const MYWORK_BADGE_MS = 5_000
+
+/**
+ * Minimum gap between My-work badge rescans when a new DB snapshot just landed
+ * — a question appears within ~1s instead of waiting for the 5s floor.
+ */
+export const MYWORK_BADGE_COOLDOWN_MS = 1_000
+
 /** Host event → scan debounce (trailing). */
 export const EVENT_SCAN_DEBOUNCE_MS = 100
 

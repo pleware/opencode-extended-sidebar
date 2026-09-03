@@ -129,6 +129,7 @@ describe("listOpenQuestions", () => {
     expect(q?.startedAt).toBe(t0 + 100)
     expect(q?.reason).toBeNull()
     expect(q?.partId).toBe("prt_open")
+    expect(q?.ended).toBe(false)
   })
 
   test("an interrupted question without an end time stays in the queue with its reason", () => {
@@ -149,6 +150,7 @@ describe("listOpenQuestions", () => {
     const q = out.find((x) => x.kind === "error")
     expect(q?.sessionId).toBe("ses_q2")
     expect(q?.reason).toBe("Invalid question payload")
+    expect(q?.ended).toBe(true)
   })
 
   test("a question in another project stays out of this queue", () => {

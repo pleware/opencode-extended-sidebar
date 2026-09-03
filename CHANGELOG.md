@@ -1,5 +1,6 @@
 # Changelog
 
+- **0.2.70** (2026-09-03) Gate the plugin self-cost line behind the debug/profile loggers, swap the tab-header pipe separators for per-tab status-light glyphs whose My-work light scans p.
 - **0.2.69** (2026-09-03) Add Codecov coverage reporting with a 90% line gate and live README badge, excluding thin TUI wrappers and runtime I/O glue from coverage.
 - **0.2.68** (2026-09-03) Extract the inline work-state and canonical status literals behind constants: new WORK_STATE_* values in the omo planStatus module (the WorkState type now deriv.
 - **0.2.67** (2026-09-03) Calibrate the sidebar row-plan chrome from the opencode TUI source: split PANEL_CHROME into the measured 6-row host frame plus a title reserve, and drop the dea.

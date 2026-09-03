@@ -417,6 +417,8 @@ export function TabColumn(props: {
   colors: ThemeColors
   onPick: (tab: string) => void
   onBrand?: () => void
+  /** Per-tab status light replacing the `|` separators (see `BrandTabs`). */
+  glyph?: (tab: string) => GlyphSpec
   panels: Record<string, () => JSX.Element>
   indentContent?: boolean
   gap?: number
@@ -451,6 +453,7 @@ export function TabColumn(props: {
           colors={props.colors}
           onPick={props.onPick}
           onBrand={props.onBrand}
+          glyph={props.glyph}
         />
         <box flexDirection="column" gap={0} paddingLeft={props.indentContent ? 1 : 0}>
           <For each={props.tabs}>
