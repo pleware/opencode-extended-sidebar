@@ -111,7 +111,7 @@ import { StatRealtimeTimeline } from "../pware.oc.perf/pware.oc.perf.realtimeTim
 import { EventDriverSampler } from "../pware.oc.perf/pware.oc.perf.realtimeSampler.js"
 import { readCpuRam } from "../pware.oc.perf/pware.oc.perf.realtimeCpuRam.js"
 import { STAT_REALTIME_BLOCK, seriesValues, type StatRealtimeSeriesKey, type StatRealtimeTabId } from "../pware.oc.perf/pware.oc.perf.realtimeBlock.js"
-import { formatSelfLine, readRendererFps, readSelfStats, resetSelfStats, selfTime, setSelfFps } from "../pware.oc.perf/pware.oc.perf.self.js"
+import { formatSelfLine, readRendererFps, readSelfStats, resetSelfStats, selfDiagActive, selfTime, setSelfFps } from "../pware.oc.perf/pware.oc.perf.self.js"
 import {
   decorateFiles,
   fileFilter,
@@ -483,7 +483,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
         setRtVersion((n) => n + 1)
       })
       tickCount += 1
-      if (tickCount % FPS_READ_EVERY_TICKS === 0) {
+      if (selfDiagActive() && tickCount % FPS_READ_EVERY_TICKS === 0) {
         const r = readRendererFps(props.api.renderer)
         setSelfFps(r.fps, r.frameMs)
       }
@@ -790,7 +790,8 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
       const t = tab()
       const omo = omoPresent()
       const sections: { key: string; want: number; min: number; rank: number }[] = []
-      let fixed = 8 // OES status bar + realtime block (tabs + 3 selector rows) + self line + brand line + top padding
+      let fixed = 7 // OES status bar + realtime block (tabs + 3 selector rows) + brand line + top padding
+      if (selfDiagActive()) fixed += 1 // self line — only while debug/profile is on
       if (modeLine()) fixed += 1 // debug/profile flag row
       if (modeDirLine()) fixed += 1
       if (engaging()) fixed += 1 // cold-start engage bar row
@@ -830,8 +831,8 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
           section(!fold.open(), `mywork.${g.kind}`, g.items.length, ROW_MIN.mywork, ROW_RANK.mywork)
         }
       } else {
-        // Perf lays out its own sections and already caps itself with perfRows.
-        fixed += 18
+        // Perf lays out its own sections and caps itself with `perfRows` in
+        // its own view; no row-plan sections are handed out here.
       }
       fixed += Math.max(0, blocks - 1) // one blank row between OES sections
 
@@ -1089,6 +1090,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
 
   /** Live self-cost line — reads the tick clock so the Solid insert re-evaluates every tick. */
   const selfLine = createMemo(() => {
+    if (!selfDiagActive()) return ""
     now()
     return formatSelfLine(readSelfStats())
   })
@@ -1176,7 +1178,9 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
           </For>
         </box>
       </box>
-      <text fg={colors().textMuted}>{selfLine()}</text>
+      <Show when={selfDiagActive()}>
+        <text fg={colors().textMuted}>{selfLine()}</text>
+      </Show>
       <TabColumn
         brand=""
         tabs={OES_TABS}

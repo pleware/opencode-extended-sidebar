@@ -5,8 +5,26 @@
  * section has already reached it.
  */
 
-/** Rows OpenCode's own TUI takes around the `sidebar_content` slot. */
-const PANEL_CHROME = 10
+/**
+ * Rows OpenCode's own TUI takes around the `sidebar_content` slot. Measured
+ * from the opencode TUI source (`packages/tui/src/routes/session/sidebar.tsx`,
+ * stable across v1.18.27 = HEAD): the sidebar column has no border — its frame
+ * is `paddingTop` 1 + a fixed footer (`sidebar_footer`, outside the scrollbox:
+ * 1 spacer + path row + 1 gap + version row) + `paddingBottom` 1.
+ */
+const HOST_SIDEBAR_CHROME = 6
+
+/**
+ * Rows the host's `sidebar_title` fallback block (same scrollbox, above the
+ * content slot) takes before the plugin's first content row: a typical session
+ * shows a bold title + workspace (2 rows) plus the 1-row `gap` separator, and
+ * a wrapping title or the optional channel/share lines add more. Kept at 4 so
+ * `PANEL_CHROME` still covers the old flat-10 headroom.
+ */
+const HOST_SIDEBAR_TITLE_RESERVE = 4
+
+/** Fixed chrome the sidebar slot's own host takes above the content rows. */
+const PANEL_CHROME = HOST_SIDEBAR_CHROME + HOST_SIDEBAR_TITLE_RESERVE
 const PANEL_MIN_ROWS = 8
 
 /** Usable rows in the sidebar slot for a terminal that tall. */

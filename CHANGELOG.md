@@ -1,5 +1,6 @@
 # Changelog
 
+- **0.2.67** (2026-09-03) Calibrate the sidebar row-plan chrome from the opencode TUI source: split PANEL_CHROME into the measured 6-row host frame plus a title reserve, and drop the dea.
 - **0.2.66** (2026-09-03) Fold D:/ vs D:\ and git-bash /d/ path spellings through shared foldPathKey/samePath helpers and compare the realtime session.updated project filter through same.
 - **0.2.65** (2026-09-03) Flank the realtime braille chart with a compact axis column showing the recent max on top and the 0 baseline below, via a <=3-char formatCompact label.
 - **0.2.64** (2026-09-03) Unify the realtime widget onto one shared 300ms wall-clock timeline whose token/cache series are 1s windowed derivatives reconciled with estimated stream deltas.
