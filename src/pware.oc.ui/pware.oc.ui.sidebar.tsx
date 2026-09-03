@@ -41,9 +41,11 @@ import {
   ROW_MIN,
   ROW_RANK,
   SESSION_MORE_STEP,
+  clampScrollOffset,
   packSections,
   panelRows,
   rowsForPlan,
+  scrollByStep,
 } from "../pware.oc.core/pware.oc.core.layout.js"
 import { openReadonlyDb } from "../pware.oc.core/pware.oc.core.sqlite.js"
 import {
@@ -142,7 +144,7 @@ import {
   runStartWork,
   selectSession,
 } from "./pware.oc.ui.host.js"
-import { dbg, debugActive, debugActiveDir, profile, profileActive, profileActiveDir, profileAsync, writeProfileSummary } from "../pware.oc.core/pware.oc.core.debug.js"
+import { dbg, debugActive, debugActiveDir, profile, profileActive, profileActiveDir, profileAsync, readScreenLines, subscribeScreenLines, writeProfileSummary } from "../pware.oc.core/pware.oc.core.debug.js"
 import { getOpenCodeDbPath, samePath } from "../pware.oc.core/pware.oc.core.paths.js"
 import {
   FPS_READ_EVERY_TICKS,
@@ -206,6 +208,9 @@ const TAB_LABELS: Record<string, string> = {
   perf: "Stats",
 }
 
+/** Event rows the bottom debug console shows at once (the ring keeps 200). */
+const SCREEN_CONSOLE_VISIBLE = 5
+
 /**
  * The cold-start "engage" bar (and its success toast) plays once per plugin
  * boot. The module latch survives sidebar remounts across route changes so a
@@ -244,6 +249,16 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   const [gitTick, setGitTick] = createSignal(0)
   const [switching, setSwitching] = createSignal<{ id: string; at: number } | null>(null)
   const [coldTab, setColdTab] = createSignal<string | null>(null)
+  const [consoleLines, setConsoleLines] = createSignal(readScreenLines())
+  const [consoleTop, setConsoleTop] = createSignal(0)
+  const consoleWindow = createMemo(() => {
+    const lines = consoleLines()
+    const top = clampScrollOffset(lines.length, SCREEN_CONSOLE_VISIBLE, consoleTop())
+    return lines.slice(top, top + SCREEN_CONSOLE_VISIBLE)
+  })
+  /** Console rows the sidebar must leave for the debug block: label + visible lines. */
+  const consoleRowSpan = () =>
+    selfDiagActive() ? 1 + Math.min(consoleLines().length, SCREEN_CONSOLE_VISIBLE) : 0
 
   const engageBootFrame = glyphFrame()
   const [engaging, setEngaging] = createSignal(!engageSeen)
@@ -257,6 +272,20 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     } catch {
       // teardown
     }
+  }
+
+  const offConsole = subscribeScreenLines(() => {
+    setConsoleLines(readScreenLines())
+    if (consoleTop() > 0) setConsoleTop((top) => top + 1)
+    requestRender()
+  })
+  onCleanup(offConsole)
+
+  const onConsoleScroll = (e: { scroll?: { direction?: "up" | "down" | "left" | "right"; delta?: number } }) => {
+    const dir = e.scroll?.direction
+    if (dir !== "up" && dir !== "down") return
+    const step = Math.max(1, Math.round(Math.abs(e.scroll?.delta ?? 1)) || 1)
+    setConsoleTop((top) => scrollByStep(consoleLines().length, SCREEN_CONSOLE_VISIBLE, top, dir, step))
   }
 
   const bumpSeen = (id: string | null | undefined) => {
@@ -839,6 +868,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
       if (modeLine()) fixed += 1 // debug/profile flag row
       if (modeDirLine()) fixed += 1
       if (engaging()) fixed += 1 // cold-start engage bar row
+      fixed += consoleRowSpan() // bottom dbg console — label + visible event rows
       let blocks = 0
 
       const header = () => {
@@ -1183,7 +1213,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
                 setRtRow(t.rows[0]!.key)
               }}
             >
-              {`${TAB_NEUTRAL_GLYPH.char}${t.label}`}
+              {`${TAB_NEUTRAL_GLYPH.char} ${t.label}`}
             </ClickText>
           )}
         </For>
@@ -1598,6 +1628,14 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
       {err() && snap().db.main ? (
         <text fg={colors().textMuted}>{err()}</text>
       ) : null}
+      <Show when={selfDiagActive()}>
+        <box flexDirection="column" gap={0} onMouseScroll={onConsoleScroll}>
+          <text fg={colors().textMuted}>{`dbg · ${consoleLines().length}`}</text>
+          <For each={consoleWindow()}>
+            {(line) => <text fg={colors().textMuted}>{clip(line.text, oes().lineMax)}</text>}
+          </For>
+        </box>
+      </Show>
     </box>
   )
 }

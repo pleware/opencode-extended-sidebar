@@ -274,11 +274,16 @@ export function BrandTabs(props: {
       </Show>
       <For each={props.tabs}>
         {(tab: string, i) => {
-          const glyph = props.glyph ? props.glyph(tab) : null
+          // Read the glyph through an accessor invoked inside the JSX, never a
+          // plain body const: SolidJS only re-runs JSX expressions, so the
+          // My-work tab light (a live memo) updates only when it is read at the
+          // expression site. A body-level `const glyph = props.glyph(tab)` would
+          // freeze the header at its first render.
+          const glyph = () => (props.glyph ? props.glyph(tab) : null)
           return (
             <box flexDirection="row" gap={1} onMouseUp={() => props.onPick(tab)}>
-              {glyph ? (
-                <text fg={toneColor(glyph.tone, props.colors)}>{glyph.char}</text>
+              {glyph() ? (
+                <text fg={toneColor(glyph()!.tone, props.colors)}>{glyph()!.char}</text>
               ) : (
                 <Show when={Boolean(props.brand) || i() > 0}>
                   <text fg={props.colors.textMuted}>|</text>

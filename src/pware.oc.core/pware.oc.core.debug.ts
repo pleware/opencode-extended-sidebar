@@ -1,5 +1,6 @@
 /**
- * Optional file-based debug + profile loggers.
+ * Optional file-based debug + profile loggers, plus a tiny on-screen event
+ * ring for the sidebar's read-only debug console.
  *
  * Debug:   OES_DEBUG_OPENCODE=1          → writes to <plugin>/logs/
  * Profile: OES_DEBUG_PROFILE=1           → writes to <plugin>/logs/
@@ -10,6 +11,10 @@
  *   debug   → { ts, tag, msg, data? }
  *   profile → { ts, tag, ms, data? }
  * All writes are silent on error — the plugin never crashes because of logging.
+ *
+ * The screen ring (`pushScreenLine`) is a module-level 200-line buffer of short
+ * labels (e.g. `db open`) that the sidebar console subscribes to; it is only
+ * fed while a logger is active, so production pays nothing.
  */
 import fs from "node:fs"
 import path from "node:path"
@@ -112,6 +117,47 @@ export function resetDebug(): void {
   _dir = undefined
   _pdir = undefined
   profileStats = {}
+  screenLines = []
+}
+
+/** One on-screen console line: a timestamp plus a short label (e.g. `db open`). */
+export type ScreenLine = { at: number; text: string }
+
+/** Ring cap — the console shows a 5-line window over these, scrolled. */
+const SCREEN_MAX = 200
+
+let screenLines: ScreenLine[] = []
+const screenListeners = new Set<() => void>()
+
+/**
+ * Append one short label (e.g. `db open`) to the sidebar console's screen ring
+ * and notify subscribers. No-op unless a debug or profile logger is active, so
+ * a normal session pays nothing for it.
+ */
+export function pushScreenLine(text: string): void {
+  if (!debugActive() && !profileActive()) return
+  screenLines.push({ at: Date.now(), text })
+  if (screenLines.length > SCREEN_MAX) screenLines.splice(0, screenLines.length - SCREEN_MAX)
+  for (const listener of screenListeners) {
+    try {
+      listener()
+    } catch {
+      // a subscriber must never break the ring feed
+    }
+  }
+}
+
+/** Newest-first copy of the screen ring (empty when nothing was pushed). */
+export function readScreenLines(): ScreenLine[] {
+  return screenLines.slice().reverse()
+}
+
+/** Subscribe to screen-ring pushes; returns an unsubscribe fn. */
+export function subscribeScreenLines(listener: () => void): () => void {
+  screenListeners.add(listener)
+  return () => {
+    screenListeners.delete(listener)
+  }
 }
 
 function appendLine(dir: string, file: string, line: Record<string, unknown>): void {

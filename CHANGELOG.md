@@ -1,5 +1,6 @@
 # Changelog
 
+- **0.2.71** (2026-09-03) Add an on-screen debug console to the bottom of the sidebar that shows the newest event labels from a 200-line in-memory ring fed only while a debug or profile .
 - **0.2.70** (2026-09-03) Gate the plugin self-cost line behind the debug/profile loggers, swap the tab-header pipe separators for per-tab status-light glyphs whose My-work light scans p.
 - **0.2.69** (2026-09-03) Add Codecov coverage reporting with a 90% line gate and live README badge, excluding thin TUI wrappers and runtime I/O glue from coverage.
 - **0.2.68** (2026-09-03) Extract the inline work-state and canonical status literals behind constants: new WORK_STATE_* values in the omo planStatus module (the WorkState type now deriv.

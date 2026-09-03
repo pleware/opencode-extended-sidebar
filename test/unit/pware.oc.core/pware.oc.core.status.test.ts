@@ -217,7 +217,7 @@ describe("tabStatusLine", () => {
 })
 
 describe("statusBarLine", () => {
-  test("a ready tab renders as a static dot (ready tone, no label)", () => {
+  test("a ready tab yields a bare line (ready tone, no label)", () => {
     expect(statusBarLine(null)).toEqual({ label: "", tone: "ready" })
   })
 

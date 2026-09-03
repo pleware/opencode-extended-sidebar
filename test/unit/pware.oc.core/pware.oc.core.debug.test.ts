@@ -2,7 +2,7 @@ import { describe, test, expect, beforeEach, afterEach } from "bun:test"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
-import { dbg, debugActive, debugActiveDir, debugLogDir, profile, profileActive, profileActiveDir, profileAsync, profileLogDir, readProfileStats, resetDebug, writeProfileSummary } from "../../../src/pware.oc.core/pware.oc.core.debug.js"
+import { dbg, debugActive, debugActiveDir, debugLogDir, profile, profileActive, profileActiveDir, profileAsync, profileLogDir, pushScreenLine, readProfileStats, readScreenLines, resetDebug, subscribeScreenLines, writeProfileSummary } from "../../../src/pware.oc.core/pware.oc.core.debug.js"
 
 describe("debugLogDir", () => {
   test("returns null when env var absent", () => {
@@ -233,5 +233,70 @@ describe("profile aggregation", () => {
     resetDebug()
     profile("a", () => {})
     expect(readProfileStats()).toEqual({})
+  })
+})
+
+describe("screen ring", () => {
+  let tmp: string
+
+  beforeEach(() => {
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), "oes-ring-test-"))
+    process.env.OES_DEBUG_OPENCODE = tmp
+    resetDebug()
+  })
+
+  afterEach(() => {
+    delete process.env.OES_DEBUG_OPENCODE
+    delete process.env.OES_DEBUG_PROFILE
+    resetDebug()
+    fs.rmSync(tmp, { recursive: true, force: true })
+  })
+
+  test("is not fed while no logger is active", () => {
+    delete process.env.OES_DEBUG_OPENCODE
+    resetDebug()
+    pushScreenLine("db open")
+    expect(readScreenLines()).toEqual([])
+  })
+
+  test("pushScreenLine feeds readScreenLines newest-first", () => {
+    pushScreenLine("a")
+    pushScreenLine("b")
+    pushScreenLine("c")
+    expect(readScreenLines().map((l) => l.text)).toEqual(["c", "b", "a"])
+  })
+
+  test("each entry carries a numeric timestamp", () => {
+    pushScreenLine("db open")
+    const lines = readScreenLines()
+    expect(lines.length).toBe(1)
+    expect(typeof lines[0]!.at).toBe("number")
+  })
+
+  test("caps the ring at 200 lines, dropping the oldest", () => {
+    for (let i = 0; i < 250; i += 1) pushScreenLine(`line ${i}`)
+    const lines = readScreenLines()
+    expect(lines.length).toBe(200)
+    expect(lines[0]!.text).toBe("line 249")
+    expect(lines[199]!.text).toBe("line 50")
+  })
+
+  test("notifies subscribers on push until they unsubscribe", () => {
+    let calls = 0
+    const unsub = subscribeScreenLines(() => {
+      calls += 1
+    })
+    pushScreenLine("a")
+    expect(calls).toBe(1)
+    unsub()
+    pushScreenLine("b")
+    expect(calls).toBe(1)
+  })
+
+  test("resetDebug clears the ring", () => {
+    pushScreenLine("a")
+    pushScreenLine("b")
+    resetDebug()
+    expect(readScreenLines()).toEqual([])
   })
 })

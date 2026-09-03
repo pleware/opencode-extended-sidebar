@@ -152,3 +152,32 @@ export function sliceShown<T>(
 export function moreRevealVisible(hidden: number, expanded?: boolean): boolean {
   return expanded === true || hidden > 0
 }
+
+/**
+ * Clamp a scroll offset into the window a `visible`-row view can show over
+ * `total` rows: the offset never goes below 0 or past the last full window.
+ */
+export function clampScrollOffset(total: number, visible: number, offset: number): number {
+  const t = Math.max(0, Math.round(total))
+  const v = Math.max(1, Math.round(visible))
+  const max = Math.max(0, t - v)
+  const o = Math.max(0, Math.round(offset))
+  return Math.min(o, max)
+}
+
+/**
+ * Move a scroll offset by one wheel `step`. Newest-first lists count the offset
+ * from the newest row, so "down" goes toward older rows and "up" back to the
+ * newest. The result stays inside the same clamped window as `clampScrollOffset`.
+ */
+export function scrollByStep(
+  total: number,
+  visible: number,
+  offset: number,
+  direction: "up" | "down",
+  step: number,
+): number {
+  const s = Math.max(1, Math.round(step))
+  const next = direction === "down" ? offset + s : offset - s
+  return clampScrollOffset(total, visible, next)
+}

@@ -83,13 +83,15 @@ export function useReveal(step: number): RevealState {
 }
 
 /**
- * The global OES status bar: `OES {glyph} {label}  {rate}`. Always renders one
- * row — a ready tab shows a static `•`. Loading reads `glyphFrame` only in this
- * leaf, so the spinner steps on the fast tick without rebuilding the panel.
+ * The global OES status bar: `OES {glyph} {label}`. Always renders one row —
+ * loading reads `glyphFrame` only in this leaf, so the spinner steps on the
+ * fast tick without rebuilding the panel. A ready bar with nothing to say is a
+ * bare `OES`: the realtime category tabs on the same line already lead with a
+ * `•`, so a trailing dot would read `OES ••Tok`.
  *
  * Everything derives through `createMemo` — a plain body computation would
- * freeze the row at its first render (`waiting for session`, frame `⠋`, empty
- * rate), because SolidJS only re-runs JSX expressions, not the component body.
+ * freeze the row at its first render (`waiting for session`, frame `⠋`),
+ * because SolidJS only re-runs JSX expressions, not the component body.
  */
 export function OesStatusRow(props: {
   status: TabStatus
@@ -97,13 +99,11 @@ export function OesStatusRow(props: {
   glyphFrame: () => number
 }): JSX.Element {
   const line = createMemo(() => statusBarLine(props.status))
-  const glyph = createMemo(() =>
-    line().tone === "loading"
-      ? spinnerFrame(props.glyphFrame())
-      : line().tone === "error"
-        ? "×"
-        : "•",
-  )
+  const glyph = createMemo(() => {
+    if (line().tone === "loading") return spinnerFrame(props.glyphFrame())
+    if (line().tone === "error") return "×"
+    return line().label ? "•" : ""
+  })
   const fg = createMemo(() =>
     line().tone === "error"
       ? props.colors.error || props.colors.text
@@ -111,7 +111,11 @@ export function OesStatusRow(props: {
         ? props.colors.primary || props.colors.text
         : props.colors.textMuted,
   )
-  const text = createMemo(() => `OES ${glyph()}${line().label ? ` ${line().label}` : ""}`)
+  const text = createMemo(() => {
+    const g = glyph()
+    const label = line().label
+    return label ? `OES ${g} ${label}` : g ? `OES ${g}` : "OES"
+  })
   return <text fg={fg()}>{text()}</text>
 }
 

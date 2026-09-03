@@ -168,16 +168,16 @@ Plugin registration: `id = "opencode-extended-sidebar"`, load toast,
 |---|---|---|
 | `cache.ts` | stamp-keyed in-memory cache, optional TTL | `createStampCache()` |
 | `clipboard.ts` | OS clipboard, no npm deps | `copyText()`, `osc52Payload()` |
-| `debug.ts` | `OES_DEBUG_OPENCODE` / `OES_DEBUG_PROFILE` JSON-line file loggers | `dbg()`, `profile()`, `profileAsync()`, `readProfileStats()`, `writeProfileSummary()`, `debugLogDir()`, `profileLogDir()`, `resetDebug()` |
+| `debug.ts` | `OES_DEBUG_OPENCODE` / `OES_DEBUG_PROFILE` JSON-line file loggers + a 200-line in-memory screen ring for the sidebar's debug console | `dbg()`, `profile()`, `profileAsync()`, `readProfileStats()`, `writeProfileSummary()`, `debugLogDir()`, `profileLogDir()`, `resetDebug()`, `pushScreenLine()`, `readScreenLines()`, `subscribeScreenLines()` |
 | `bus.ts` | in-process plugin event bus (`pware.oc.*` / `pware.omo.*` / `pware.oes.*`) | `createEventBus()`, `PwareEvent`, `PwareEventBus` |
 | `events.ts` | host event type/kind classification | `eventType()`, `eventKind()`, `shouldRefreshDb()` |
-| `layout.ts` | vertical row budget, overflow slicing | `panelRows()`, `packSections()`, `rowsForPlan()`, `sliceShown()`, `ROW_MIN`, `ROW_RANK` |
+| `layout.ts` | vertical row budget, overflow slicing | `panelRows()`, `packSections()`, `rowsForPlan()`, `sliceShown()`, `clampScrollOffset()`, `scrollByStep()`, `ROW_MIN`, `ROW_RANK` |
 | `oes.ts` | `oes.json` merge + clamp | `OesOptions`, `OES_DEFAULTS`, `pick()`, `getOes()`, `oesStamp()`, `resetOesCache()` |
 | `paths.ts` | OpenCode path resolution, path folding | `getOpenCodeDbPath()`, `pluginRoot()`, `resolveProjectFile()`, `basenameOf()`, `fileStamp()`, `dbStamp()`, `str()`, `finiteNum()` |
 | `preview.ts` | text/markdown preview limits | `previewViewportRows()`, `canPreviewPath()`, `isMarkdownPath()`, `readTextPreview()` |
 | `pulse.ts` | agent marks, flow, time/token formatting | `toEpochMs()`, `pulseAgeMs()`, `composeMark()`, `hottestMark()`, `activeFlow()`, `applyFlow()`, `flowFromEvent()`, `sessionBusyFromEvent()`, `sessionIdFromEvent()`, `stripSessionPrefix()`, `shortToolLabel()`, `toolHitFromEvent()`, `formatAge()`, `formatDuration()`, `formatTokens()`, `formatUsd()`, `packChips()` |
 | `glyph.ts` | every glyph as one char+tone spec; tone keys | `ToneKey`, `GlyphSpec`, `SPINNER_FRAMES`, `spinnerFrame()`, `flowBlinkOn()`, `markTone()`, `stateGlyph()`, `directionGlyph()`, `defaultBodyTone()`, `QUEUED_GLYPH`, `ENGAGE_MIN_FRAMES`, `ENGAGE_MAX_FRAMES`, `engageFill()`, `engageDone()` |
-| `sqlite.ts` | readonly `bun:sqlite` / `node:sqlite` handle, fail-fast busy timeout (logs `sql.busy`) | `openReadonlyDb()`, `withDbRead()`, `resetReadonlyDb()`, `uniqueIds()`, `isBusyError()` |
+| `sqlite.ts` | readonly `bun:sqlite` / `node:sqlite` handle, fail-fast busy timeout (logs `sql.busy`), pings the debug console's screen ring (`db open`) on a fresh open | `openReadonlyDb()`, `withDbRead()`, `resetReadonlyDb()`, `uniqueIds()`, `isBusyError()` |
 | `status.ts` | canonical lifecycle/tool/work status | `normalizeStatus()`, `toToolStatus()`, `toWorkLabel()`, `workStatusGlyph()`, `workIsTerminal()`, `taskRank()` |
 | `timing.ts` | panel clock budgets | `TICK_MS`, `NOW_MS`, `FPS_READ_EVERY_TICKS`, `BLINK_TICKS`, `MONITOR_POLL_MS`, `MONITOR_WATCH_DEBOUNCE_MS`, `EVENT_SCAN_DEBOUNCE_MS`, `REALTIME_WINDOW_MS`, `REALTIME_RATE_WINDOW_MS` |
 

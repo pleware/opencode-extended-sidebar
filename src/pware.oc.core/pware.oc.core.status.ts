@@ -145,7 +145,11 @@ export function tabStatusLine(status: TabStatus): TabStatusLine {
 /** Tone of the global status bar: loading/error/muted, or "ready" when a tab is done. */
 export type StatusBarTone = TabTone | "ready"
 
-/** Global status-bar line: a ready tab (`null`) still renders — as a static dot. */
+/**
+ * Global status-bar line. A ready tab (`null`) still yields a line — with an
+ * empty label the bar is a bare `OES` (the realtime category tabs on the same
+ * row already lead with their own `•`), never `OES •` + a tab bullet.
+ */
 export type StatusBarLine = { label: string; tone: StatusBarTone }
 
 export function statusBarLine(status: TabStatus): StatusBarLine {

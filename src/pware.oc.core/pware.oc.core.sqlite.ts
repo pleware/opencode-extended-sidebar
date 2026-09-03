@@ -4,7 +4,7 @@
  */
 import { createRequire } from "node:module"
 import fs from "node:fs"
-import { dbg, profile } from "./pware.oc.core.debug.js"
+import { dbg, profile, pushScreenLine } from "./pware.oc.core.debug.js"
 
 export type SqlRow = Record<string, unknown>
 
@@ -170,5 +170,6 @@ export function openReadonlyDb(dbPath: string): SqlDb | null {
   const db = openFresh(dbPath)
   if (!db) return null
   hold = { path: dbPath, db }
+  pushScreenLine("db open")
   return db
 }
