@@ -107,9 +107,9 @@ import {
 import { emptyPerf, readPerfSnapshot } from "../pware.oc.perf/pware.oc.perf.reader.js"
 import { PerfPanel } from "../pware.oc.perf/pware.oc.perf.view.js"
 import { rateSparkline, shareBar } from "../pware.oc.perf/pware.oc.perf.charts.js"
-import { StatRealtimeResolver } from "../pware.oc.perf/pware.oc.perf.realtimeResolver.js"
+import { StatRealtimeTimeline } from "../pware.oc.perf/pware.oc.perf.realtimeTimeline.js"
 import { EventDriverSampler } from "../pware.oc.perf/pware.oc.perf.realtimeSampler.js"
-import { CpuRamSampler } from "../pware.oc.perf/pware.oc.perf.realtimeCpuRam.js"
+import { readCpuRam } from "../pware.oc.perf/pware.oc.perf.realtimeCpuRam.js"
 import { STAT_REALTIME_BLOCK, seriesValues, type StatRealtimeSeriesKey, type StatRealtimeTabId } from "../pware.oc.perf/pware.oc.perf.realtimeBlock.js"
 import { formatSelfLine, readRendererFps, readSelfStats, resetSelfStats, selfTime, setSelfFps } from "../pware.oc.perf/pware.oc.perf.self.js"
 import {
@@ -144,7 +144,6 @@ import {
   FPS_READ_EVERY_TICKS,
   GLYPH_TICK_MS,
   NOW_MS,
-  REALTIME_TOKEN_RENDER_MS,
   SWITCH_TIMEOUT_MS,
   TICK_MS,
   TOKEN_RATE_WINDOW_MS,
@@ -239,7 +238,6 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   const [liveFiles, setLiveFiles] = createSignal<Record<string, FileView>>({})
   const [tokenTicks, setTokenTicks] = createSignal<readonly TokenTick[]>([])
   const [rtVersion, setRtVersion] = createSignal(0)
-  const [rtCpuVersion, setRtCpuVersion] = createSignal(0)
   const [rtTab, setRtTab] = createSignal<StatRealtimeTabId>("tokens")
   const [rtRow, setRtRow] = createSignal<StatRealtimeSeriesKey>("sum")
   const [gitTick, setGitTick] = createSignal(0)
@@ -424,9 +422,13 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   const offTokensDelta = bus.on(EV_OC_TOKENS_DELTA, (evt) => {
     const data = evt.data
     if (!data || typeof data !== "object") return
-    const tokens = (data as Record<string, unknown>).tokens
+    const payload = data as Record<string, unknown>
+    const tokens = payload.tokens
     if (typeof tokens !== "number" || !Number.isFinite(tokens) || tokens <= 0) return
     setTokenTicks((prev) => pushTokenTick(prev, Date.now(), tokens, TOKEN_RATE_WINDOW_MS))
+    const sessionId = typeof payload.sessionId === "string" && payload.sessionId ? payload.sessionId : props.sessionId
+    const kind = payload.kind === "reasoning" ? "reasoning" : "out"
+    rtTimeline.ingestEstimate(sessionId, kind, tokens, Date.now())
   })
 
   const offSessionSelect = bus.on(EV_OES_SESSION_SELECT, () => remount())
@@ -439,6 +441,29 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     onRender: requestRender,
   })
 
+  // One shared realtime timeline (tokens / cache / CPU / RAM). Exact cumulative
+  // totals arrive on session.updated; estimated stream deltas arrive on the bus;
+  // the UI tick below folds everything into a grid sample every TICK_MS, so the
+  // chart's right edge always reaches now instead of waiting for an event.
+  const rtTimeline = StatRealtimeTimeline.build(null)
+  const rtSampler = EventDriverSampler.create(rtTimeline, (handler) => {
+    try {
+      const on = props.api.event.on as (
+        name: string,
+        cb: (evt: unknown, meta?: { directory?: unknown }) => void,
+      ) => unknown
+      const off = on("session.updated", (evt, meta) => {
+        const dir = projectDir()
+        if (dir && meta?.directory && String(meta.directory) !== dir) return
+        handler(evt)
+      })
+      return typeof off === "function" ? () => off() : () => {}
+    } catch {
+      return () => {}
+    }
+  })
+  rtSampler.start()
+
   let tickCount = 0
   const tick = setInterval(() => {
     profile("tick", () => {
@@ -450,6 +475,11 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
           return n - prev >= NOW_MS ? n : prev
         })
         setFrame((n) => n + 1)
+        // Realtime grid: CPU/RAM are read here and the timeline folds one sample.
+        const at = Date.now()
+        rtTimeline.ingestCpuRam(readCpuRam(), at)
+        rtTimeline.tick(at)
+        setRtVersion((n) => n + 1)
       })
       tickCount += 1
       if (tickCount % FPS_READ_EVERY_TICKS === 0) {
@@ -461,41 +491,6 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
 
   /** Fast glyph heartbeat — spinners and direction flows step at `GLYPH_TICK_MS`. */
   const glyphTick = setInterval(() => setGlyphFrame((n) => n + 1), GLYPH_TICK_MS)
-
-  const rtResolver = StatRealtimeResolver.build(null)
-  // Token redraws are coalesced to a 40ms cadence: the session.updated handler
-  // only marks dirty; the tick below flushes once (no events → line stands still).
-  let rtTokenDirty = false
-  const rtSampler = EventDriverSampler.create(rtResolver, (handler) => {
-    try {
-      const on = props.api.event.on as (
-        name: string,
-        cb: (evt: unknown, meta?: { directory?: unknown }) => void,
-      ) => unknown
-      const off = on("session.updated", (evt, meta) => {
-        const dir = projectDir()
-        if (dir && meta?.directory && String(meta.directory) !== dir) return
-        handler(evt)
-        rtTokenDirty = true
-      })
-      return typeof off === "function" ? () => off() : () => {}
-    } catch {
-      return () => {}
-    }
-  })
-  rtSampler.start()
-
-  const cpuRamSampler = CpuRamSampler.create(rtResolver, {
-    onSample: () => setRtCpuVersion((n) => n + 1),
-  })
-  cpuRamSampler.start()
-
-  const rtTokenTick = setInterval(() => {
-    if (rtTokenDirty) {
-      rtTokenDirty = false
-      setRtVersion((n) => n + 1)
-    }
-  }, REALTIME_TOKEN_RENDER_MS)
 
   const offGit = onGitMarksChange(() => {
     profile("git", () => {
@@ -553,9 +548,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   onCleanup(() => {
     clearInterval(tick)
     clearInterval(glyphTick)
-    clearInterval(rtTokenTick)
     rtSampler.stop()
-    cpuRamSampler.stop()
     bridge.stop()
     offSnapshot()
     offSessionActivity()
@@ -1062,12 +1055,8 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     () => rtActiveTab().rows.find((r) => r.key === rtRow()) ?? rtActiveTab().rows[0]!,
   )
   const rtHistory = createMemo(() => {
-    if (rtActiveTab().id === "cpu-ram") {
-      rtCpuVersion()
-      return rtResolver.getForGraphCpuRam()
-    }
     rtVersion()
-    return rtResolver.getForGraph(null)
+    return rtTimeline.getTimeline()
   })
   const rtLines = createMemo(() =>
     rateSparkline(seriesValues(rtHistory(), rtActiveRow().read), {

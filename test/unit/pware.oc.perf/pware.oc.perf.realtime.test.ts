@@ -1,11 +1,13 @@
 import { describe, expect, test } from "bun:test"
 import {
-  STAT_REALTIME_HISTORY_WINDOW_MS,
   emptyStatRealtimeSnapshot,
   pushStatRealtimeHistory,
   sumSeries,
+  tokenRateToKbit,
+  NETWORK_BYTES_PER_TOKEN,
   type StatRealtimeSnapshot,
 } from "../../../src/pware.oc.perf/pware.oc.perf.realtime.js"
+import { REALTIME_WINDOW_MS } from "../../../src/pware.oc.core/pware.oc.core.timing.js"
 
 function snap(at: number, out: number | null = 5): StatRealtimeSnapshot {
   const s = emptyStatRealtimeSnapshot(at)
@@ -34,6 +36,18 @@ describe("emptyStatRealtimeSnapshot", () => {
   })
 })
 
+describe("tokenRateToKbit", () => {
+  test("converts tok/s to kbit/s at the bytes-per-token constant", () => {
+    expect(NETWORK_BYTES_PER_TOKEN).toBe(4)
+    // 1000 tok/s × 4 B × 8 bits / 1000 = 32 kbit/s
+    expect(tokenRateToKbit(1_000)).toBe(32)
+    expect(tokenRateToKbit(125)).toBe(4)
+  })
+  test("null stays null", () => {
+    expect(tokenRateToKbit(null)).toBeNull()
+  })
+})
+
 describe("pushStatRealtimeHistory", () => {
   test("appends and prunes to the window", () => {
     const a = snap(1_000)
@@ -44,9 +58,9 @@ describe("pushStatRealtimeHistory", () => {
     h = pushStatRealtimeHistory(h, c, 5_000)
     expect(h.map((s) => s.at)).toEqual([6_000, 7_000])
   })
-  test("default window is the 15-minute constant", () => {
+  test("default window is the 3-minute realtime window", () => {
     const h = pushStatRealtimeHistory([], snap(0))
-    expect(STAT_REALTIME_HISTORY_WINDOW_MS).toBe(15 * 60 * 1000)
+    expect(REALTIME_WINDOW_MS).toBe(3 * 60 * 1000)
     expect(h.length).toBe(1)
   })
 })

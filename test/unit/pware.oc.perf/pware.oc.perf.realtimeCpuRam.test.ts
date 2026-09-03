@@ -4,7 +4,7 @@ import {
   cpuPercentOverWindow,
   ramMb,
 } from "../../../src/pware.oc.perf/pware.oc.perf.realtimeCpuRam.js"
-import { StatRealtimeResolver } from "../../../src/pware.oc.perf/pware.oc.perf.realtimeResolver.js"
+import { StatRealtimeTimeline } from "../../../src/pware.oc.perf/pware.oc.perf.realtimeTimeline.js"
 
 describe("cpuPercent", () => {
   test("one full core busy for the whole interval is 100% on one core", () => {
@@ -65,17 +65,5 @@ describe("ramMb", () => {
   test("converts resident bytes to MB", () => {
     expect(ramMb(1024 * 1024)).toBe(1)
     expect(ramMb(0)).toBe(0)
-  })
-})
-
-describe("StatRealtimeResolver cpu/ram", () => {
-  test("ingestCpuRam feeds a separate interpolated history on the fine cpu grid", () => {
-    const r = StatRealtimeResolver.build(null)
-    r.ingestCpuRam(10, 500, 1_000)
-    r.ingestCpuRam(30, 700, 1_500)
-    const graph = r.getForGraphCpuRam()
-    expect(graph.map((s) => s.at)).toEqual([1_000, 1_250, 1_500])
-    expect(graph.map((s) => s.cpuRam.cpu)).toEqual([10, 20, 30])
-    expect(graph.map((s) => s.cpuRam.ram)).toEqual([500, 600, 700])
   })
 })

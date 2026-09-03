@@ -383,6 +383,14 @@ export function estimateTokens(text: string, charsPerToken = 4): number {
   return Math.max(1, Math.ceil([...t].length / charsPerToken))
 }
 
+/** Whether a streamed text delta is visible output (`out`) or hidden thinking (`reasoning`). */
+export function deltaKindFromEvent(evt: unknown): "out" | "reasoning" {
+  const type = eventType(evt)
+  const kind = partKind(evt)
+  if (type.includes("reasoning") || kind.includes("reasoning")) return "reasoning"
+  return "out"
+}
+
 /** A single streaming token-count sample: `n` estimated tokens at `at`. */
 export type TokenTick = { at: number; n: number }
 

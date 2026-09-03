@@ -1,4 +1,5 @@
 import {
+  deltaKindFromEvent,
   deltaTextFromEvent,
   estimateTokens,
   flowFromEvent,
@@ -61,6 +62,8 @@ export type OcTokensDeltaEvent = {
   ts: number
   data: {
     sessionId: string
+    /** Which stream produced the delta — `out` (text) or `reasoning` (thinking). */
+    kind: "out" | "reasoning"
     tokens: number
   }
 }
@@ -138,6 +141,7 @@ export function hostEventToOcEvents(
         ts,
         data: {
           sessionId: eventSessionId,
+          kind: deltaKindFromEvent(evt),
           tokens,
         },
       })

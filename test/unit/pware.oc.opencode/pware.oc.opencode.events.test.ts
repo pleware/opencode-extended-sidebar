@@ -56,4 +56,19 @@ describe("hostEventToOcEvents", () => {
     expect(delta?.data.sessionId).toBe("ses_main")
     expect(delta?.data.tokens).toBeGreaterThan(0)
   })
+
+  test("maps a reasoning delta to a tokens-delta event with reasoning kind", () => {
+    const events = hostEventToOcEvents(
+      {
+        type: "session.next.reasoning.delta",
+        properties: { sessionID: "ses_main", text: "thinking thinking thinking" },
+      },
+      { sessionId: "ses_main", projectRoot: null },
+    )
+
+    const delta = events.find((e) => e.type === EV_OC_TOKENS_DELTA)
+    expect(delta).toBeDefined()
+    expect(delta?.data.kind).toBe("reasoning")
+    expect(delta?.data.tokens).toBeGreaterThan(0)
+  })
 })

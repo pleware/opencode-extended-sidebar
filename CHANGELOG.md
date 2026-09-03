@@ -1,5 +1,6 @@
 # Changelog
 
+- **0.2.64** (2026-09-03) Unify the realtime widget onto one shared 300ms wall-clock timeline whose token/cache series are 1s windowed derivatives reconciled with estimated stream deltas.
 - **0.2.63** (2026-09-03) Tune the realtime block to 30 ms CPU/RAM sampling with a rolling 1 s window and 40 ms coalesced token redraws, draw the chart 3 rows tall, and show a one-row co.
 - **0.2.62** (2026-09-03) Add an event-driven realtime block with token, cache and process CPU/RAM series under the OES bar and route glyph colours through a shared resolver.
 - **0.2.61** (2026-09-02) Expose a shared new-session prompt as.

@@ -3,10 +3,10 @@
  *
  * Event-driven sampler: subscribes to `session.updated` events, extracts the
  * per-session cumulative token totals, and feeds them to a
- * `StatRealtimeResolver`. The subscription is injected so the class stays
+ * `StatRealtimeTimeline`. The subscription is injected so the class stays
  * host-free; the event parsing is a pure exported function.
  */
-import type { StatRealtimeEventTokens, StatRealtimeResolver } from "./pware.oc.perf.realtimeResolver.js"
+import type { StatRealtimeEventTokens, StatRealtimeTimeline } from "./pware.oc.perf.realtimeTimeline.js"
 
 /** Subscribe to realtime events: returns a dispose function. */
 export type RealtimeEventSubscribe = (handler: (evt: unknown) => void) => () => void
@@ -40,17 +40,17 @@ export function extractSessionTokens(evt: unknown): { sessionId: string; tokens:
 
 export class EventDriverSampler {
   static create(
-    resolver: StatRealtimeResolver,
+    timeline: StatRealtimeTimeline,
     subscribe: RealtimeEventSubscribe,
     now: () => number = Date.now,
   ): EventDriverSampler {
-    return new EventDriverSampler(resolver, subscribe, now)
+    return new EventDriverSampler(timeline, subscribe, now)
   }
 
   private off: (() => void) | null = null
 
   private constructor(
-    private readonly resolver: StatRealtimeResolver,
+    private readonly timeline: StatRealtimeTimeline,
     private readonly subscribe: RealtimeEventSubscribe,
     private readonly now: () => number,
   ) {}
@@ -60,7 +60,7 @@ export class EventDriverSampler {
     this.off = this.subscribe((evt) => {
       const hit = extractSessionTokens(evt)
       if (!hit) return
-      this.resolver.ingest(hit.sessionId, hit.tokens, this.now())
+      this.timeline.ingest(hit.sessionId, hit.tokens, this.now())
     })
   }
 

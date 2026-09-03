@@ -1,21 +1,35 @@
 /**
  * pware.oc.perf.realtimeCpuRam
  *
- * Process-level CPU/RAM sampling for the OES realtime block. CPU% is the
+ * Process-level CPU/RAM reading for the OES realtime block. CPU% is the
  * OpenCode process's load across all cores; RAM is its resident set. Both come
  * from Node/Bun built-ins (`process.cpuUsage`, `process.memoryUsage`,
  * `os.cpus`), so they work identically on Linux, macOS and Windows with no
- * dependencies. The sampling math is pure and exported for tests.
+ * dependencies. The sampling math is pure and exported for tests; the host
+ * read helpers (`readCpuRam`, `cpuCores`) are thin edges the UI tick calls.
  */
 import os from "node:os"
-import { REALTIME_CPU_SAMPLE_MS } from "../pware.oc.core/pware.oc.core.timing.js"
-import type { StatRealtimeResolver } from "./pware.oc.perf.realtimeResolver.js"
 
 /** A raw CPU/RAM reading: cumulative CPU µs (user/system) + resident bytes. */
 export type CpuRamReading = {
   user: number
   system: number
   rss: number
+}
+
+/** One raw reading from the host: process CPU µs since start + resident bytes. Never throws. */
+export function readCpuRam(): CpuRamReading {
+  try {
+    const cpu = process.cpuUsage()
+    return { user: cpu.user, system: cpu.system, rss: process.memoryUsage().rss }
+  } catch {
+    return { user: 0, system: 0, rss: 0 }
+  }
+}
+
+/** Logical CPU count — divides CPU% so a full core is never above 100. */
+export function cpuCores(): number {
+  return os.cpus().length
 }
 
 /** A reading stamped with when it was taken. */
@@ -62,57 +76,4 @@ export function cpuPercentOverWindow(
 /** Resident bytes → MB. */
 export function ramMb(rssBytes: number): number {
   return rssBytes / (1024 * 1024)
-}
-
-export type CpuRamSamplerOptions = {
-  /** Measurement cadence — how often a fresh reading is taken (default `REALTIME_CPU_SAMPLE_MS` = 30 ms). */
-  intervalMs?: number
-  /** Rolling window the CPU% is averaged over — damps per-tick jitter (default 1 s). */
-  windowMs?: number
-  cores?: number
-  read?: () => CpuRamReading
-  onSample?: () => void
-}
-
-export class CpuRamSampler {
-  static create(resolver: StatRealtimeResolver, opts: CpuRamSamplerOptions = {}): CpuRamSampler {
-    return new CpuRamSampler(resolver, opts)
-  }
-
-  private timer: ReturnType<typeof setInterval> | null = null
-  private ring: CpuRamStampedReading[] = []
-
-  private constructor(
-    private readonly resolver: StatRealtimeResolver,
-    private readonly opts: CpuRamSamplerOptions,
-  ) {}
-
-  start(): void {
-    if (this.timer) return
-    const intervalMs = this.opts.intervalMs ?? REALTIME_CPU_SAMPLE_MS
-    const windowMs = this.opts.windowMs ?? 1_000
-    const cores = this.opts.cores ?? os.cpus().length
-    const read =
-      this.opts.read ??
-      ((): CpuRamReading => {
-        const cpu = process.cpuUsage()
-        return { user: cpu.user, system: cpu.system, rss: process.memoryUsage().rss }
-      })
-    this.timer = setInterval(() => {
-      const at = Date.now()
-      this.ring.push({ ...read(), at })
-      const minAt = at - windowMs
-      while (this.ring.length > 1 && this.ring[0]!.at < minAt) this.ring.shift()
-      const cpu = cpuPercentOverWindow(this.ring, cores, windowMs)
-      if (cpu == null) return
-      this.resolver.ingestCpuRam(cpu, ramMb(this.ring[this.ring.length - 1]!.rss), at)
-      this.opts.onSample?.()
-    }, intervalMs)
-  }
-
-  stop(): void {
-    if (this.timer) clearInterval(this.timer)
-    this.timer = null
-    this.ring = []
-  }
 }

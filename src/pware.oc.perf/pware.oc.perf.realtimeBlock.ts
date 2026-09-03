@@ -41,7 +41,7 @@ export function seriesValues(
   return history.map((s) => read(s) ?? 0)
 }
 
-/** The default OES realtime block. `Network` is a future placeholder. */
+/** The default OES realtime block. Network is estimated from the token flow (kbit/s). */
 export const STAT_REALTIME_BLOCK: StatRealtimeBlock = {
   tabs: [
     {

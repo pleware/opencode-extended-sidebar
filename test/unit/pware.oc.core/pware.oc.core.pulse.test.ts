@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import {
   applyFlow,
   composeMark,
+  deltaKindFromEvent,
   deltaTextFromEvent,
   estimateTokens,
   flowFromEvent,
@@ -206,6 +207,29 @@ describe("deltaTextFromEvent", () => {
     ).toBeNull()
     expect(deltaTextFromEvent({ type: "tool.called", sessionID: "s1" })).toBeNull()
     expect(deltaTextFromEvent(null)).toBeNull()
+  })
+})
+
+describe("deltaKindFromEvent", () => {
+  test("reasoning deltas and reasoning parts classify as reasoning", () => {
+    expect(
+      deltaKindFromEvent({ type: "session.next.reasoning.delta", properties: { text: "x" } }),
+    ).toBe("reasoning")
+    expect(
+      deltaKindFromEvent({
+        type: "message.part.updated",
+        properties: { part: { type: "reasoning" }, delta: "x" },
+      }),
+    ).toBe("reasoning")
+  })
+  test("text deltas and non-reasoning parts classify as out", () => {
+    expect(deltaKindFromEvent({ type: "session.next.text.delta", properties: { text: "x" } })).toBe("out")
+    expect(
+      deltaKindFromEvent({
+        type: "message.part.updated",
+        properties: { part: { type: "text" }, delta: "x" },
+      }),
+    ).toBe("out")
   })
 })
 

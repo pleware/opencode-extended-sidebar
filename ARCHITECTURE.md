@@ -109,7 +109,7 @@ src/
 │   ├── pware.oc.perf.charts.ts
 │   ├── pware.oc.perf.realtime.ts
 │   ├── pware.oc.perf.realtimeBlock.ts
-│   ├── pware.oc.perf.realtimeResolver.ts
+│   ├── pware.oc.perf.realtimeTimeline.ts
 │   ├── pware.oc.perf.realtimeSampler.ts
 │   ├── pware.oc.perf.realtimeCpuRam.ts
 │   ├── pware.oc.perf.asciichart.d.ts
@@ -179,7 +179,7 @@ Plugin registration: `id = "opencode-extended-sidebar"`, load toast,
 | `glyph.ts` | every glyph as one char+tone spec; tone keys | `ToneKey`, `GlyphSpec`, `SPINNER_FRAMES`, `spinnerFrame()`, `flowBlinkOn()`, `markTone()`, `stateGlyph()`, `directionGlyph()`, `defaultBodyTone()`, `QUEUED_GLYPH`, `ENGAGE_MIN_FRAMES`, `ENGAGE_MAX_FRAMES`, `engageFill()`, `engageDone()` |
 | `sqlite.ts` | readonly `bun:sqlite` / `node:sqlite` handle, fail-fast busy timeout (logs `sql.busy`) | `openReadonlyDb()`, `withDbRead()`, `resetReadonlyDb()`, `uniqueIds()`, `isBusyError()` |
 | `status.ts` | canonical lifecycle/tool/work status | `normalizeStatus()`, `toToolStatus()`, `toWorkLabel()`, `workStatusGlyph()`, `workIsTerminal()`, `taskRank()` |
-| `timing.ts` | panel clock budgets | `TICK_MS`, `NOW_MS`, `FPS_READ_EVERY_TICKS`, `BLINK_TICKS`, `MONITOR_POLL_MS`, `MONITOR_WATCH_DEBOUNCE_MS`, `EVENT_SCAN_DEBOUNCE_MS`, `REALTIME_CPU_SAMPLE_MS`, `REALTIME_TOKEN_RENDER_MS` |
+| `timing.ts` | panel clock budgets | `TICK_MS`, `NOW_MS`, `FPS_READ_EVERY_TICKS`, `BLINK_TICKS`, `MONITOR_POLL_MS`, `MONITOR_WATCH_DEBOUNCE_MS`, `EVENT_SCAN_DEBOUNCE_MS`, `REALTIME_WINDOW_MS`, `REALTIME_RATE_WINDOW_MS` |
 
 ### `pware.oc.core/constants` — host literals + the plugin's own vocabularies
 
@@ -277,15 +277,15 @@ Plugin registration: `id = "opencode-extended-sidebar"`, load toast,
 | `reader.ts` | wall-clock split per model/tool, dated logs | `readPerfSnapshot()`, `emptyPerf()`, `aggregate()`, `readPerfLog()`, `formatPerfLog()`, `collectPerfLogRows()`, `formatColumns()`, `toolLogCall()` |
 | `self.ts` | plugin self-cost: event/scan/tick latency + renderer FPS | `selfTime()`, `readSelfStats()`, `resetSelfStats()`, `setSelfFps()`, `readRendererFps()`, `formatSelfLine()`, `SelfStats` |
 | `charts.ts` | pure chart/stat helpers: null-fill, smoothing, downsampling, ANSI strip, bars, trends, histograms, gauges | `interpolateSeries()`, `smoothSeries()`, `downsampleAvg()`, `stripAnsi()`, `asciiTrend()`, `shareBar()`, `perfStatLine()`, `waitHistogram()`, `shareGauge()`, `shareDonut()` |
-| `realtime.ts` | realtime metric samples (tokens/cache/cpu·ram/network) + pure history push/prune | `StatRealtimeSnapshot`, `StatRealtimeSnapshotHistory`, `StatRealtimeTokensSeries`, `StatRealtimeCacheSeries`, `StatRealtimeCpuRamSeries`, `StatRealtimeNetworkSeries`, `STAT_REALTIME_HISTORY_WINDOW_MS`, `sumSeries()`, `emptyStatRealtimeSnapshot()`, `pushStatRealtimeHistory()` |
+| `realtime.ts` | realtime metric samples (tokens/cache/cpu·ram/network) + pure history push/prune | `StatRealtimeSnapshot`, `StatRealtimeSnapshotHistory`, `StatRealtimeTokensSeries`, `StatRealtimeCacheSeries`, `StatRealtimeCpuRamSeries`, `StatRealtimeNetworkSeries`, `sumSeries()`, `tokenRateToKbit()`, `NETWORK_BYTES_PER_TOKEN`, `emptyStatRealtimeSnapshot()`, `pushStatRealtimeHistory()` |
 | `realtimeBlock.ts` | static definition of the OES realtime widget: tabs, selector rows, series readers | `StatRealtimeBlock`, `StatRealtimeTab`, `StatRealtimeRowTab`, `StatRealtimeTabId`, `StatRealtimeSeriesKey`, `seriesValues()`, `STAT_REALTIME_BLOCK` |
-| `realtimeResolver.ts` | event-driven per-session delta rates → per-session + aggregate chart series (no DB) | `StatRealtimeResolver`, `StatRealtimeEventTokens`, `mergeRealtimeHistories()`, `interpolateRealtimeHistory()`, `REALTIME_INTERPOLATE_STEP_MS`, `REALTIME_CPU_WINDOW_MS`, `REALTIME_CPU_GRAPH_STEP_MS` |
-| `realtimeSampler.ts` | subscribes to `session.updated`, extracts token totals, feeds the resolver | `EventDriverSampler`, `RealtimeEventSubscribe`, `extractSessionTokens()` |
-| `realtimeCpuRam.ts` | process-level CPU/RAM sampling (built-ins, cross-platform) | `CpuRamSampler`, `CpuRamSamplerOptions`, `CpuRamReading`, `CpuRamStampedReading`, `cpuPercent()`, `cpuPercentOverWindow()`, `ramMb()` |
+| `realtimeTimeline.ts` | one shared wall-clock realtime grid (tokens/cache/cpu·ram) sampled every `TICK_MS` over `REALTIME_WINDOW_MS` (no DB) | `StatRealtimeTimeline`, `StatRealtimeEventTokens`, `StatRealtimeEstKind` |
+| `realtimeSampler.ts` | subscribes to `session.updated`, extracts token totals, feeds the timeline | `EventDriverSampler`, `RealtimeEventSubscribe`, `extractSessionTokens()` |
+| `realtimeCpuRam.ts` | process-level CPU/RAM reading + pure percent math (built-ins, cross-platform) | `CpuRamReading`, `CpuRamStampedReading`, `readCpuRam()`, `cpuCores()`, `cpuPercent()`, `cpuPercentOverWindow()`, `ramMb()` |
 | `asciichart.d.ts` | ambient `asciichart` module typings (plain, ANSI-free output) | `plot()` |
 | `view.tsx` | Perf tab | `PerfPanel` |
 
-`reader.ts`, `self.ts`, `realtime.ts`, `realtimeBlock.ts`, `realtimeResolver.ts`, `realtimeSampler.ts` and `realtimeCpuRam.ts` are core-only — they import nothing above core.
+`reader.ts`, `self.ts`, `realtime.ts`, `realtimeBlock.ts`, `realtimeTimeline.ts`, `realtimeSampler.ts` and `realtimeCpuRam.ts` are core-only — they import nothing above core.
 `view.tsx` is a TUI component: it may import ui chrome to render the Perf tab.
 
 ### `pware.oc.ui` — TUI layer

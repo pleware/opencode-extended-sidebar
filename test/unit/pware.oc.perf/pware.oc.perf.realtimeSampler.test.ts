@@ -3,7 +3,7 @@ import {
   EventDriverSampler,
   extractSessionTokens,
 } from "../../../src/pware.oc.perf/pware.oc.perf.realtimeSampler.js"
-import { StatRealtimeResolver } from "../../../src/pware.oc.perf/pware.oc.perf.realtimeResolver.js"
+import { StatRealtimeTimeline } from "../../../src/pware.oc.perf/pware.oc.perf.realtimeTimeline.js"
 
 describe("extractSessionTokens", () => {
   test("pulls sessionID + tokens from a session.updated event", () => {
@@ -28,12 +28,12 @@ describe("extractSessionTokens", () => {
 })
 
 describe("EventDriverSampler", () => {
-  test("start subscribes and feeds the resolver; stop unsubscribes", () => {
+  test("start subscribes and feeds the timeline; stop unsubscribes", () => {
     let handler: ((evt: unknown) => void) | null = null
     let stopped = 0
     let clock = 1_000
-    const resolver = StatRealtimeResolver.build(null)
-    const sampler = EventDriverSampler.create(resolver, (h) => {
+    const timeline = StatRealtimeTimeline.build(null)
+    const sampler = EventDriverSampler.create(timeline, (h) => {
       handler = h
       return () => {
         stopped += 1
@@ -48,8 +48,8 @@ describe("EventDriverSampler", () => {
         info: { tokens: { output: 10 } },
       },
     })
-    // first event has no baseline yet
-    expect(resolver.getForGraph(null)).toEqual([])
+    // first event is a baseline; a tick after the second event produces a rate
+    expect(timeline.getTimeline()).toEqual([])
 
     clock = 2_000
     handler!({
@@ -58,7 +58,9 @@ describe("EventDriverSampler", () => {
         info: { tokens: { output: 30 } },
       },
     })
-    expect(resolver.getForGraph(null).length).toBeGreaterThan(0)
+    timeline.tick(2_300)
+    const last = timeline.getTimeline()[timeline.getTimeline().length - 1]!
+    expect(last.tokens.out).toBe(20)
 
     sampler.stop()
     expect(stopped).toBe(1)
@@ -66,8 +68,8 @@ describe("EventDriverSampler", () => {
 
   test("start is idempotent", () => {
     let subs = 0
-    const resolver = StatRealtimeResolver.build(null)
-    const sampler = EventDriverSampler.create(resolver, () => {
+    const timeline = StatRealtimeTimeline.build(null)
+    const sampler = EventDriverSampler.create(timeline, () => {
       subs += 1
       return () => {}
     })

@@ -7,7 +7,7 @@ cheap. Line references point at `src/` as of the performance fix.
 All clock values live in one place: `src/pware.oc.core/pware.oc.core.timing.ts`
 (`TICK_MS`, `GLYPH_TICK_MS`, `NOW_MS`, `FPS_READ_EVERY_TICKS`, `BLINK_TICKS`,
 `MONITOR_POLL_MS`, `MONITOR_WATCH_DEBOUNCE_MS`, `EVENT_SCAN_DEBOUNCE_MS`,
-`REALTIME_CPU_SAMPLE_MS`, `REALTIME_TOKEN_RENDER_MS`).
+`REALTIME_WINDOW_MS`, `REALTIME_RATE_WINDOW_MS`).
 
 ## 1. The four render triggers
 
@@ -16,22 +16,18 @@ loop thread.**
 
 ```
 ┌────────────────────────────────────────────────────────────────┐
-│  SOURCE 1: TICK (row clock)                 sidebar.tsx          │
+│  SOURCE 1: TICK (row clock + realtime grid)  sidebar.tsx          │
 │    setInterval(..., TICK_MS = 300ms)                            │
 │    → setNow()  (coarse — advances at most every NOW_MS = 1s)    │
 │    → setFrame() (advances every tick — glyph blink phase)       │
+│    → timeline tick: ingestCpuRam(readCpuRam(), at); tick(at)     │
+│      folds tokens/cache/cpu/ram into one grid sample (TICK_MS)  │
+│      → setRtVersion() (realtime chart always reaches now)       │
 │    → every FPS_READ_EVERY_TICKS (6) ticks: readRendererFps()    │
 ├────────────────────────────────────────────────────────────────┤
 │  SOURCE 2: GLYPH TICK (fast animation)      sidebar.tsx          │
 │    setInterval(..., GLYPH_TICK_MS = 80ms)                       │
 │    → setGlyphFrame() (advances every 80ms — spinner + flow)     │
-├────────────────────────────────────────────────────────────────┤
-│  SOURCE 2b: REALTIME CADENCES               sidebar.tsx          │
-│    CPU/RAM: CpuRamSampler every REALTIME_CPU_SAMPLE_MS = 30ms   │
-│      → setRtCpuVersion() (cpu-ram tab chart only)               │
-│    tokens: session.updated events coalesce to a dirty flag       │
-│      flushed every REALTIME_TOKEN_RENDER_MS = 40ms               │
-│      → setRtVersion() (token/cache chart, stand-still when idle) │
 ├────────────────────────────────────────────────────────────────┤
 │  SOURCE 3: RUNTIME SOURCE                  runtime.source.ts      │
 │    monitor poll/watch in monitor.ts emit pware.oes.snapshot      │
@@ -44,12 +40,14 @@ loop thread.**
 │    → hostEventToOcEvents() → bus emits pware.oc.*               │
 │    → shouldRefreshDb(type) emits pware.oes.refresh.hint          │
 │    sidebar subscribes to pware.oc.* and updates live signals     │
+│    session.updated → StatRealtimeTimeline.ingest()               │
+│    text/reasoning deltas → StatRealtimeTimeline.ingestEstimate() │
 └────────────────────────────────────────────────────────────────┘
          all four → synchronous Solid reactive cascade
-                                       ↓
-                          requestRender() (async)
-                                       ↓
-                          TUI renderer (measured fps)
+                                        ↓
+                           requestRender() (async)
+                                        ↓
+                           TUI renderer (measured fps)
 ```
 
 ## 2. Anatomy of one tick (300ms)
@@ -64,7 +62,15 @@ setInterval(TICK_MS = 300)                       ── sidebar.tsx
 │  │    returning `prev` skips the Solid cascade entirely
 │  │
 │  └─ setFrame(n => n + 1)                       ── CASCADE B (blink consumers)
-│       re-renders ONLY the glyph2 blink leaves
+│  │     re-renders ONLY the glyph2 blink leaves
+│  │
+│  └─ realtime grid (realtimeTimeline.ts)
+│       ├─ ingestCpuRam(readCpuRam(), at)        ── raw CPU/RAM reading
+│       └─ rtTimeline.tick(at)                   ── one grid sample: every
+│            │                                     token/cache series is the
+│            │                                     windowed derivative over
+│            │                                     REALTIME_RATE_WINDOW_MS (1s)
+│            └─ setRtVersion(n => n + 1)         ── realtime chart redraw
 │
 ├─ tickCount % FPS_READ_EVERY_TICKS === 0 ?     ── every 1800ms
 │  └─ readRendererFps(api.renderer)             ── perf.self.ts
@@ -139,6 +145,40 @@ cadence — while the direction glyph blink stays at 600ms and row data still
 runs on the coarse clocks. The `PerfPanel` live glyph reads `glyphFrame()` at
 the leaf, the panel body does not.
 
+## 4c. The realtime grid — one wall-clock sampler for every series
+
+Before: tokens/cache were event-driven (a grid point only when a
+`session.updated` arrived, right edge frozen between events, CPU/RAM on a
+separate 250ms grid) — the tokens chart visibly lagged the stream. Now one
+shared `StatRealtimeTimeline` samples everything on the UI tick cadence.
+
+```
+session.updated (exact totals)  ──→ StatRealtimeTimeline.ingest()
+text/reasoning .delta (estimates) → StatRealtimeTimeline.ingestEstimate()
+every TICK_MS: readCpuRam()       → StatRealtimeTimeline.ingestCpuRam()
+                rtTimeline.tick() → one StatRealtimeSnapshot on the grid
+                                     → setRtVersion() → one chart redraw
+```
+
+Every `tick(at)` writes one snapshot covering tokens + cache + CPU/RAM + network
+(`StatRealtimeSnapshot`, `realtime.ts`) into a rolling history pruned to
+`REALTIME_WINDOW_MS` (3 min). Token/cache series are windowed derivatives over
+the trailing `REALTIME_RATE_WINDOW_MS` (1s): the sample at `at` is the average
+token level change over the last second, so when nothing arrives the series
+falls to zero instead of holding a stale rate. `out`/`reasoning` are fed by
+both the exact `session.updated` totals and the estimated text/reasoning
+stream deltas (`EV_OC_TOKENS_DELTA` with its new `kind` field); the exact
+delta only adds what the estimate has not covered yet, so no token is counted
+twice. Network is not metered — the TUI plugin never sees real socket bytes
+(model traffic lives in the server process) — so each tick derives it from the
+same token flow: `out` = input + cache (what the session sends), `in` =
+output + reasoning (what streams back), converted at ≈ 4 bytes/token via
+`tokenRateToKbit()`. CPU% is read from the raw readings ring over the same 1s
+window and RAM from the newest reading, all on the same grid — one chart, one
+history, one redraw cadence. The realtime block UI (`realtimeBlock.ts`) is
+unchanged: tabs and selector rows just read their series out of the shared
+snapshot.
+
 ## 5. Why the numbers were 3fps, and what changed
 
 Before the fix, every 300ms tick rebuilt the whole row tree (285ms) and every
@@ -206,6 +246,7 @@ watch cover the rest.
 | `glyphFrame` (spinner + direction flow) | every 80ms (`GLYPH_TICK_MS`) | glyph text leaves only | ~ms per frame |
 | `frame` (glyph2 blink) | every 300ms tick | glyph blink colour leaf | folded into the tick |
 | `now` (ages/marks) | 1×/s (`NOW_MS`) | row arrays, ages, marks | folded into the 1×/s tick |
+| realtime grid (tokens/cache/CPU/RAM) | every 300ms tick | one `StatRealtimeSnapshot` into the shared timeline | folded into the tick |
 | scan (DB re-read) | on real change only + refresh hints | full snapshot (`pware.oes.snapshot`) | HIT ~5-20ms, MISS ~30-150ms+ |
 | fps read | every 6th tick | `self` line fps | negligible |
 
