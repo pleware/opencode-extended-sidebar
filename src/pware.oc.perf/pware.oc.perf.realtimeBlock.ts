@@ -9,7 +9,17 @@
 import { sumSeries, type StatRealtimeSnapshot, type StatRealtimeSnapshotHistory } from "./pware.oc.perf.realtime.js"
 
 /** A selector row's series key — unique within its tab. */
-export type StatRealtimeSeriesKey = "sum" | "in" | "out" | "reasoning" | "read" | "write" | "cpu" | "ram"
+export type StatRealtimeSeriesKey =
+  | "avg"
+  | "sum"
+  | "in"
+  | "out"
+  | "reasoning"
+  | "read"
+  | "write"
+  | "cpu"
+  | "ram"
+  | "tok/s"
 
 /** One selector row: its key, label, and how to read the series from a sample. */
 export type StatRealtimeRowTab = {
@@ -49,9 +59,13 @@ export const STAT_REALTIME_BLOCK: StatRealtimeBlock = {
       label: "Tok",
       unit: "tok/s",
       rows: [
+        // avg is the OES bar's old live reading — the chart smooths this series.
+        { key: "avg", label: "avg", read: (s) => sumSeries(s.tokens.in, s.tokens.out) },
         { key: "sum", label: "sum", read: (s) => sumSeries(s.tokens.in, s.tokens.out) },
         { key: "in", label: "in", read: (s) => s.tokens.in },
         { key: "out", label: "out", read: (s) => s.tokens.out },
+        // tok/s duplicates sum (in+out) — kept as the bar's old label per UX.
+        { key: "tok/s", label: "tok/s", read: (s) => sumSeries(s.tokens.in, s.tokens.out) },
       ],
     },
     {
@@ -66,7 +80,7 @@ export const STAT_REALTIME_BLOCK: StatRealtimeBlock = {
     },
     {
       id: "cpu-ram",
-      label: "CPU/RAM",
+      label: "Proc",
       unit: "%/MB",
       rows: [
         { key: "cpu", label: "cpu", read: (s) => s.cpuRam.cpu },

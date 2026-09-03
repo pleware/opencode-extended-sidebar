@@ -20,10 +20,10 @@ describe("STAT_REALTIME_BLOCK", () => {
   test("has the four category tabs in order", () => {
     expect(STAT_REALTIME_BLOCK.tabs.map((t) => t.id)).toEqual(["tokens", "cache", "cpu-ram", "network"])
   })
-  test("tokens tab has sum / in / out rows", () => {
+  test("tokens tab has avg / sum / in / out / tok/s rows", () => {
     const tokens = STAT_REALTIME_BLOCK.tabs.find((t) => t.id === "tokens")!
     expect(tokens.unit).toBe("tok/s")
-    expect(tokens.rows.map((r) => r.key)).toEqual(["sum", "in", "out"])
+    expect(tokens.rows.map((r) => r.key)).toEqual(["avg", "sum", "in", "out", "tok/s"])
   })
   test("cache tab has sum / read / write rows", () => {
     const cache = STAT_REALTIME_BLOCK.tabs.find((t) => t.id === "cache")!

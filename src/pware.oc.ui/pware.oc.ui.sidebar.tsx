@@ -110,7 +110,7 @@ import {
 } from "./pware.oc.ui.sections.js"
 import { emptyPerf, readPerfSnapshot } from "../pware.oc.perf/pware.oc.perf.reader.js"
 import { PerfPanel } from "../pware.oc.perf/pware.oc.perf.view.js"
-import { rateSparkline, shareBar } from "../pware.oc.perf/pware.oc.perf.charts.js"
+import { rateSparkline, shareBar, smoothSeries } from "../pware.oc.perf/pware.oc.perf.charts.js"
 import { StatRealtimeTimeline } from "../pware.oc.perf/pware.oc.perf.realtimeTimeline.js"
 import { EventDriverSampler } from "../pware.oc.perf/pware.oc.perf.realtimeSampler.js"
 import { readCpuRam } from "../pware.oc.perf/pware.oc.perf.realtimeCpuRam.js"
@@ -152,7 +152,6 @@ import {
   NOW_MS,
   SWITCH_TIMEOUT_MS,
   TICK_MS,
-  TOKEN_RATE_WINDOW_MS,
 } from "../pware.oc.core/pware.oc.core.timing.js"
 import {
   activeFlow,
@@ -161,18 +160,14 @@ import {
   formatAge,
   formatCompact,
   formatDuration,
-  formatTokenRate,
   hottestMark,
   phaseAgeMs,
   pulseAgeMs,
-  pushTokenTick,
-  tokenRate,
   toolFlow,
   toolMark,
   type AgentMark,
   type FlowDir,
   type FlowEntry,
-  type TokenTick,
   type ToolHit,
 } from "../pware.oc.core/pware.oc.core.pulse.js"
 import {
@@ -243,10 +238,9 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   const dimensions = useTerminalDimensions()
   const [liveTools, setLiveTools] = createSignal<Record<string, ToolHit>>({})
   const [liveFiles, setLiveFiles] = createSignal<Record<string, FileView>>({})
-  const [tokenTicks, setTokenTicks] = createSignal<readonly TokenTick[]>([])
   const [rtVersion, setRtVersion] = createSignal(0)
   const [rtTab, setRtTab] = createSignal<StatRealtimeTabId>("tokens")
-  const [rtRow, setRtRow] = createSignal<StatRealtimeSeriesKey>("sum")
+  const [rtRow, setRtRow] = createSignal<StatRealtimeSeriesKey>("avg")
   const [gitTick, setGitTick] = createSignal(0)
   const [switching, setSwitching] = createSignal<{ id: string; at: number } | null>(null)
   const [coldTab, setColdTab] = createSignal<string | null>(null)
@@ -350,7 +344,6 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
       watchedId = id
       setLiveTools({})
       setLiveFiles({})
-      setTokenTicks([])
       source.setSession(id)
       queueMicrotask(hydrateDiff)
     })
@@ -432,7 +425,6 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     const payload = data as Record<string, unknown>
     const tokens = payload.tokens
     if (typeof tokens !== "number" || !Number.isFinite(tokens) || tokens <= 0) return
-    setTokenTicks((prev) => pushTokenTick(prev, Date.now(), tokens, TOKEN_RATE_WINDOW_MS))
     const sessionId = typeof payload.sessionId === "string" && payload.sessionId ? payload.sessionId : props.sessionId
     const kind = payload.kind === "reasoning" ? "reasoning" : "out"
     rtTimeline.ingestEstimate(sessionId, kind, tokens, Date.now())
@@ -842,7 +834,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
       const t = tab()
       const omo = omoPresent()
       const sections: { key: string; want: number; min: number; rank: number }[] = []
-      let fixed = 7 // OES status bar + realtime block (tabs + 3 selector rows) + brand line + top padding
+      let fixed = 7 // OES status+tabs line + realtime 4-row chart area + brand line + top padding
       if (selfDiagActive()) fixed += 1 // self line — only while debug/profile is on
       if (modeLine()) fixed += 1 // debug/profile flag row
       if (modeDirLine()) fixed += 1
@@ -1096,12 +1088,6 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     />
   )
 
-  /** Live token rate — recomputes on each token delta and once a second (decay). */
-  const liveTokenRate = createMemo(() => {
-    now()
-    return tokenRate(tokenTicks(), Date.now(), TOKEN_RATE_WINDOW_MS)
-  })
-
   const rtActiveTab = createMemo(
     () => STAT_REALTIME_BLOCK.tabs.find((t) => t.id === rtTab()) ?? STAT_REALTIME_BLOCK.tabs[0]!,
   )
@@ -1112,7 +1098,11 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     rtVersion()
     return rtTimeline.getTimeline()
   })
-  const rtSeries = createMemo(() => seriesValues(rtHistory(), rtActiveRow().read))
+  const rtSeries = createMemo(() => {
+    const series = seriesValues(rtHistory(), rtActiveRow().read)
+    // avg = the OES bar's old live reading, drawn as a gentle moving average.
+    return rtActiveRow().key === "avg" ? smoothSeries(series, 5) : series
+  })
   const rtSeriesMax = createMemo(() => {
     let max = 0
     for (const v of rtSeries()) {
@@ -1123,7 +1113,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   const rtLines = createMemo(() =>
     rateSparkline(rtSeries(), {
       width: Math.max(8, oes().lineMax - 12),
-      height: 3,
+      height: 4,
       charset: "braille",
     }),
   )
@@ -1176,13 +1166,12 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
       <Show when={modeDirLine()}>
         <text fg={colors().textMuted}>{modeDirLine()}</text>
       </Show>
-      <OesStatusRow
-        status={tabStatusFor(tab())}
-        rate={formatTokenRate(liveTokenRate())}
-        colors={colors()}
-        glyphFrame={glyphFrame}
-      />
       <box flexDirection="row" gap={1}>
+        <OesStatusRow
+          status={tabStatusFor(tab())}
+          colors={colors()}
+          glyphFrame={glyphFrame}
+        />
         <For each={STAT_REALTIME_BLOCK.tabs}>
           {(t) => (
             <ClickText

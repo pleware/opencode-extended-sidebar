@@ -93,7 +93,6 @@ export function useReveal(step: number): RevealState {
  */
 export function OesStatusRow(props: {
   status: TabStatus
-  rate: string
   colors: ThemeColors
   glyphFrame: () => number
 }): JSX.Element {
@@ -112,9 +111,7 @@ export function OesStatusRow(props: {
         ? props.colors.primary || props.colors.text
         : props.colors.textMuted,
   )
-  const text = createMemo(
-    () => `OES ${glyph()}${line().label ? ` ${line().label}` : ""}${props.rate ? `  ${props.rate}` : ""}`,
-  )
+  const text = createMemo(() => `OES ${glyph()}${line().label ? ` ${line().label}` : ""}`)
   return <text fg={fg()}>{text()}</text>
 }
 
