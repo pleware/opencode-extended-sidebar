@@ -153,6 +153,7 @@ import {
   applyFlow,
   composeMark,
   formatAge,
+  formatCompact,
   formatDuration,
   formatTokenRate,
   hottestMark,
@@ -1058,13 +1059,33 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     rtVersion()
     return rtTimeline.getTimeline()
   })
+  const rtSeries = createMemo(() => seriesValues(rtHistory(), rtActiveRow().read))
+  const rtSeriesMax = createMemo(() => {
+    let max = 0
+    for (const v of rtSeries()) {
+      if (Number.isFinite(v) && v > max) max = v
+    }
+    return max
+  })
   const rtLines = createMemo(() =>
-    rateSparkline(seriesValues(rtHistory(), rtActiveRow().read), {
-      width: Math.max(8, oes().lineMax - 8),
+    rateSparkline(rtSeries(), {
+      width: Math.max(8, oes().lineMax - 12),
       height: 3,
       charset: "braille",
     }),
   )
+  /** Axis column beside the chart: dynamic max on top, the chart's 0 baseline on the bottom. */
+  const rtAxisLines = createMemo(() => {
+    const n = rtLines().length
+    if (n === 0) return []
+    const pad = (s: string): string => s.padStart(3)
+    // CPU is a 0–100 % reading; the axis reads it as a 0.0–1.0 fraction.
+    const top = rtActiveRow().key === "cpu" ? rtSeriesMax() / 100 : rtSeriesMax()
+    const out = [pad(formatCompact(top))]
+    for (let i = 1; i < n - 1; i += 1) out.push("   ")
+    out.push(pad("0"))
+    return out
+  })
 
   /** Live self-cost line — reads the tick clock so the Solid insert re-evaluates every tick. */
   const selfLine = createMemo(() => {
@@ -1142,6 +1163,11 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
         <box flexDirection="column">
           <For each={rtLines()}>
             {(line) => <text fg={colors().success}>{line || " "}</text>}
+          </For>
+        </box>
+        <box flexDirection="column" gap={0}>
+          <For each={rtAxisLines()}>
+            {(line) => <text fg={colors().textMuted}>{line}</text>}
           </For>
         </box>
         <box flexDirection="column" gap={0}>

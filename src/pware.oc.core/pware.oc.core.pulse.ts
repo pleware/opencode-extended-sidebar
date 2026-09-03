@@ -279,6 +279,28 @@ export function formatTokens(n: number | null | undefined): string {
   return String(Math.round(v))
 }
 
+/** Compact ≤3-char axis label for a sparkline edge: 100 → "100", 1000 → "1k", 0 → "0". */
+export function formatCompact(n: number | null | undefined): string {
+  if (n == null || !Number.isFinite(n)) return "0"
+  const v = Math.max(0, n)
+  if (v < 10) {
+    const s = (Math.round(v * 10) / 10).toString()
+    return s.length <= 3 ? s : String(Math.round(v))
+  }
+  if (v < 1000) return String(Math.round(v))
+  const units: ReadonlyArray<readonly [number, string]> = [
+    [1e12, "T"],
+    [1e9, "G"],
+    [1e6, "M"],
+    [1e3, "k"],
+  ]
+  for (const [div, suffix] of units) {
+    const m = Math.round(v / div)
+    if (m >= 1) return `${m}${suffix}`
+  }
+  return String(Math.round(v))
+}
+
 /** Models header: ↑in ↓out ∴reasoning. Reasoning omitted when zero. */
 export function tokenSummary(tokens: {
   tokensIn: number

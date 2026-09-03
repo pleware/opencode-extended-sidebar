@@ -6,6 +6,7 @@ import {
   deltaTextFromEvent,
   estimateTokens,
   flowFromEvent,
+  formatCompact,
   formatDuration,
   formatSpan,
   formatTokenRate,
@@ -48,6 +49,30 @@ describe("formatTokens", () => {
     expect(formatTokens(1_500)).toBe("1.5k")
     expect(formatTokens(12_000)).toBe("12k")
     expect(formatTokens(1_500_000)).toBe("1.5M")
+  })
+})
+
+describe("formatCompact", () => {
+  test("at most three characters: 100 → 100, 1000 → 1k, 0 → 0", () => {
+    expect(formatCompact(null)).toBe("0")
+    expect(formatCompact(0)).toBe("0")
+    expect(formatCompact(100)).toBe("100")
+    expect(formatCompact(1000)).toBe("1k")
+    expect(formatCompact(9999)).toBe("10k")
+  })
+  test("small fractional values keep a single decimal", () => {
+    expect(formatCompact(0.5)).toBe("0.5")
+    expect(formatCompact(9.9)).toBe("9.9")
+  })
+  test("k / M / G / T scale ladder", () => {
+    expect(formatCompact(1_500_000)).toBe("2M")
+    expect(formatCompact(1e9)).toBe("1G")
+    expect(formatCompact(1e12)).toBe("1T")
+    expect(formatCompact(5e11)).toBe("1T")
+  })
+  test("negative or NaN clamp to 0", () => {
+    expect(formatCompact(-5)).toBe("0")
+    expect(formatCompact(Number.NaN)).toBe("0")
   })
 })
 
