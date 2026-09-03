@@ -1,5 +1,6 @@
 # Changelog
 
+- **0.2.68** (2026-09-03) Extract the inline work-state and canonical status literals behind constants: new WORK_STATE_* values in the omo planStatus module (the WorkState type now deriv.
 - **0.2.67** (2026-09-03) Calibrate the sidebar row-plan chrome from the opencode TUI source: split PANEL_CHROME into the measured 6-row host frame plus a title reserve, and drop the dea.
 - **0.2.66** (2026-09-03) Fold D:/ vs D:\ and git-bash /d/ path spellings through shared foldPathKey/samePath helpers and compare the realtime session.updated project filter through same.
 - **0.2.65** (2026-09-03) Flank the realtime braille chart with a compact axis column showing the recent max on top and the 0 baseline below, via a <=3-char formatCompact label.

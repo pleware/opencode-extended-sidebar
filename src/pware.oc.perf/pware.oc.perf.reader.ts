@@ -13,6 +13,7 @@ import { formatDuration, formatWhen, shortToolLabel, toEpochMs } from "../pware.
 import { openReadonlyDb, withDbRead, type SqlDb } from "../pware.oc.core/pware.oc.core.sqlite.js"
 import { PART_TYPE_REASONING, PART_TYPE_TEXT, PART_TYPE_TOOL } from "../pware.oc.core/constants/pware.oc.core.constants.partType.js"
 import { TOOL_QUESTION } from "../pware.oc.core/constants/pware.oc.core.constants.toolName.js"
+import { STATUS_ERROR } from "../pware.oc.core/constants/pware.oc.core.constants.status.js"
 import {
   PERF_LOG_KIND_MODELS,
   PERF_LOG_KIND_TIME,
@@ -423,7 +424,7 @@ export function collectPerfLogRows(
       const start = toEpochMs(part.tstart)
       const end = toEpochMs(part.tend)
       const ms = span(start, end)
-      const failed = (part.status || "").toLowerCase() === "error"
+      const failed = (part.status || "").toLowerCase() === STATUS_ERROR
       const { tool, call } = toolLogCall(part)
       rows.push({
         at: start,
@@ -472,7 +473,7 @@ function toolSummary(rows: PerfLogRow[]): { headers: string[]; rows: string[][] 
     const agg = by.get(key) ?? { tool, call, count: 0, errors: 0, totalMs: 0 }
     agg.count += 1
     agg.totalMs += row.ms
-    if (row.status === "error") agg.errors += 1
+    if (row.status === STATUS_ERROR) agg.errors += 1
     by.set(key, agg)
   }
   const list = [...by.values()]
@@ -641,7 +642,7 @@ function collectParts(rows: PartRow[]): {
     const start = toEpochMs(row.tstart)
     const end = toEpochMs(row.tend)
     const ms = span(start, end)
-    const failed = (row.status || "").toLowerCase() === "error"
+    const failed = (row.status || "").toLowerCase() === STATUS_ERROR
     b.tools += 1
     b.toolMs += ms
     if (failed) b.toolErrors += 1

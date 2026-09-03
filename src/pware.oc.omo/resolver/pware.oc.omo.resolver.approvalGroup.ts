@@ -17,6 +17,8 @@ import {
   PLAN_STATUS_APPROVED,
   PLAN_STATUS_DONE,
   PLAN_STATUS_DRAFTING,
+  WORK_STATE_ABSENT,
+  WORK_STATE_COMPLETED,
   type WorkState,
 } from "../../pware.oc.omo/constants/pware.oc.omo.constants.planStatus.js"
 
@@ -60,8 +62,8 @@ export function planWorkDone(
   todosDone: boolean,
 ): boolean {
   const s = (status ?? "").toLowerCase()
-  if (workState === "completed") return true
-  if (workState === "absent" && todosDone && s === PLAN_STATUS_APPROVED) return true
+  if (workState === WORK_STATE_COMPLETED) return true
+  if (workState === WORK_STATE_ABSENT && todosDone && s === PLAN_STATUS_APPROVED) return true
   return false
 }
 

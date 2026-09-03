@@ -28,6 +28,7 @@ import {
   QUESTION_KIND_QUESTION,
   type OpenQuestionKind,
 } from "../pware.oc.opencode/constants/pware.oc.opencode.constants.questionKind.js"
+import { SESSION_STATUS_RUNNING } from "../pware.oc.opencode/constants/pware.oc.opencode.constants.sessionStatus.js"
 import {
   START_WORK_MAKE_PR,
   START_WORK_PLAIN,
@@ -170,7 +171,7 @@ export function toRunningItems(
   }[],
 ): MyWorkItem[] {
   return sessions
-    .filter((s) => s.status === "running")
+    .filter((s) => s.status === SESSION_STATUS_RUNNING)
     .map((s) => ({
       kind: MY_WORK_GROUP_RUNNING,
       sessionId: s.id,

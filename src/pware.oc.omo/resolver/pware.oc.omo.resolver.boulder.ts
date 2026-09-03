@@ -26,7 +26,11 @@ import {
   STATUS_UNKNOWN,
 } from "../../pware.oc.core/constants/pware.oc.core.constants.status.js"
 import { BOULDER_STATUS_PENDING, BOULDER_STATUS_RUNNING } from "../constants/pware.oc.omo.constants.boulderStatus.js"
-import type { WorkState } from "../constants/pware.oc.omo.constants.planStatus.js"
+import {
+  WORK_STATE_COMPLETED,
+  WORK_STATE_NOT_COMPLETED,
+  type WorkState,
+} from "../constants/pware.oc.omo.constants.planStatus.js"
 
 export { workIsTerminal }
 export { toWorkLabel as workStatusLabel }
@@ -437,7 +441,7 @@ export function planWorkStateByPlanName(
   if (!projectRoot) return out
   for (const w of readOmo(projectRoot).works) {
     if (!w.name || out.has(w.name)) continue
-    out.set(w.name, normalizeStatus(w.status) === STATUS_COMPLETED ? "completed" : "not-completed")
+    out.set(w.name, normalizeStatus(w.status) === STATUS_COMPLETED ? WORK_STATE_COMPLETED : WORK_STATE_NOT_COMPLETED)
   }
   return out
 }

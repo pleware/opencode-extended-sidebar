@@ -29,6 +29,7 @@ import {
   SESSION_STATE_UNKNOWN,
   type SessionState,
 } from "../pware.oc.opencode/constants/pware.oc.opencode.constants.sessionStatus.js"
+import { STATUS_COMPLETED } from "../pware.oc.core/constants/pware.oc.core.constants.status.js"
 import type { ApprovalItem } from "../pware.oc.omo/resolver/pware.oc.omo.resolver.plan.js"
 
 /**
@@ -61,7 +62,7 @@ function blank(items: readonly ApprovalItem[]): EnrichedApproval[] {
 
 function sessionTodosDone(db: SqlDb, sessionId: string): boolean {
   const todos = listTodos(db, sessionId)
-  return todos.length > 0 && todos.every((t) => t.status === "completed")
+  return todos.length > 0 && todos.every((t) => t.status === STATUS_COMPLETED)
 }
 
 export function enrichApprovalSessionStates(

@@ -21,7 +21,7 @@ import {
   DOC_KIND_PROOF,
   type DocKind,
 } from "../constants/pware.oc.omo.constants.docKind.js"
-import { PLAN_STATUS_DONE, type WorkState } from "../constants/pware.oc.omo.constants.planStatus.js"
+import { PLAN_STATUS_DONE, WORK_STATE_COMPLETED, type WorkState } from "../constants/pware.oc.omo.constants.planStatus.js"
 import { findOmoWatchDirs, planWorkStateByPlanName } from "./pware.oc.omo.resolver.boulder.js"
 import { approvalName, parsePlanStatus } from "./pware.oc.omo.resolver.plan.js"
 import { sessionForOmoFile } from "./pware.oc.omo.resolver.planFile.js"
@@ -167,7 +167,7 @@ function planStatusOf(
   }
   const status = parsePlanStatus(text)
   if (!status) return null
-  if (workStates.get(approvalName(rel)) === "completed") return PLAN_STATUS_DONE
+  if (workStates.get(approvalName(rel)) === WORK_STATE_COMPLETED) return PLAN_STATUS_DONE
   return status
 }
 
