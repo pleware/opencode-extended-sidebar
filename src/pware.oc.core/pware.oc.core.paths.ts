@@ -191,6 +191,19 @@ export function relativeProjectPath(
   return resolveProjectFile(projectRoot, filePath)?.rel ?? null
 }
 
+/** Read a JSON file as a plain object, soft-failing to null (missing / invalid / non-object). */
+export function readJson(p: string): Record<string, unknown> | null {
+  try {
+    if (!fs.existsSync(p)) return null
+    const raw = JSON.parse(fs.readFileSync(p, "utf8"))
+    return raw && typeof raw === "object" && !Array.isArray(raw)
+      ? (raw as Record<string, unknown>)
+      : null
+  } catch {
+    return null
+  }
+}
+
 export function fileStamp(p: string | null | undefined): string {
   if (!p) return "0"
   try {

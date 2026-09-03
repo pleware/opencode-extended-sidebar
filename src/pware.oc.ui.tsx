@@ -23,11 +23,6 @@ type NwLayer = {
   commands: readonly NwCommand[]
 }
 
-export function resolveLocationDirectory(api: Parameters<TuiPlugin>[0]): string | null {
-  const dir = api.state?.path?.directory
-  return typeof dir === "string" && dir.trim() ? dir : null
-}
-
 export function nwCommandLayer(onPick: () => void): NwLayer {
   return {
     priority: 10,
@@ -50,7 +45,7 @@ export function nwCommandLayer(onPick: () => void): NwLayer {
 function tryRegisterNwCommand(api: Parameters<TuiPlugin>[0]): (() => void) | null {
   try {
     return api.keymap.registerLayer(
-      nwCommandLayer(() => openNewSessionPrompt(api, resolveLocationDirectory(api))),
+      nwCommandLayer(() => openNewSessionPrompt(api)),
     )
   } catch {
   }

@@ -18,37 +18,34 @@ import {
   FoldHeader,
   kvRead,
   kvWrite,
+  toneColor,
   type ThemeColors,
 } from "./pware.oc.ui.chrome.js"
 import {
+  defaultBodyTone,
+  directionGlyph,
   flowBlinkOn,
-  rowGlyphs,
   spinnerFrame,
+  stateGlyph,
+  type GlyphSpec,
+  type ToneKey,
 } from "./pware.oc.ui.glyphs.js"
 import { profile } from "../pware.oc.core/pware.oc.core.debug.js"
 import { moreRevealVisible, sliceShown } from "../pware.oc.core/pware.oc.core.layout.js"
 import { statusBarLine, type TabStatus } from "../pware.oc.core/pware.oc.core.status.js"
 import {
-  flowColor,
   formatTokens,
   formatUsd,
   type AgentMark,
   type FlowDir,
 } from "../pware.oc.core/pware.oc.core.pulse.js"
 import {
-  FLOW_RECV,
-  FLOW_TOOL,
-  FLOW_WAIT,
-  PULSE_LIVE,
-  PULSE_STALE,
-} from "../pware.oc.core/constants/pware.oc.core.constants.pulse.js"
-import { STATUS_ERROR } from "../pware.oc.core/constants/pware.oc.core.constants.status.js"
-import {
   ROW_KIND_AGENT,
   ROW_KIND_FILE,
   ROW_KIND_GROUP,
   type RowKind,
 } from "../pware.oc.core/constants/pware.oc.core.constants.rowKind.js"
+import { MARK_READY } from "../pware.oc.core/constants/pware.oc.core.constants.pulse.js"
 import { formatDiffStat, shortFileName } from "../pware.oc.opencode/pware.oc.opencode.files.js"
 
 export type { RowKind }
@@ -189,15 +186,19 @@ export function RowList<T>(props: {
 
 export type RowData = {
   kind: RowKind
-  mark: AgentMark
+  /** Live state source — drives the default state glyph and body tone. */
+  mark?: AgentMark
   name: string
-  glyph?: string
-  /** Secondary glyph drawn after `glyph` (or the mark glyph), same colour. */
-  glyph2?: string
+  /** Overrides the primary glyph entirely (char + tone). */
+  glyph?: GlyphSpec
+  /** Future tertiary slot, rendered after the direction column. */
+  glyph2?: GlyphSpec
   tokens?: number | null
   cost?: number | null
   title?: string
   suffix?: string
+  /** Muted second line drawn under the row — e.g. a question's dismissal/error reason. */
+  subline?: string
   diff?: { additions: number; deletions: number }
   current?: boolean
   flow?: FlowDir | null
@@ -205,25 +206,9 @@ export type RowData = {
   dirSlot?: boolean
   /** Indent one glyph column — a nested child under a group header. */
   indent?: boolean
-  /** Queued work — rendered in warning colour with a clock glyph, not the idle dot. */
-  waiting?: boolean
+  /** Override the body text tone (defaults from `defaultBodyTone`). */
+  bodyTone?: ToneKey | null
   onSelect?: () => void
-}
-
-function markColor(
-  mark: AgentMark,
-  colors: ThemeColors,
-  current = false,
-  flow?: FlowDir | null,
-  waiting = false,
-): string {
-  if (waiting) return colors.warning || colors.text
-  if (flow === FLOW_RECV || flow === FLOW_WAIT || flow === FLOW_TOOL) return flowColor(flow, colors)
-  if (mark === PULSE_LIVE) return colors.success
-  if (mark === PULSE_STALE) return colors.warning || colors.text
-  if (mark === STATUS_ERROR) return colors.error || colors.text
-  if (current) return colors.primary || colors.text
-  return colors.textMuted
 }
 
 export function clip(s: string, max: number): string {
@@ -253,27 +238,26 @@ export function AgentLine(props: RowData & {
   glyphFrame?: () => number
   colors: ThemeColors
 }): JSX.Element {
-  const directional = () =>
-    props.flow === FLOW_RECV || props.flow === FLOW_WAIT || props.flow === FLOW_TOOL
-  const lit = () => !directional() || flowBlinkOn(props.frame?.() ?? 0)
-  const glyphs = () =>
-    rowGlyphs(props.mark, props.glyphFrame?.() ?? props.frame?.() ?? 0, props.flow)
-  const stateFg = () =>
-    markColor(props.mark, props.colors, props.current, null, props.waiting)
-  const dirFg = () =>
-    props.flow && flowBlinkOn(props.frame?.() ?? 0)
-      ? flowColor(props.flow, props.colors)
-      : props.colors.textMuted
-  const glyphFg = () =>
-    lit()
-      ? markColor(props.mark, props.colors, props.current, props.flow, props.waiting)
-      : props.colors.textMuted
-  const bodyFg = () =>
-    props.kind === ROW_KIND_FILE
-      ? props.colors.text
-      : props.kind === ROW_KIND_GROUP
-        ? props.colors.textMuted
-        : markColor(props.mark, props.colors, props.current, props.flow, props.waiting)
+  const mark = () => props.mark ?? MARK_READY
+  const frame = () => props.glyphFrame?.() ?? props.frame?.() ?? 0
+  const primary = () => props.glyph ?? stateGlyph(mark(), frame())
+  const dir = () =>
+    props.dirSlot
+      ? directionGlyph(props.flow ?? null) ?? { char: " ", tone: "textMuted" as ToneKey }
+      : null
+  const primaryTone = (): ToneKey => {
+    const spec = primary()
+    const tone = spec.tone
+    if (props.glyph) return tone
+    return props.current && tone === "textMuted" ? "primary" : tone
+  }
+  const dirFg = () => {
+    const spec = dir()
+    if (!spec) return undefined
+    if (spec.blink && !flowBlinkOn(props.frame?.() ?? 0)) return toneColor("textMuted", props.colors)
+    return toneColor(spec.tone, props.colors)
+  }
+  const bodyTone = () => props.bodyTone ?? defaultBodyTone(props.kind, props.mark, Boolean(props.current))
   const rest = () => {
     const max = Math.max(0, props.lineMax - 2)
     const suffix = props.suffix?.trim() ?? ""
@@ -299,31 +283,36 @@ export function AgentLine(props: RowData & {
     return suffix ? `${body} ${suffix}` : body
   }
   return profile("row", () => (
-    <box flexDirection="row" onMouseUp={props.onSelect}>
-      <Show when={props.indent}>
-        <text>{`  `}</text>
-      </Show>
-      <text fg={stateFg()}>{`${props.glyph ?? glyphs().state} `}</text>
-      <Show when={props.dirSlot}>
-        <text fg={dirFg()}>{`${glyphs().dir ?? " "} `}</text>
-      </Show>
-      <Show when={props.glyph2}>
-        <text fg={glyphFg()}>{`${props.glyph2} `}</text>
-      </Show>
-      <ClickText
-        fg={bodyFg()}
-        bold={Boolean(props.current)}
-        underline={Boolean(props.onSelect)}
-      >
-        {rest()}
-      </ClickText>
-      <Show when={Boolean(props.diff && (props.diff.additions > 0 || props.diff.deletions > 0))}>
-        <text> </text>
-        <DiffStat
-          additions={props.diff?.additions ?? 0}
-          deletions={props.diff?.deletions ?? 0}
-          colors={props.colors}
-        />
+    <box flexDirection="column" gap={0}>
+      <box flexDirection="row" onMouseUp={props.onSelect}>
+        <Show when={props.indent}>
+          <text>{`  `}</text>
+        </Show>
+        <text fg={toneColor(primaryTone(), props.colors)}>{`${primary().char} `}</text>
+        <Show when={props.dirSlot}>
+          <text fg={dirFg()}>{`${dir()?.char ?? " "} `}</text>
+        </Show>
+        <Show when={props.glyph2}>
+          <text fg={toneColor(props.glyph2!.tone, props.colors)}>{`${props.glyph2!.char} `}</text>
+        </Show>
+        <ClickText
+          fg={toneColor(bodyTone(), props.colors)}
+          bold={Boolean(props.current)}
+          underline={Boolean(props.onSelect)}
+        >
+          {rest()}
+        </ClickText>
+        <Show when={Boolean(props.diff && (props.diff.additions > 0 || props.diff.deletions > 0))}>
+          <text> </text>
+          <DiffStat
+            additions={props.diff?.additions ?? 0}
+            deletions={props.diff?.deletions ?? 0}
+            colors={props.colors}
+          />
+        </Show>
+      </box>
+      <Show when={props.subline}>
+        <text fg={props.colors.textMuted}>{`  ${clip(props.subline ?? "", Math.max(0, props.lineMax - 2))}`}</text>
       </Show>
     </box>
   ))

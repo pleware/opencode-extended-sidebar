@@ -7,7 +7,7 @@
  */
 import fs from "node:fs"
 import path from "node:path"
-import { canonicalizePath, fileStamp, resolveProjectFile } from "../../pware.oc.core/pware.oc.core.paths.js"
+import { canonicalizePath, fileStamp, readJson, resolveProjectFile } from "../../pware.oc.core/pware.oc.core.paths.js"
 import { profile } from "../../pware.oc.core/pware.oc.core.debug.js"
 import { composeMark, formatAge, pulseAgeMs, stripSessionPrefix, toEpochMs, type AgentMark } from "../../pware.oc.core/pware.oc.core.pulse.js"
 import {
@@ -148,18 +148,29 @@ type RawBoulder = RawWork & {
   works?: Record<string, RawWork>
 }
 
-export function findBoulder(projectRoot: string): string | null {
-  for (const rel of [".omo/boulder.json", ".sisyphus/boulder.json"]) {
-    const p = path.join(projectRoot, rel)
+/** The two OMO layout roots, newest-first: `.omo` and the legacy `.sisyphus`. */
+export const OMO_DIRS = [".omo", ".sisyphus"] as const
+
+/** An OMO layout root directory name. */
+export type OmoDir = (typeof OMO_DIRS)[number]
+
+/** First existing `<root>/<omoDir>/<...rel>` across the OMO dirs, or null. */
+export function firstOmoPath(root: string, ...rel: string[]): string | null {
+  for (const dir of OMO_DIRS) {
+    const p = path.join(root, dir, ...rel)
     if (fs.existsSync(p)) return p
   }
   return null
 }
 
+export function findBoulder(projectRoot: string): string | null {
+  return firstOmoPath(projectRoot, "boulder.json")
+}
+
 export function findOmoWatchDirs(projectRoot: string): string[] {
   const out: string[] = []
-  for (const rel of [".omo", ".sisyphus"]) {
-    const p = path.join(projectRoot, rel)
+  for (const dir of OMO_DIRS) {
+    const p = path.join(projectRoot, dir)
     if (fs.existsSync(p)) out.push(p)
   }
   return out
@@ -167,10 +178,7 @@ export function findOmoWatchDirs(projectRoot: string): string[] {
 
 /** Installed omo means its config marker — `.omo/omo.jsonc` or `.sisyphus/omo.jsonc`. */
 export function isOmoPresent(projectRoot: string): boolean {
-  for (const rel of [".omo", ".sisyphus"]) {
-    if (fs.existsSync(path.join(projectRoot, rel, "omo.jsonc"))) return true
-  }
-  return false
+  return firstOmoPath(projectRoot, "omo.jsonc") !== null
 }
 
 /**
@@ -185,8 +193,8 @@ export function omoStamp(projectRoot?: string | null): string {
     const parts: string[] = []
     const boulderPath = findBoulder(root)
     if (boulderPath) parts.push(fileStamp(boulderPath))
-    for (const rel of [".omo/omo.jsonc", ".sisyphus/omo.jsonc"]) {
-      const p = path.join(root, rel)
+    for (const dir of OMO_DIRS) {
+      const p = path.join(root, dir, "omo.jsonc")
       if (fs.existsSync(p)) parts.push(fileStamp(p))
     }
     return parts.join("|") || "0"
@@ -443,12 +451,8 @@ function readOmoInner(projectRoot: string): OmoSnapshot {
     return emptyOmo()
   }
 
-  let raw: RawBoulder
-  try {
-    raw = JSON.parse(fs.readFileSync(boulderPath, "utf8")) as RawBoulder
-  } catch {
-    return { ...emptyOmo(), present: true, boulderPath, stamp: fileStamp(boulderPath) }
-  }
+  const raw = readJson(boulderPath) as RawBoulder | null
+  if (!raw) return { ...emptyOmo(), present: true, boulderPath, stamp: fileStamp(boulderPath) }
 
   const works = collectWorks(raw, root)
   const active = works.find((w) => w.current) ?? null

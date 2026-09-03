@@ -2,7 +2,7 @@
 /** Perf tab: where a session's wall clock goes, per model and per tool. */
 import { createMemo, For, Show, type JSX } from "solid-js"
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
-import { ClickText, type ThemeColors } from "../pware.oc.ui/pware.oc.ui.chrome.js"
+import { ClickText, toneColor, type ThemeColors } from "../pware.oc.ui/pware.oc.ui.chrome.js"
 import { FoldSection, RowList, useFold, useReveal } from "../pware.oc.ui/pware.oc.ui.sections.js"
 import { openPerfCharts, openPerfLog } from "../pware.oc.ui/pware.oc.ui.menudialogs.js"
 import type { PerfLogKind } from "./pware.oc.perf.reader.js"
@@ -12,7 +12,7 @@ import {
   type SessionPerf,
   type ToolPerf,
 } from "./pware.oc.perf.reader.js"
-import { THINK_GLYPH, flowGlyph, spinnerFrame } from "../pware.oc.ui/pware.oc.ui.glyphs.js"
+import { THINK_GLYPH, directionGlyph, spinnerFrame, type GlyphSpec } from "../pware.oc.ui/pware.oc.ui.glyphs.js"
 import {
   PERF_LOG_KIND_MODELS,
   PERF_LOG_KIND_TIME,
@@ -29,7 +29,6 @@ import {
   FLOW_WAIT,
 } from "../pware.oc.core/constants/pware.oc.core.constants.pulse.js"
 import {
-  flowColor,
   formatDuration,
   formatPercent,
   formatRate,
@@ -50,19 +49,13 @@ const KV_FOLD_TOOLS = "oes.fold.perf.tools"
 const KV_FOLD_TREND = "oes.fold.perf.trend"
 const KV_FOLD_HISTORY = "oes.fold.perf.history"
 
-const PHASES: Array<{ key: PerfPhase; glyph: string; label: string }> = [
-  { key: PERF_PHASE_WAIT, glyph: flowGlyph(FLOW_WAIT), label: "wait" },
-  { key: PERF_PHASE_THINK, glyph: THINK_GLYPH, label: "think" },
-  { key: PERF_PHASE_RECV, glyph: flowGlyph(FLOW_RECV), label: "recv" },
-  { key: PERF_PHASE_TOOL, glyph: flowGlyph(FLOW_TOOL), label: "tools" },
-  { key: PERF_PHASE_IDLE, glyph: "·", label: "idle" },
+const PHASES: Array<{ key: PerfPhase; spec: GlyphSpec; label: string }> = [
+  { key: PERF_PHASE_WAIT, spec: directionGlyph(FLOW_WAIT)!, label: "wait" },
+  { key: PERF_PHASE_THINK, spec: { char: THINK_GLYPH, tone: "primary" }, label: "think" },
+  { key: PERF_PHASE_RECV, spec: directionGlyph(FLOW_RECV)!, label: "recv" },
+  { key: PERF_PHASE_TOOL, spec: directionGlyph(FLOW_TOOL)!, label: "tools" },
+  { key: PERF_PHASE_IDLE, spec: { char: "·", tone: "textMuted" }, label: "idle" },
 ]
-
-function phaseFg(phase: PerfPhase, colors: ThemeColors): string {
-  if (phase === PERF_PHASE_WAIT || phase === PERF_PHASE_RECV || phase === PERF_PHASE_TOOL) return flowColor(phase, colors)
-  if (phase === PERF_PHASE_THINK) return colors.primary || colors.text
-  return colors.textMuted
-}
 
 function MetricRow(props: {
   glyph: string
@@ -100,8 +93,7 @@ function MetricRow(props: {
 }
 
 function PhaseRow(props: {
-  phase: PerfPhase
-  glyph: string
+  spec: GlyphSpec
   label: string
   ms: number
   share: number | null
@@ -109,12 +101,12 @@ function PhaseRow(props: {
   lineMax: number
   onSelect?: () => void
 }): JSX.Element {
-  const fg = () => phaseFg(props.phase, props.colors)
+  const fg = () => toneColor(props.spec.tone, props.colors)
   // Fixed columns keep every bar starting and ending on the same screen column.
   const barWidth = () => Math.max(4, props.lineMax - 18)
   return (
     <box flexDirection="row" onMouseUp={props.onSelect}>
-      <text fg={fg()}>{`${props.glyph} `}</text>
+      <text fg={fg()}>{`${props.spec.char} `}</text>
       <ClickText fg={props.colors.textMuted} underline={Boolean(props.onSelect)}>
         {props.label.padEnd(5)}
       </ClickText>
@@ -311,7 +303,7 @@ export function PerfPanel(props: PerfPanelProps): JSX.Element {
     const dir = props.livePhase
     if (!dir) return null
     const label = dir === FLOW_WAIT ? "wait" : dir === FLOW_RECV ? "recv" : "tool"
-    const fg = flowColor(dir, props.colors)
+    const fg = toneColor(directionGlyph(dir)!.tone, props.colors)
     return { label, fg, ms: props.livePhaseMs }
   }
 
@@ -372,8 +364,7 @@ export function PerfPanel(props: PerfPanelProps): JSX.Element {
             <For each={phases()}>
               {(p) => (
                 <PhaseRow
-                  phase={p.key}
-                  glyph={p.glyph}
+                  spec={p.spec}
                   label={p.label}
                   ms={p.ms}
                   share={p.ms / wall()}

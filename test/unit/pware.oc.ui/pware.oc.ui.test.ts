@@ -1,26 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { nwCommandLayer, resolveLocationDirectory } from "../../../src/pware.oc.ui.js"
-
-describe("resolveLocationDirectory", () => {
-  test("returns state.path.directory when present", () => {
-    const api = {
-      state: { path: { directory: "/repo/app" } },
-    } as unknown as Parameters<typeof resolveLocationDirectory>[0]
-    expect(resolveLocationDirectory(api)).toBe("/repo/app")
-  })
-
-  test("returns null when directory is blank", () => {
-    const api = {
-      state: { path: { directory: "" } },
-    } as unknown as Parameters<typeof resolveLocationDirectory>[0]
-    expect(resolveLocationDirectory(api)).toBeNull()
-  })
-
-  test("returns null when no directory is available", () => {
-    const api = {} as unknown as Parameters<typeof resolveLocationDirectory>[0]
-    expect(resolveLocationDirectory(api)).toBeNull()
-  })
-})
+import { nwCommandLayer } from "../../../src/pware.oc.ui.js"
 
 describe("nwCommandLayer", () => {
   test("builds a palette/slash command with native keymap fields", async () => {

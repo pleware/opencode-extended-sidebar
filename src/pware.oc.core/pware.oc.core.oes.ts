@@ -2,9 +2,8 @@
  * oes.json — OpenCode Extended Sidebar options.
  * Merge: plugin defaults < ~/.config/opencode/oes.json < <project>/oes.json
  */
-import fs from "node:fs"
 import path from "node:path"
-import { fileStamp, getOpenCodeConfigDir, pluginRoot } from "./pware.oc.core.paths.js"
+import { fileStamp, getOpenCodeConfigDir, pluginRoot, readJson } from "./pware.oc.core.paths.js"
 import { createStampCache } from "./pware.oc.core.cache.js"
 
 export type OesOptions = {
@@ -25,15 +24,6 @@ export type OesOptions = {
   toolRows: number
   /** Tool-call history kept for the feed's `… +N more` revealer. Distinct from `toolRows`. */
   toolFetch: number
-  /** Per-chart options, keyed by chart. `rate` is the OES status-bar token-rate sparkline. */
-  charts: {
-    rate: {
-      /** How often the rate sparkline samples the token rate (ms). */
-      sampleMs: number
-      /** How much rate-sparkline history is kept (ms). */
-      windowMs: number
-    }
-  }
 }
 
 export const OES_DEFAULTS: OesOptions = {
@@ -47,12 +37,6 @@ export const OES_DEFAULTS: OesOptions = {
   skipGitignore: false,
   toolRows: 5,
   toolFetch: 20,
-  charts: {
-    rate: {
-      sampleMs: 55,
-      windowMs: 240_000,
-    },
-  },
 }
 
 function pluginOesPath(): string {
@@ -64,17 +48,11 @@ function clamp(n: unknown, min: number, max: number, fallback: number): number {
   return Math.round(Math.min(max, Math.max(min, n)))
 }
 
-/** Non-array object, else `{}` — safe nested lookup for `charts.rate`. */
-function asRecord(v: unknown): Record<string, unknown> {
-  return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {}
-}
-
 /** Merge one oes.json object onto a base. Exported for tests. */
 export function pick(raw: Record<string, unknown> | null, base: OesOptions): OesOptions {
   if (!raw) return base
   const toolRows = clamp(raw.toolRows, 3, 20, base.toolRows)
   const sessionRows = clamp(raw.sessionRows, 2, 12, base.sessionRows)
-  const rate = asRecord(asRecord(raw.charts).rate)
   return {
     fileRows: clamp(raw.fileRows, 3, 20, base.fileRows),
     lineMax: clamp(raw.lineMax, 20, 64, base.lineMax),
@@ -86,24 +64,6 @@ export function pick(raw: Record<string, unknown> | null, base: OesOptions): Oes
     skipGitignore: typeof raw.skipGitignore === "boolean" ? raw.skipGitignore : base.skipGitignore,
     toolRows,
     toolFetch: clamp(raw.toolFetch, toolRows, 80, base.toolFetch),
-    charts: {
-      rate: {
-        sampleMs: clamp(rate.sampleMs, 20, 1_000, base.charts.rate.sampleMs),
-        windowMs: clamp(rate.windowMs, 5_000, 600_000, base.charts.rate.windowMs),
-      },
-    },
-  }
-}
-
-function readJson(p: string): Record<string, unknown> | null {
-  try {
-    if (!fs.existsSync(p)) return null
-    const raw = JSON.parse(fs.readFileSync(p, "utf8"))
-    return raw && typeof raw === "object" && !Array.isArray(raw)
-      ? (raw as Record<string, unknown>)
-      : null
-  } catch {
-    return null
   }
 }
 

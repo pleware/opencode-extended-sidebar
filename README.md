@@ -26,7 +26,7 @@ OpenCode gives you one conversation at a time. Real work looks different: an orc
 
 ## ⇄ Session switcher
 
-> Recent sessions, one click away. Title, age, and whether it is still alive. The current session is tagged `[C]`. The header is `Sessions` — no count — with two labels: `switch` opens the host session switcher (the same `/sessions` command) and `new` opens a prompt — Enter creates the session and sends it, an empty prompt is blocked. The command palette exposes `nw`, and slash autocomplete exposes `/nw` (alias `/new`); both open that exact same prompt flow. Empty sessions that were never prompted are hidden from the list. When more sessions were fetched, a clickable `… +N more` reveals the next four per click. Below the list, tools and files rolled up from those same recent sessions.
+> Recent sessions, one click away. Title, age, and whether it is still alive. The current session is tagged `[C]`. The header is `Sessions` — no count — with two labels: `switch` opens the host session switcher (the same `/sessions` command) and `new` jumps to the home prompt — the native new-session composer with `/` slash autocomplete, `@` mentions and the agent/model picker; Enter creates the session and sends it. The command palette exposes `nw`, and slash autocomplete exposes `/nw` (alias `/new`); both jump to that same home prompt. Empty sessions that were never prompted are hidden from the list. When more sessions were fetched, a clickable `… +N more` reveals the next four per click. Below the list, tools and files rolled up from those same recent sessions.
 
 ## ⊚ Live activity pulse
 
@@ -48,13 +48,13 @@ OpenCode gives you one conversation at a time. Real work looks different: an orc
 
 ## ? My work — what is waiting on you
 
-> One queue of things that need **your** action, shown first in the core group. Open `question` tools anywhere in the project appear as rows. Three states: `?` **Awaiting answer** (the agent is live and waiting — click to jump to the session and answer), `⊘` **Interrupted** (the question was aborted — answer never came, the reason shows on the row; once an interrupted question has terminated it is treated as resolved and hidden), and `×` **Errors** (the question tool genuinely failed — collapsed by default, expand for the error text). Interrupted and Errors rows open a picker with **Navigate to session** and **Dismiss** — dismissing hides the row and is remembered for the project. Then a **Running** group (`◔`) — your recent sessions still working or idle, each showing the title and its live status label on a two-glyph row, click to jump straight back in. OMO plans and drafts appear in four foldable groups by the action they need from you. Click a group header to fold it to its count line, and a trimmed group ends in a clickable `… +N more`: `Ready to review` (`!`, plans genuinely waiting for your sign-off), `Ready to start` (`▶`, approved plans you can launch), `Finished` (`✓`, done plans — an approved plan is auto-reconciled to Finished when its boulder work completed, or the writer session's todos are all done) and `Drafting` (`…` rows, drafts still being written — click for a picker: **Navigate to session** jumps to the session that wrote the draft, **Preview plan file** opens it as a preview). Click a plan row for a native, searchable picker: **Navigate to session** jumps to the session that wrote the plan (a muted reason is shown when no session is found), **Docs** opens the draft as a preview, and the **Plan options** group holds **Approve** — sending `ok` to that same session — plus **start work** rows (`start work`, `start work --make-pr`, `start work --ship`) that launch the OMO plan in the current session. Session activity is a row suffix, not a group: `working` (streaming), `waiting` (awaiting a background task), `idle`, `archived` or `unknown`. Review-required plans add the ulw-plan review state `R<round> <momus><independent>`, with per-lane glyphs `✓` approved, `!` changes requested, `?` inconclusive, `…` review live, `·` waiting. When `.omo/` is absent the approval section is simply gone; the question queue works on OpenCode alone.
+> One queue of things that need **your** action, shown first in the core group. Open `question` tools anywhere in the project appear as rows. Three states: `?` **Awaiting answer** (the agent is live and waiting — click to jump to the session and answer), `⊘` **Interrupted** (the question was aborted — answer never came, the reason shows on a muted line under the session name; once an interrupted question has terminated it is treated as resolved and hidden), and `×` **Errors** (the question tool genuinely failed — collapsed by default, expand for the error text on a muted line under the session name). Interrupted and Errors rows open a picker with **Navigate to session** and **Dismiss** — dismissing hides the row and is remembered for the project. Then a **Running** group (`◔`) — your recent sessions still working or idle, each showing the title and its live status label on a two-glyph row, click to jump straight back in. OMO plans and drafts appear in four foldable groups by the action they need from you. Click a group header to fold it to its count line, and a trimmed group ends in a clickable `… +N more`: `Ready to review` (`!`, plans genuinely waiting for your sign-off), `Ready to start` (`▶`, approved plans you can launch), `Finished` (`✓`, done plans — an approved plan is auto-reconciled to Finished when its boulder work completed, or the writer session's todos are all done) and `Drafting` (`…` rows, drafts still being written — click for a picker: **Navigate to session** jumps to the session that wrote the draft, **Preview plan file** opens it as a preview). Click a plan row for a native, searchable picker: **Navigate to session** jumps to the session that wrote the plan (a muted reason is shown when no session is found), **Docs** opens the draft as a preview, and the **Plan options** group holds **Approve** — sending `ok` to that same session — plus **start work** rows (`start work`, `start work --make-pr`, `start work --ship`) that launch the OMO plan in the current session. Session activity is a row suffix, not a group: `working` (streaming), `waiting` (awaiting a background task), `idle`, `archived` or `unknown`. Review-required plans add the ulw-plan review state `R<round> <momus><independent>`, with per-lane glyphs `✓` approved, `!` changes requested, `?` inconclusive, `…` review live, `·` waiting. When `.omo/` is absent the approval section is simply gone; the question queue works on OpenCode alone.
 
 ## ◴ Where the time actually goes
 
 > **Perf** splits the wall clock into wait, think, stream and tools, then ranks models and slow calls. Click a phase, a section title, or a tool row for a dated column log. The scan runs only while this tab is open.
 >
-> A single **OES status bar** sits at the very top of the panel — `OES • 50 tok/s`. The glyph is a braille spinner while a tab loads or a session switch is in flight, `×` on a real error (with the message), and a static `•` once ready. The trailing number is a **live token-rate estimate**: streaming text deltas are counted (≈ code points ÷ 4) over a rolling 5-second window, so it reads `50 tok/s` while tokens stream in and settles to `0 tok/s` when idle — the rate is always shown, rounded to whole tokens. No prompt or output text ever leaves the panel — only the count. A two-row **rate sparkline** (ASCII line) sits right below the bar, charting that rate over the last few minutes so a stream is visible as a rising curve instead of a lone number.
+> A single **OES status bar** sits at the very top of the panel — `OES • 50 tok/s`. The glyph is a braille spinner while a tab loads or a session switch is in flight, `×` on a real error (with the message), and a static `•` once ready. The trailing number is a **live token-rate estimate**: streaming text deltas are counted (≈ code points ÷ 4) over a rolling 5-second window, so it reads `50 tok/s` while tokens stream in and settles to `0 tok/s` when idle — the rate is always shown, rounded to whole tokens. No prompt or output text ever leaves the panel — only the count. Right below the bar sits a **realtime block** with category tabs (`Tokens | Cache | CPU/RAM | Network`) and a row selector (`sum` / `in` / `out`, cache `read`/`write`, `cpu`/`ram`); picking a row switches the one shared braille chart to that series, each with a `F` fullscreen placeholder (future).
 >
 > A muted **self** line above the tab row — `self 0.4ms/ev · 1.2ms/sc · 59fps` — shows what the plugin itself costs: average event-handler ms, average scan (fingerprint + snapshot) ms, and the TUI renderer's FPS. It measures the plugin's own runtime, not the model's. `OES_DEBUG_OPENCODE=1` additionally writes `self`-tagged JSON lines to the debug log.
 
@@ -115,7 +115,7 @@ The working spinner animates on a separate fast glyph tick (80 ms) while rows an
 | red                    | `error`                     | failed                                           |
 | muted                  | `textMuted`                 | idle, done or archived                           |
 | green `+N` / red `−M`  | `diffAdded` / `diffRemoved` | added and removed lines                          |
-| muted `M` `A` `D` `?` `V` | `textMuted`                 | Files: git-status letter — not highlighted       |
+| `A` green / `D` red / `M` yellow | `success` / `error` / `warning` | Files: git-status letter by state; other letters muted |
 | accent `∴`             | `primary`                   | Perf: thinking                                   |
 
 While an arrow is lit it drives the colour. The current session is **bold** and tagged `[C]` in the Sessions list. Clickable labels **underline on hover**. On Perf the same arrows mean measured time: wait, stream, tools.
@@ -154,13 +154,7 @@ Later files win:
   "sessionFetch": 20,
   "skipGitignore": false,
   "toolRows": 5,
-  "toolFetch": 20,
-  "charts": {
-    "rate": {
-      "sampleMs": 55,
-      "windowMs": 240000
-    }
-  }
+  "toolFetch": 20
 }
 ```
 
@@ -176,8 +170,6 @@ Later files win:
 | `skipGitignore`          | `false`                          | also honour the project's root `.gitignore` (`.oesignore` is always honoured) |
 | `toolRows`               | `5`                              | most tool-call rows shown; the `… +N more` control reveals another `toolRows` per click |
 | `toolFetch`              | `20`                             | tool-call history kept behind the `… +N more` revealer; distinct from `toolRows` |
-| `charts.rate.sampleMs`   | `55`                             | how often the OES rate sparkline samples the token rate (ms) |
-| `charts.rate.windowMs`   | `240000`                         | how much rate-sparkline history is kept (ms) |
 
 Row counts are ceilings: a short terminal trims below them. Changes apply on the next refresh — no restart.
 
@@ -201,7 +193,7 @@ opencode
 
 SQLite reads fail fast: `busy_timeout` is 100 ms, so a transient WAL lock no longer freezes the panel — the previous snapshot is kept on screen and a `sql.busy` debug line (with the SQL in `data.q`) is appended so lock contention is visible in the log.
 
-The same semantics power `OES_DEBUG_PROFILE`, which times **every plugin entry point and hotspot** and writes one line per call to `<plugin>/logs/oes-profile-YYYY-MM-DD.log`: `{ ts, tag, ms, data? }`. In this local repo checkout, `<plugin>/logs` means `./logs` at the repository root (not `./src/logs`). Tags: `event` (per event type), `tick`, `render` (the re-render trigger), `requestRender`, `row` (per row built), `scan`, `monitor.emit` (fingerprint + snapshot), `db.snapshot` / `db.feed` / `perf.read`, `sql` (every query, with its SQL in `data.q`), `omo.read` / `omo.stamp` / `omo.config` / `omo.approvals` / `omo.docs`, `mywork.approvals` (the per-approval session lookup), `files.decorate` (git marks), `git`, `remount`, `hydrate`, and the async host calls `rpc.diff` / `rpc.selectSession` / `rpc.newSession` / `rpc.startWork` / `rpc.approve`. When the panel unmounts, one `summary` line with per-tag `{ n, total, avg, max }` is appended — the whole wall-clock split in a single line.
+The same semantics power `OES_DEBUG_PROFILE`, which times **every plugin entry point and hotspot** and writes one line per call to `<plugin>/logs/oes-profile-YYYY-MM-DD.log`: `{ ts, tag, ms, data? }`. In this local repo checkout, `<plugin>/logs` means `./logs` at the repository root (not `./src/logs`). Tags: `event` (per event type), `tick`, `render` (the re-render trigger), `requestRender`, `row` (per row built), `scan`, `monitor.emit` (fingerprint + snapshot), `db.snapshot` / `db.feed` / `perf.read`, `sql` (every query, with its SQL in `data.q`), `omo.read` / `omo.stamp` / `omo.config` / `omo.approvals` / `omo.docs`, `mywork.approvals` (the per-approval session lookup), `files.decorate` (git marks), `git`, `remount`, `hydrate`, and the async host calls `rpc.diff` / `rpc.selectSession` / `rpc.startWork` / `rpc.approve`. When the panel unmounts, one `summary` line with per-tag `{ n, total, avg, max }` is appended — the whole wall-clock split in a single line.
 
 ## How it works
 

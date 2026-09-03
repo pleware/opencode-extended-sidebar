@@ -198,18 +198,18 @@ export function shareDonut(
 }
 
 /**
- * Braille line sparkline for the OES status bar's live token rate. Returns one
+ * Box line sparkline for the OES status bar's live token rate. Returns one
  * string per row (empty input → `[]`), `height` rows tall (default 2). The
  * series is first bucket-averaged to `width` (`downsampleAvg`) then smoothed
  * (window 3) so a spiky raw rate renders as a continuous curve instead of an
- * aliased sawtooth. Renders through `@crafter/charts` `chart().line()` (braille
- * 4x2 sub-pixel), pins the y-domain to `[0, max]` (rates are never negative),
+ * aliased sawtooth. Renders through `@crafter/charts` `chart().line()` (box
+ * charset), pins the y-domain to `[0, max]` (rates are never negative),
  * and drops the 8-column y-axis gutter so the line spans the full requested
  * width — the TUI colours it via the `fg` prop, no ANSI.
  */
 export function rateSparkline(
   values: number[],
-  opts: { width: number; height?: number },
+  opts: { width: number; height?: number; charset?: "braille" | "block" | "ascii" | "box" },
 ): string[] {
   if (values.length === 0) return []
   const height = Math.max(2, Math.round(opts.height ?? 2))
@@ -218,19 +218,10 @@ export function rateSparkline(
   const max = Math.max(1, ...smoothed)
   const rows = smoothed.map((v, i) => ({ x: i, y: v }))
   const out = renderToString(
-    chart({ width: opts.width + 8, height, charset: "ascii" })
+    chart({ width: opts.width + 8, height, charset: opts.charset ?? "braille" })
       .data(rows, { xKey: "x" })
       .line({ key: "y" })
       .yDomain([0, max]),
   )
-  return out.split("\n").map((line) => toAsciiOnly(line.slice(8)))
-}
-
-function toAsciiOnly(line: string): string {
-  let out = ""
-  for (const ch of line) {
-    const code = ch.codePointAt(0) ?? 0
-    out += code >= 32 && code <= 126 ? ch : "*"
-  }
-  return out
+  return out.split("\n").map((line) => line.slice(8))
 }

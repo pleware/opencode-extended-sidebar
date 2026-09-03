@@ -3,6 +3,7 @@
 import { createSignal, For, Show, type JSX } from "solid-js"
 import { TextAttributes } from "@opentui/core"
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
+import type { ToneKey } from "../pware.oc.core/pware.oc.core.glyph.js"
 import { formatDismissed, parseDismissed } from "../pware.oc.runtime/pware.oc.runtime.mywork.js"
 
 /** OpenTUI has no bold/underline props on `<text>` — only the `attributes` bitmask. */
@@ -115,6 +116,24 @@ export function dismissQuestion(api: TuiPluginApi, partId: string): void {
     kv?.set(KV_DISMISSED_QUESTIONS, formatDismissed(ids))
   } catch {
     // no kv in older hosts
+  }
+}
+
+/** The single mapping from a semantic tone to a concrete theme colour. */
+export function toneColor(tone: ToneKey, colors: ThemeColors): string {
+  switch (tone) {
+    case "success":
+      return colors.success
+    case "warning":
+      return colors.warning || colors.text
+    case "primary":
+      return colors.primary || colors.text
+    case "error":
+      return colors.error || colors.text
+    case "text":
+      return colors.text
+    default:
+      return colors.textMuted
   }
 }
 

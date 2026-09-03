@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { foldHeaderTitle, textAttrs } from "../../../src/pware.oc.ui/pware.oc.ui.chrome.js"
+import { foldHeaderTitle, textAttrs, toneColor } from "../../../src/pware.oc.ui/pware.oc.ui.chrome.js"
 
 describe("textAttrs", () => {
   test("no flags is the plain bitmask", () => {
@@ -61,5 +61,32 @@ describe("foldHeaderTitle", () => {
 
   test("zero live is the plain count", () => {
     expect(foldHeaderTitle("Files", { count: 12, live: 0 })).toBe("Files (12)")
+  })
+})
+
+describe("toneColor", () => {
+  const colors = {
+    text: "#fff",
+    textMuted: "#888",
+    success: "#0f0",
+    primary: "#00f",
+    warning: "#ff0",
+    error: "#f00",
+  } as any
+
+  test("resolves each tone to its theme colour", () => {
+    expect(toneColor("text", colors)).toBe("#fff")
+    expect(toneColor("textMuted", colors)).toBe("#888")
+    expect(toneColor("success", colors)).toBe("#0f0")
+    expect(toneColor("primary", colors)).toBe("#00f")
+    expect(toneColor("warning", colors)).toBe("#ff0")
+    expect(toneColor("error", colors)).toBe("#f00")
+  })
+
+  test("falls back to text when the optional tone colour is absent", () => {
+    const bare = { text: "#fff", textMuted: "#888", success: "#0f0" } as any
+    expect(toneColor("primary", bare)).toBe("#fff")
+    expect(toneColor("warning", bare)).toBe("#fff")
+    expect(toneColor("error", bare)).toBe("#fff")
   })
 })

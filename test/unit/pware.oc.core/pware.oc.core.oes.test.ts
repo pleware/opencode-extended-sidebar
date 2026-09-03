@@ -48,20 +48,4 @@ describe("pick", () => {
     expect(pick({ sessionRows: 12, sessionFetch: 12 }, OES_DEFAULTS).sessionFetch).toBe(12)
     expect(pick({ sessionRows: 12 }, OES_DEFAULTS).sessionFetch).toBe(OES_DEFAULTS.sessionFetch)
   })
-
-  test("charts.rate timing defaults and clamps", () => {
-    expect(OES_DEFAULTS.charts.rate.sampleMs).toBe(55)
-    expect(OES_DEFAULTS.charts.rate.windowMs).toBe(240_000)
-    expect(pick({ charts: { rate: { sampleMs: 5 } } }, OES_DEFAULTS).charts.rate.sampleMs).toBe(20)
-    expect(pick({ charts: { rate: { sampleMs: 5000 } } }, OES_DEFAULTS).charts.rate.sampleMs).toBe(1_000)
-    expect(pick({ charts: { rate: { windowMs: 100 } } }, OES_DEFAULTS).charts.rate.windowMs).toBe(5_000)
-    expect(pick({ charts: { rate: { windowMs: 999_999 } } }, OES_DEFAULTS).charts.rate.windowMs).toBe(600_000)
-    expect(
-      pick({ charts: { rate: { sampleMs: "nope" } } } as Record<string, unknown>, OES_DEFAULTS).charts.rate
-        .sampleMs,
-    ).toBe(OES_DEFAULTS.charts.rate.sampleMs)
-    // Missing or malformed charts/rate falls back to defaults.
-    expect(pick({}, OES_DEFAULTS).charts.rate.windowMs).toBe(240_000)
-    expect(pick({ charts: "x" } as Record<string, unknown>, OES_DEFAULTS).charts.rate.windowMs).toBe(240_000)
-  })
 })

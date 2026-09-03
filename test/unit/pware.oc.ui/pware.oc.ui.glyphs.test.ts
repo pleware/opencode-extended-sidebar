@@ -1,118 +1,77 @@
 import { describe, expect, test } from "bun:test"
 import {
-  directionGlyph,
-  fileLetterMark,
-  flowBlinkOn,
-  flowGlyph,
-  FLOW_DIRECTION,
-  markGlyph,
+  fileLetterGlyph,
   myWorkGlyph,
   reviewLaneGlyph,
   reviewStateSuffix,
-  rowGlyphs,
-  spinnerFrame,
 } from "../../../src/pware.oc.ui/pware.oc.ui.glyphs.js"
 
-describe("flowGlyph", () => {
-  test("wait recv tool arrows", () => {
-    expect(flowGlyph("wait")).toBe("↑")
-    expect(flowGlyph("recv")).toBe("↓")
-    expect(flowGlyph("tool")).toBe("→")
-  })
-})
-
-describe("directionGlyph", () => {
-  test("maps each flow to its direction glyph", () => {
-    expect(directionGlyph("wait")).toBe("◷")
-    expect(directionGlyph("recv")).toBe("←")
-    expect(directionGlyph("tool")).toBe("→")
-  })
-})
-
-describe("spinnerFrame", () => {
-  test("cycles through the braille set and wraps negatives", () => {
-    expect(spinnerFrame(0)).toBe("⠋")
-    expect(spinnerFrame(10)).toBe("⠋")
-    expect(spinnerFrame(-1)).toBe("⠏")
-  })
-})
-
-describe("flowBlinkOn", () => {
-  test("blinks every other 300ms tick", () => {
-    expect(flowBlinkOn(0)).toBe(true)
-    expect(flowBlinkOn(1)).toBe(true)
-    expect(flowBlinkOn(2)).toBe(false)
-    expect(flowBlinkOn(3)).toBe(false)
-    expect(flowBlinkOn(4)).toBe(true)
-  })
-})
-
-describe("markGlyph", () => {
-  test("error is a cross; done / archived are dots", () => {
-    expect(markGlyph("error")).toBe("×")
-    expect(markGlyph("ready")).toBe("•")
-    expect(markGlyph("archived")).toBe("•")
-    expect(markGlyph("idle")).toBe("•")
-  })
-
-  test("queued waits with the hourglass, not an idle dot", () => {
-    expect(markGlyph("queued")).toBe("⧗")
-  })
-
-  test("live / stale spin the braille spinner", () => {
-    expect(markGlyph("live", 0)).toBe("⠋")
-    expect(markGlyph("stale", 1)).toBe("⠙")
-  })
-})
-
-describe("FLOW_DIRECTION", () => {
-  test("flow direction mapping: wait up, recv left, tool right", () => {
-    expect(FLOW_DIRECTION.wait).toBe("up")
-    expect(FLOW_DIRECTION.recv).toBe("left")
-    expect(FLOW_DIRECTION.tool).toBe("right")
-  })
-})
-
-describe("rowGlyphs", () => {
-  test("splits state and direction into two cells", () => {
-    expect(rowGlyphs("live", 0, "wait")).toEqual({ state: "⠋", dir: "◷" })
-    expect(rowGlyphs("live", 0, "recv")).toEqual({ state: "⠋", dir: "←" })
-    expect(rowGlyphs("live", 0, "tool")).toEqual({ state: "⠋", dir: "→" })
-    expect(rowGlyphs("ready", 0, null)).toEqual({ state: "•", dir: null })
-    expect(rowGlyphs("queued", 5, "wait")).toEqual({ state: "⧗", dir: "◷" })
-    expect(rowGlyphs("error", 0, undefined)).toEqual({ state: "×", dir: null })
-  })
-})
-
 describe("myWorkGlyph", () => {
-  test("questions use ?, approvals the review/start/finished/draft glyphs — plain ASCII", () => {
-    expect(myWorkGlyph("question")).toBe("?")
-    expect(myWorkGlyph("running")).toBe("◔")
-    expect(myWorkGlyph("drafting")).toBe("…")
-    expect(myWorkGlyph("ready-to-review")).toBe("!")
-    expect(myWorkGlyph("ready-to-start")).toBe("▶")
-    expect(myWorkGlyph("finished")).toBe("✓")
+  test("questions are a warning ? and errors a red cross", () => {
+    expect(myWorkGlyph("question")).toEqual({ char: "?", tone: "warning" })
+    expect(myWorkGlyph("error")).toEqual({ char: "×", tone: "error" })
   })
 
-  test("interrupted is the circled slash, error the cross", () => {
-    expect(myWorkGlyph("interrupted")).toBe("⊘")
-    expect(myWorkGlyph("error")).toBe("×")
+  test("interrupted and dismissed are muted ⊘", () => {
+    expect(myWorkGlyph("interrupted")).toEqual({ char: "⊘", tone: "textMuted" })
+    expect(myWorkGlyph("dismissed")).toEqual({ char: "⊘", tone: "textMuted" })
+  })
+
+  test("approvals colour by state: review warning, start primary, finished success, drafting muted", () => {
+    expect(myWorkGlyph("ready-to-review")).toEqual({ char: "!", tone: "warning" })
+    expect(myWorkGlyph("ready-to-start")).toEqual({ char: "▶", tone: "primary" })
+    expect(myWorkGlyph("finished")).toEqual({ char: "✓", tone: "success" })
+    expect(myWorkGlyph("drafting")).toEqual({ char: "…", tone: "textMuted" })
+  })
+
+  test("running is the primary ◔", () => {
+    expect(myWorkGlyph("running")).toEqual({ char: "◔", tone: "primary" })
+  })
+})
+
+describe("fileLetterGlyph", () => {
+  test("added green, deleted red, modified yellow", () => {
+    expect(fileLetterGlyph("A")).toEqual({ char: "A", tone: "success" })
+    expect(fileLetterGlyph("D")).toEqual({ char: "D", tone: "error" })
+    expect(fileLetterGlyph("M")).toEqual({ char: "M", tone: "warning" })
+  })
+
+  test("the rest are muted, and a missing letter is a muted dot", () => {
+    expect(fileLetterGlyph("R")).toEqual({ char: "R", tone: "textMuted" })
+    expect(fileLetterGlyph("C")).toEqual({ char: "C", tone: "textMuted" })
+    expect(fileLetterGlyph("T")).toEqual({ char: "T", tone: "textMuted" })
+    expect(fileLetterGlyph("U")).toEqual({ char: "U", tone: "textMuted" })
+    expect(fileLetterGlyph("?")).toEqual({ char: "?", tone: "textMuted" })
+    expect(fileLetterGlyph("V")).toEqual({ char: "V", tone: "textMuted" })
+    expect(fileLetterGlyph(null)).toEqual({ char: "•", tone: "textMuted" })
   })
 })
 
 describe("reviewLaneGlyph", () => {
-  test("terminal lane states have stable glyphs", () => {
-    expect(reviewLaneGlyph({ status: "approved", result: null })).toBe("✓")
-    expect(reviewLaneGlyph({ status: "changes_requested", result: null })).toBe("!")
-    expect(reviewLaneGlyph({ status: "inconclusive", result: null })).toBe("?")
+  test("terminal lane states have stable glyphs and tones", () => {
+    expect(reviewLaneGlyph({ status: "approved", result: null })).toEqual({ char: "✓", tone: "success" })
+    expect(reviewLaneGlyph({ status: "changes_requested", result: null })).toEqual({
+      char: "!",
+      tone: "warning",
+    })
+    expect(reviewLaneGlyph({ status: "inconclusive", result: null })).toEqual({
+      char: "?",
+      tone: "warning",
+    })
   })
 
-  test("pending is a dot, live lanes the ellipsis, unknown stays a dot", () => {
-    expect(reviewLaneGlyph({ status: "pending", result: null })).toBe("·")
-    expect(reviewLaneGlyph({ status: "launching", result: null })).toBe("…")
-    expect(reviewLaneGlyph({ status: "in_flight", result: null })).toBe("…")
-    expect(reviewLaneGlyph(null)).toBe("·")
-    expect(reviewLaneGlyph(undefined)).toBe("·")
+  test("pending is a muted dot, live lanes the muted ellipsis, unknown stays a muted dot", () => {
+    expect(reviewLaneGlyph({ status: "pending", result: null })).toEqual({ char: "·", tone: "textMuted" })
+    expect(reviewLaneGlyph({ status: "launching", result: null })).toEqual({
+      char: "…",
+      tone: "textMuted",
+    })
+    expect(reviewLaneGlyph({ status: "in_flight", result: null })).toEqual({
+      char: "…",
+      tone: "textMuted",
+    })
+    expect(reviewLaneGlyph(null)).toEqual({ char: "·", tone: "textMuted" })
+    expect(reviewLaneGlyph(undefined)).toEqual({ char: "·", tone: "textMuted" })
   })
 })
 
@@ -165,16 +124,5 @@ describe("reviewStateSuffix", () => {
         },
       }),
     ).toBe("✓!")
-  })
-})
-
-describe("fileLetterMark", () => {
-  test("every git letter is muted — files are not activity-highlighted", () => {
-    expect(fileLetterMark("D")).toBe("ready")
-    expect(fileLetterMark("U")).toBe("ready")
-    expect(fileLetterMark("M")).toBe("ready")
-    expect(fileLetterMark("A")).toBe("ready")
-    expect(fileLetterMark("V")).toBe("ready")
-    expect(fileLetterMark(null)).toBe("ready")
   })
 })

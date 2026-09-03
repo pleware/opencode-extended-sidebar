@@ -1,5 +1,6 @@
 # Changelog
 
+- **0.2.62** (2026-09-03) Add an event-driven realtime block with token, cache and process CPU/RAM series under the OES bar and route glyph colours through a shared resolver.
 - **0.2.61** (2026-09-02) Expose a shared new-session prompt as.
 - **0.2.60** (2026-09-02) Switch the tok/s sparkline to ASCII output and align chart docs and tests.
 - **0.2.59** (2026-09-02) Add a Dismissed questions My work group and route dismissed-question errors into it.

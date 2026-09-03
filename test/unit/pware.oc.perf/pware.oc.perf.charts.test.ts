@@ -197,8 +197,17 @@ describe("rateSparkline", () => {
     expect(out).toHaveLength(2)
     for (const line of out) {
       expect(line).not.toContain("\x1b[")
-      expect(line).not.toMatch(/[\u2800-\u28FF]/)
       expect(line.length).toBeGreaterThan(0)
+    }
+  })
+
+  test("braille charset emits braille glyphs and stays within width", () => {
+    const data = Array.from({ length: 80 }, (_, i) => Math.max(0, 80 * Math.sin(i / 8)))
+    const out = rateSparkline(data, { width: 29, height: 4, charset: "braille" })
+    expect(out.some((line) => /[\u2800-\u28FF]/.test(line))).toBe(true)
+    for (const line of out) {
+      expect(line).not.toContain("\x1b[")
+      expect(line.length).toBeLessThanOrEqual(29)
     }
   })
 

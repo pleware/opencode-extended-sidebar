@@ -15,24 +15,28 @@
 import { createStampCache } from "../../pware.oc.core/pware.oc.core.cache.js"
 import { basenameOf, str } from "../../pware.oc.core/pware.oc.core.paths.js"
 import type { SqlDb } from "../../pware.oc.core/pware.oc.core.sqlite.js"
-import { DOC_KIND_PLAN } from "../constants/pware.oc.omo.constants.docKind.js"
+import { DOC_KIND_PLAN, type DocKind } from "../constants/pware.oc.omo.constants.docKind.js"
 import {
   listOmoFiles,
   type DocView,
   type ListOmoFilesOptions,
 } from "./pware.oc.omo.resolver.doc.js"
 
-/** An OMO on-disk document kind (the subdirectory under `.omo/` / `.sisyphus/`). */
-export type OmoFileKind =
-  | "plan"
-  | "draft"
-  | "notepad"
-  | "proof"
-  | "rule"
-  | "run-continuation"
+/** Every OMO on-disk document kind (the subdirectory under `.omo/` / `.sisyphus/`). */
+export const OMO_FILE_KINDS = [
+  "plan",
+  "draft",
+  "notepad",
+  "proof",
+  "rule",
+  "run-continuation",
+] as const
+
+/** An OMO on-disk document kind. */
+export type OmoFileKind = (typeof OMO_FILE_KINDS)[number]
 
 /** One case-insensitive regex per kind matching the omo/sisyphus subdir. */
-export const OMO_FILE_KINDS: Record<OmoFileKind, RegExp> = {
+const OMO_FILE_KIND_RE: Record<OmoFileKind, RegExp> = {
   plan: /\.(omo|sisyphus)\/plans\//i,
   draft: /\.(omo|sisyphus)\/drafts\//i,
   notepad: /\.(omo|sisyphus)\/notepads\//i,
@@ -212,7 +216,7 @@ function buildOmoFileIndex(
   const fileWriter = new Map<string, { sessionId: string; lastAt: number }>()
   const writerPref = new Map<string, number>() // basename → is_writer of the current entry
   const sessionFiles = new Map<string, { rel: string; lastAt: number }>()
-  const regex = OMO_FILE_KINDS[kind]
+  const regex = OMO_FILE_KIND_RE[kind]
   try {
     for (const row of queryFileParts(db, projectId)) {
       const sessionId = str(row.session_id)
@@ -311,13 +315,35 @@ export function sessionForOmoFile(
   return omoFileIndex(db, null, null, kind).fileWriter.get(base)?.sessionId ?? null
 }
 
-/** Plan files under `.omo/plans/`, optionally filtered by writer session. */
-export const PlanFile = {
-  list(
+/** A per-kind omo-file resolver: the index builder + the writer-session lookup. */
+export function makeOmoFileResolver(kind: OmoFileKind): {
+  sessionIndex: (
+    db: SqlDb,
+    projectId: string | null | undefined,
     projectRoot: string | null | undefined,
-    sessionId: string | null = null,
-    opts: ListOmoFilesOptions = {},
-  ): DocView[] {
-    return listOmoFiles(DOC_KIND_PLAN, projectRoot, { ...opts, sessionId })
-  },
+  ) => OmoFileIndex
+  sessionForFile: (db: SqlDb, relPath: string | null | undefined) => string | null
+} {
+  return {
+    sessionIndex: (db, projectId, projectRoot) => omoFileIndex(db, projectId, projectRoot, kind),
+    sessionForFile: (db, relPath) => sessionForOmoFile(db, relPath, kind),
+  }
 }
+
+/** A per-doc-kind `.list` wrapper — the `XxxFile.list` shape. */
+export function makeOmoFileList(docKind: DocKind): {
+  list: (
+    projectRoot: string | null | undefined,
+    sessionId?: string | null,
+    opts?: ListOmoFilesOptions,
+  ) => DocView[]
+} {
+  return {
+    list(projectRoot, sessionId = null, opts = {}) {
+      return listOmoFiles(docKind, projectRoot, { ...opts, sessionId })
+    },
+  }
+}
+
+/** Plan files under `.omo/plans/`, optionally filtered by writer session. */
+export const PlanFile = makeOmoFileList(DOC_KIND_PLAN)

@@ -6,7 +6,6 @@ import {
   START_WORK_SHIP,
 } from "../pware.oc.omo/constants/pware.oc.omo.constants.startWork.js"
 import { startWorkCommand, type StartWorkMode } from "../pware.oc.runtime/pware.oc.runtime.mywork.js"
-import { openNewSessionDialog } from "./pware.oc.ui.menudialogs.js"
 
 export function selectSession(api: TuiPluginApi, sessionId: string | null | undefined): void {
   if (!sessionId) return
@@ -59,43 +58,11 @@ export function openSessionSwitcher(api: TuiPluginApi): void {
   }
 }
 
-export function newSessionWithPrompt(
-  api: TuiPluginApi,
-  directory: string | null | undefined,
-  text: string,
-): void {
-  const prompt = text.trim()
-  if (!prompt) return
-  const go = async () => {
-    try {
-      const created = await api.client.session.create({
-        directory: directory ?? undefined,
-      })
-      const res = created as { data?: { id?: string }; id?: string } | null | undefined
-      const id = res?.data?.id ?? res?.id
-      if (!id) return
-      selectSession(api, id)
-      try {
-        await api.client.session.promptAsync({
-          sessionID: id,
-          parts: [{ type: PART_TYPE_TEXT, text: prompt }],
-        })
-      } catch {
-        // the prompt failed after create+select — the session exists, just empty
-      }
-    } catch {
-    }
+export function openNewSessionPrompt(api: TuiPluginApi): void {
+  try {
+    api.route.navigate("home")
+  } catch {
   }
-  void profileAsync("rpc.newSession", go)
-}
-
-export function openNewSessionPrompt(
-  api: TuiPluginApi,
-  directory: string | null | undefined,
-): void {
-  openNewSessionDialog(api, {
-    onSubmit: (text) => newSessionWithPrompt(api, directory, text),
-  })
 }
 
 export function runStartWork(

@@ -154,11 +154,6 @@ export function statusBarLine(status: TabStatus): StatusBarLine {
   return { label: line.label, tone: line.tone }
 }
 
-/** Queued / waiting work — boulder writes no `status` while a task waits for a slot. */
-export function isPendingWork(status: string | null | undefined): boolean {
-  return normalizeStatus(status) === STATUS_PENDING
-}
-
 /** Paused and abandoned are deliberate stops — they must not keep pulsing. */
 export function workIsTerminal(status: string): boolean {
   const s = toWorkLabel(status)

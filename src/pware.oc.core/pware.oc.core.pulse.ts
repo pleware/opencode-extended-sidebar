@@ -129,19 +129,6 @@ export function hottestMark(marks: readonly AgentMark[]): AgentMark {
   return error ? STATUS_ERROR : MARK_READY
 }
 
-export type FlowColors = {
-  text: string
-  success: string
-  primary?: string
-  warning?: string
-}
-
-export function flowColor(dir: FlowDir, colors: FlowColors): string {
-  if (dir === FLOW_RECV) return colors.success
-  if (dir === FLOW_WAIT) return colors.warning || colors.text
-  return colors.primary || colors.text
-}
-
 export function activeFlow(
   entry: FlowEntry | undefined,
   now: number,

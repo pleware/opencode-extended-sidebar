@@ -104,7 +104,7 @@ setFrame(n + 1)                                  ── every 300ms
 │
 └─ AgentLine (sections.tsx):
     ├─ direction glyph → dirFg() → flowBlinkOn(frame())  ← static arrow/clock blinks
-    └─ glyph2 colour → glyphFg() → lit() → flowBlinkOn(frame())
+    └─ glyph2 → glyphFg() → flowBlinkOn(frame())
 ```
 
 ## 4b. CASCADE C — `glyphFrame()` consumers (animate every 80ms, rows untouched)
@@ -115,8 +115,8 @@ setGlyphFrame(n + 1)                             ── every GLYPH_TICK_MS = 80
 └─ Row helper (sidebar.tsx): glyphFrame={glyphFrame}   ← accessor
 │
 └─ AgentLine (sections.tsx):
-    └─ glyphs() → rowGlyphs(mark, glyphFrame(), flow)
-         └─ state glyph → spinnerFrame(glyphFrame())   ← braille spinner
+    └─ primary glyph → stateGlyph(mark, glyphFrame())
+         └─ state spinner → spinnerFrame(glyphFrame())   ← braille spinner
     └─ PerfPanel (perf.view.tsx): live spinner → spinnerFrame(glyphFrame())
 ```
 

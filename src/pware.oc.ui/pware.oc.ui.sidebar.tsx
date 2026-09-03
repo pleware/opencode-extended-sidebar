@@ -48,13 +48,11 @@ import {
 import { openReadonlyDb } from "../pware.oc.core/pware.oc.core.sqlite.js"
 import {
   MARK_QUEUED,
-  MARK_READY,
   PULSE_LIVE,
   PULSE_STALE,
 } from "../pware.oc.core/constants/pware.oc.core.constants.pulse.js"
 import {
   STATUS_ARCHIVED,
-  STATUS_ERROR,
   TOOL_STATUS_RUNNING,
 } from "../pware.oc.core/constants/pware.oc.core.constants.status.js"
 import {
@@ -83,11 +81,12 @@ import {
 import { DOC_KIND_DRAFT } from "../pware.oc.omo/constants/pware.oc.omo.constants.docKind.js"
 import {
   GROUP_GLYPH,
-  fileLetterMark,
+  fileLetterGlyph,
+  markTone,
   myWorkGlyph,
   reviewStateSuffix,
 } from "./pware.oc.ui.glyphs.js"
-import { dismissQuestion, kvReadOne, kvWriteOne, readDismissedQuestions, type ThemeColors } from "./pware.oc.ui.chrome.js"
+import { dismissQuestion, kvReadOne, kvWriteOne, readDismissedQuestions, ClickText, type ThemeColors } from "./pware.oc.ui.chrome.js"
 import {
   AgentLine,
   FoldSection,
@@ -105,6 +104,10 @@ import {
 import { emptyPerf, readPerfSnapshot } from "../pware.oc.perf/pware.oc.perf.reader.js"
 import { PerfPanel } from "../pware.oc.perf/pware.oc.perf.view.js"
 import { rateSparkline } from "../pware.oc.perf/pware.oc.perf.charts.js"
+import { StatRealtimeResolver } from "../pware.oc.perf/pware.oc.perf.realtimeResolver.js"
+import { EventDriverSampler } from "../pware.oc.perf/pware.oc.perf.realtimeSampler.js"
+import { CpuRamSampler } from "../pware.oc.perf/pware.oc.perf.realtimeCpuRam.js"
+import { STAT_REALTIME_BLOCK, seriesValues, type StatRealtimeSeriesKey, type StatRealtimeTabId } from "../pware.oc.perf/pware.oc.perf.realtimeBlock.js"
 import { formatSelfLine, readRendererFps, readSelfStats, resetSelfStats, selfTime, setSelfFps } from "../pware.oc.perf/pware.oc.perf.self.js"
 import {
   decorateFiles,
@@ -118,7 +121,6 @@ import { onGitMarksChange } from "../pware.oc.core/git/pware.oc.core.git.js"
 import { getOes } from "../pware.oc.core/pware.oc.core.oes.js"
 import {
   TAB_STATUS_SESSION_NOT_IN_DB,
-  isPendingWork,
   sessionStatusLabel,
   tabStatus,
 } from "../pware.oc.core/pware.oc.core.status.js"
@@ -225,7 +227,9 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   const [liveTools, setLiveTools] = createSignal<Record<string, ToolHit>>({})
   const [liveFiles, setLiveFiles] = createSignal<Record<string, FileView>>({})
   const [tokenTicks, setTokenTicks] = createSignal<readonly TokenTick[]>([])
-  const [sparkHistory, setSparkHistory] = createSignal<readonly number[]>([])
+  const [rtVersion, setRtVersion] = createSignal(0)
+  const [rtTab, setRtTab] = createSignal<StatRealtimeTabId>("tokens")
+  const [rtRow, setRtRow] = createSignal<StatRealtimeSeriesKey>("sum")
   const [gitTick, setGitTick] = createSignal(0)
   const [switching, setSwitching] = createSignal<{ id: string; at: number } | null>(null)
   const [coldTab, setColdTab] = createSignal<string | null>(null)
@@ -326,7 +330,6 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
       setLiveTools({})
       setLiveFiles({})
       setTokenTicks([])
-      setSparkHistory([])
       source.setSession(id)
       queueMicrotask(hydrateDiff)
     })
@@ -443,17 +446,30 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   /** Fast glyph heartbeat — spinners and direction flows step at `GLYPH_TICK_MS`. */
   const glyphTick = setInterval(() => setGlyphFrame((n) => n + 1), GLYPH_TICK_MS)
 
-  // Rate sparkline: sample the live token rate into a bounded history ring.
-  const sparkCfg = getOes(projectDir()).charts.rate
-  const sparkSampleMs = sparkCfg.sampleMs
-  const sparkMax = Math.max(1, Math.round(sparkCfg.windowMs / sparkSampleMs))
-  const sparkTick = setInterval(() => {
-    const rate = tokenRate(tokenTicks(), Date.now(), TOKEN_RATE_WINDOW_MS) ?? 0
-    setSparkHistory((prev) => {
-      const next = [...prev, rate]
-      return next.length > sparkMax ? next.slice(next.length - sparkMax) : next
-    })
-  }, sparkSampleMs)
+  const rtResolver = StatRealtimeResolver.build(null)
+  const rtSampler = EventDriverSampler.create(rtResolver, (handler) => {
+    try {
+      const on = props.api.event.on as (
+        name: string,
+        cb: (evt: unknown, meta?: { directory?: unknown }) => void,
+      ) => unknown
+      const off = on("session.updated", (evt, meta) => {
+        const dir = projectDir()
+        if (dir && meta?.directory && String(meta.directory) !== dir) return
+        handler(evt)
+        setRtVersion((n) => n + 1)
+      })
+      return typeof off === "function" ? () => off() : () => {}
+    } catch {
+      return () => {}
+    }
+  })
+  rtSampler.start()
+
+  const cpuRamSampler = CpuRamSampler.create(rtResolver, {
+    onSample: () => setRtVersion((n) => n + 1),
+  })
+  cpuRamSampler.start()
 
   const offGit = onGitMarksChange(() => {
     profile("git", () => {
@@ -491,7 +507,8 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   onCleanup(() => {
     clearInterval(tick)
     clearInterval(glyphTick)
-    clearInterval(sparkTick)
+    rtSampler.stop()
+    cpuRamSampler.stop()
     bridge.stop()
     offSnapshot()
     offSessionActivity()
@@ -732,7 +749,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
       const t = tab()
       const omo = omoPresent()
       const sections: { key: string; want: number; min: number; rank: number }[] = []
-      let fixed = 6 // OES status bar + 2-row sparkline + self status line + OES brand line + panel top padding
+      let fixed = 8 // OES status bar + realtime block (tabs + 3 selector rows) + self line + brand line + top padding
       if (modeLine()) fixed += 1 // debug/profile flag row
       if (modeDirLine()) fixed += 1
       let blocks = 0
@@ -819,15 +836,13 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     }
     if ("sessionId" in item) {
       const age = pulseAgeMs(now(), item.startedAt)
-      const reason = item.reason ? ` · ${item.reason}` : ""
       const dismissible = item.kind === QUESTION_KIND_INTERRUPTED || item.kind === QUESTION_KIND_ERROR
       return {
         kind: ROW_KIND_AGENT,
-        mark: item.kind === QUESTION_KIND_ERROR ? STATUS_ERROR : MARK_READY,
         glyph: myWorkGlyph(item.kind),
         name: item.title,
-        suffix: `${formatAge(age)}${reason}`,
-        waiting: item.kind === QUESTION_KIND_QUESTION,
+        suffix: formatAge(age),
+        subline: item.reason ?? undefined,
         onSelect: dismissible
           ? () =>
               openQuestionDialog(props.api, {
@@ -858,7 +873,6 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     }
     return {
       kind: ROW_KIND_FILE,
-      mark: MARK_READY,
       glyph: myWorkGlyph(item.kind),
       name: item.name,
       suffix: [sessionLabel, reviewLabel].filter(Boolean).join(" ") || undefined,
@@ -944,21 +958,21 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
       if (item.kind === "header") {
         out.push({
           kind: ROW_KIND_GROUP,
-          mark: hottestMark(item.members.map(delegateMark)),
-          glyph: GROUP_GLYPH,
+          glyph: {
+            char: GROUP_GLYPH,
+            tone: markTone(hottestMark(item.members.map(delegateMark))),
+          },
           name: `${agentDisplayName(item.agent)} (${item.count})`,
         })
         continue
       }
       const d = item.delegate
       const isBusy = Boolean(d.sessionId && busy()[d.sessionId])
-      const waiting = isPendingWork(d.status)
       const mark = delegateMark(d)
       const dir = rowFlow(d.sessionId, isBusy)
       out.push({
         kind: item.grouped ? ROW_KIND_DELEGATE : ROW_KIND_AGENT,
         mark,
-        waiting,
         name: item.grouped ? d.title || d.taskKey || "task" : d.agent || "agent",
         tokens: d.tokensTotal,
         title: item.grouped ? undefined : d.title,
@@ -993,9 +1007,22 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     return tokenRate(tokenTicks(), Date.now(), TOKEN_RATE_WINDOW_MS)
   })
 
-  /** Two-line rate sparkline under the OES bar; empty until the first samples land. */
-  const sparkLines = createMemo(() =>
-    rateSparkline([...sparkHistory()], { width: oes().lineMax, height: 2 }),
+  const rtActiveTab = createMemo(
+    () => STAT_REALTIME_BLOCK.tabs.find((t) => t.id === rtTab()) ?? STAT_REALTIME_BLOCK.tabs[0]!,
+  )
+  const rtActiveRow = createMemo(
+    () => rtActiveTab().rows.find((r) => r.key === rtRow()) ?? rtActiveTab().rows[0]!,
+  )
+  const rtHistory = createMemo(() => {
+    rtVersion()
+    return rtActiveTab().id === "cpu-ram" ? rtResolver.getForGraphCpuRam() : rtResolver.getForGraph(null)
+  })
+  const rtLines = createMemo(() =>
+    rateSparkline(seriesValues(rtHistory(), rtActiveRow().read), {
+      width: Math.max(8, oes().lineMax - 8),
+      height: 2,
+      charset: "braille",
+    }),
   )
 
   /** Live self-cost line — reads the tick clock so the Solid insert re-evaluates every tick. */
@@ -1033,9 +1060,49 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
         colors={colors()}
         glyphFrame={glyphFrame}
       />
-      <For each={sparkLines()}>
-        {(line) => <text fg={colors().textMuted}>{line}</text>}
-      </For>
+      <box flexDirection="row" gap={1}>
+        <For each={STAT_REALTIME_BLOCK.tabs}>
+          {(t) => (
+            <ClickText
+              fg={rtTab() === t.id ? colors().primary || colors().text : colors().textMuted}
+              bold={rtTab() === t.id}
+              underline
+              onMouseUp={() => {
+                setRtTab(t.id)
+                setRtRow(t.rows[0]!.key)
+              }}
+            >
+              {t.label}
+            </ClickText>
+          )}
+        </For>
+      </box>
+      <box flexDirection="row" gap={1}>
+        <box flexDirection="column" gap={0}>
+          <For each={rtActiveTab().rows}>
+            {(r) => (
+              <ClickText
+                fg={rtRow() === r.key ? colors().primary || colors().text : colors().textMuted}
+                bold={rtRow() === r.key}
+                underline
+                onMouseUp={() => setRtRow(r.key)}
+              >
+                {r.label}
+              </ClickText>
+            )}
+          </For>
+        </box>
+        <box flexDirection="column">
+          <For each={rtLines()}>
+            {(line) => <text fg={colors().success}>{line || " "}</text>}
+          </For>
+        </box>
+        <box flexDirection="column" gap={0}>
+          <For each={rtActiveTab().rows}>
+            {() => <text fg={colors().textMuted}>F</text>}
+          </For>
+        </box>
+      </box>
       <text fg={colors().textMuted}>{selfLine()}</text>
       <TabColumn
         brand=""
@@ -1103,7 +1170,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
             open={foldSessions.open()}
             actions={[
               { label: "switch", onPick: () => openSessionSwitcher(props.api) },
-              { label: "new", onPick: () => openNewSessionPrompt(props.api, projectDir()) },
+              { label: "new", onPick: () => openNewSessionPrompt(props.api) },
             ]}
             colors={colors()}
             onToggle={foldSessions.toggle}
@@ -1200,8 +1267,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
               renderItem={(f) => (
                 <Row
                   kind={ROW_KIND_FILE}
-                  mark={fileLetterMark(f.letter)}
-                  glyph={f.letter ?? "•"}
+                  glyph={fileLetterGlyph(f.letter)}
                   name={f.name}
                   diff={{ additions: f.additions, deletions: f.deletions }}
                   onSelect={() => openFileDetail(props.api, f, projectRoots(), colors())}
@@ -1335,8 +1401,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
                 renderItem={(f) => (
                   <Row
                     kind={ROW_KIND_FILE}
-                    mark={fileLetterMark(f.letter)}
-                    glyph={f.letter ?? "•"}
+                    glyph={fileLetterGlyph(f.letter)}
                     name={f.name}
                     diff={{ additions: f.additions, deletions: f.deletions }}
                     onSelect={() => openFileDetail(props.api, f, projectRoots(), colors())}
@@ -1378,8 +1443,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
                   return (
                     <Row
                       kind={ROW_KIND_FILE}
-                      mark={composeMark({ ageMs: age })}
-                      glyph="•"
+                      glyph={{ char: "•", tone: markTone(composeMark({ ageMs: age })) }}
                       name={d.name}
                       suffix={formatAge(age)}
                       onSelect={() => openDocDetail(props.api, d, projectRoots(), colors())}

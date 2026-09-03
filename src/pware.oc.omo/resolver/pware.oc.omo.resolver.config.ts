@@ -4,10 +4,10 @@
  * Oh-my-openagent config resolution — team mode + agent names from the user's
  * `oh-my-openagent.json`. Best-effort, never throws.
  */
-import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { profile } from "../../pware.oc.core/pware.oc.core.debug.js"
+import { readJson } from "../../pware.oc.core/pware.oc.core.paths.js"
 
 export type OmoConfigView = {
   present: boolean
@@ -24,20 +24,15 @@ export function readOmoConfig(): OmoConfigView {
       path.join(home, ".config", "opencode", "oh-my-openagent.json"),
     ]
     for (const p of candidates) {
-      try {
-        if (!fs.existsSync(p)) continue
-        const raw = JSON.parse(fs.readFileSync(p, "utf8")) as {
-          team_mode?: { enabled?: boolean }
-          agents?: Record<string, unknown>
-        }
-        return {
-          present: true,
-          path: p,
-          teamMode: raw.team_mode?.enabled ?? null,
-          agents: Object.keys(raw.agents || {}),
-        }
-      } catch {
-        // next
+      const raw = readJson(p)
+      if (!raw) continue
+      const team = raw.team_mode as { enabled?: boolean } | undefined
+      const agents = raw.agents as Record<string, unknown> | undefined
+      return {
+        present: true,
+        path: p,
+        teamMode: team?.enabled ?? null,
+        agents: Object.keys(agents || {}),
       }
     }
     return { present: false, path: null, teamMode: null, agents: [] }

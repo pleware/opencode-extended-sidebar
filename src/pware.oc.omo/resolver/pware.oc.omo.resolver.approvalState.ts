@@ -6,17 +6,13 @@
  * layer's my-work enrich module composes this marker with the session activity
  * state.
  */
-import fs from "node:fs"
 import path from "node:path"
-import { findOmoWatchDirs } from "./pware.oc.omo.resolver.boulder.js"
+import { firstOmoPath } from "./pware.oc.omo.resolver.boulder.js"
+import { readJson } from "../../pware.oc.core/pware.oc.core.paths.js"
 
 /** First existing `.omo`/`.sisyphus` run-continuation directory, or null. */
 export function firstRunContinuationDir(projectRoot: string): string | null {
-  for (const omoDir of findOmoWatchDirs(projectRoot)) {
-    const p = path.join(omoDir, "run-continuation")
-    if (fs.existsSync(p)) return p
-  }
-  return null
+  return firstOmoPath(projectRoot, "run-continuation")
 }
 
 /**
@@ -30,13 +26,9 @@ export function readRunContinuationState(
   if (!projectRoot) return null
   const dir = firstRunContinuationDir(projectRoot)
   if (!dir) return null
-  try {
-    const raw = JSON.parse(
-      fs.readFileSync(path.join(dir, `${sessionId}.json`), "utf8"),
-    ) as { sources?: { "background-task"?: { state?: unknown } } }
-    const state = raw?.sources?.["background-task"]?.state
-    return typeof state === "string" ? state : null
-  } catch {
-    return null
-  }
+  const raw = readJson(path.join(dir, `${sessionId}.json`)) as {
+    sources?: { "background-task"?: { state?: unknown } }
+  } | null
+  const state = raw?.sources?.["background-task"]?.state
+  return typeof state === "string" ? state : null
 }
