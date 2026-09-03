@@ -47,6 +47,26 @@ export function spinnerFrame(frame: number): string {
   return SPINNER_FRAMES[i] ?? "⠋"
 }
 
+/** Cold-start "engage" bar length in glyph frames (GLYPH_TICK_MS × 12 ≈ 1s). */
+export const ENGAGE_MIN_FRAMES = 12
+/** Hard ceiling so the boot bar can never strand (GLYPH_TICK_MS × 50 = 4s). */
+export const ENGAGE_MAX_FRAMES = 50
+
+/** Fill ratio of the cold-start engage bar: linear to 1 at `ENGAGE_MIN_FRAMES`. */
+export function engageFill(frame: number): number {
+  return Math.min(1, Math.max(0, frame) / ENGAGE_MIN_FRAMES)
+}
+
+/**
+ * The cold-start engage bar ends once the first real snapshot has landed
+ * (`ready`) after its minimum show time — or on the hard ceiling (no DB / no
+ * snapshot ever) so the row can never strand. Negative frames count as 0.
+ */
+export function engageDone(frame: number, ready: boolean): boolean {
+  const n = Math.max(0, frame)
+  return (ready && n >= ENGAGE_MIN_FRAMES) || n >= ENGAGE_MAX_FRAMES
+}
+
 /** ↑/↓ blink half-period in ticks (TICK_MS × BLINK_TICKS ≈ 600ms). */
 export function flowBlinkOn(frame: number): boolean {
   return Math.floor(Math.abs(frame) / BLINK_TICKS) % 2 === 0

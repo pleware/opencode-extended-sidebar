@@ -6,7 +6,8 @@ cheap. Line references point at `src/` as of the performance fix.
 
 All clock values live in one place: `src/pware.oc.core/pware.oc.core.timing.ts`
 (`TICK_MS`, `GLYPH_TICK_MS`, `NOW_MS`, `FPS_READ_EVERY_TICKS`, `BLINK_TICKS`,
-`MONITOR_POLL_MS`, `MONITOR_WATCH_DEBOUNCE_MS`, `EVENT_SCAN_DEBOUNCE_MS`).
+`MONITOR_POLL_MS`, `MONITOR_WATCH_DEBOUNCE_MS`, `EVENT_SCAN_DEBOUNCE_MS`,
+`REALTIME_CPU_SAMPLE_MS`, `REALTIME_TOKEN_RENDER_MS`).
 
 ## 1. The four render triggers
 
@@ -24,6 +25,13 @@ loop thread.**
 │  SOURCE 2: GLYPH TICK (fast animation)      sidebar.tsx          │
 │    setInterval(..., GLYPH_TICK_MS = 80ms)                       │
 │    → setGlyphFrame() (advances every 80ms — spinner + flow)     │
+├────────────────────────────────────────────────────────────────┤
+│  SOURCE 2b: REALTIME CADENCES               sidebar.tsx          │
+│    CPU/RAM: CpuRamSampler every REALTIME_CPU_SAMPLE_MS = 30ms   │
+│      → setRtCpuVersion() (cpu-ram tab chart only)               │
+│    tokens: session.updated events coalesce to a dirty flag       │
+│      flushed every REALTIME_TOKEN_RENDER_MS = 40ms               │
+│      → setRtVersion() (token/cache chart, stand-still when idle) │
 ├────────────────────────────────────────────────────────────────┤
 │  SOURCE 3: RUNTIME SOURCE                  runtime.source.ts      │
 │    monitor poll/watch in monitor.ts emit pware.oes.snapshot      │

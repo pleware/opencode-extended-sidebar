@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import {
   cpuPercent,
+  cpuPercentOverWindow,
   ramMb,
 } from "../../../src/pware.oc.perf/pware.oc.perf.realtimeCpuRam.js"
 import { StatRealtimeResolver } from "../../../src/pware.oc.perf/pware.oc.perf.realtimeResolver.js"
@@ -24,6 +25,42 @@ describe("cpuPercent", () => {
   })
 })
 
+describe("cpuPercentOverWindow", () => {
+  const full = (at: number, user: number): { at: number; user: number; system: number; rss: number } => ({
+    at,
+    user,
+    system: 0,
+    rss: 0,
+  })
+
+  test("uses the newest reading and the oldest one still inside the window", () => {
+    const readings = [
+      full(0, 0),
+      full(250, 250_000),
+      full(500, 500_000),
+      full(750, 750_000),
+      full(1_000, 1_000_000),
+    ]
+    expect(cpuPercentOverWindow(readings, 1, 500)).toBe(100)
+  })
+
+  test("a window smaller than the reading span only counts the recent slice", () => {
+    const readings = [
+      full(0, 0),
+      full(1_000, 1_000_000),
+      full(1_200, 1_200_000),
+      full(1_400, 1_400_000),
+    ]
+    expect(cpuPercentOverWindow(readings, 1, 500)).toBe(100)
+  })
+
+  test("null with fewer than two readings or a zero window", () => {
+    expect(cpuPercentOverWindow([full(0, 0)], 1, 500)).toBeNull()
+    expect(cpuPercentOverWindow([full(0, 0), full(100, 1)], 1, 0)).toBeNull()
+    expect(cpuPercentOverWindow([full(0, 0), full(100, 1)], 0, 500)).toBeNull()
+  })
+})
+
 describe("ramMb", () => {
   test("converts resident bytes to MB", () => {
     expect(ramMb(1024 * 1024)).toBe(1)
@@ -32,12 +69,12 @@ describe("ramMb", () => {
 })
 
 describe("StatRealtimeResolver cpu/ram", () => {
-  test("ingestCpuRam feeds a separate interpolated history", () => {
+  test("ingestCpuRam feeds a separate interpolated history on the fine cpu grid", () => {
     const r = StatRealtimeResolver.build(null)
     r.ingestCpuRam(10, 500, 1_000)
-    r.ingestCpuRam(30, 700, 3_000)
+    r.ingestCpuRam(30, 700, 1_500)
     const graph = r.getForGraphCpuRam()
-    expect(graph.map((s) => s.at)).toEqual([1_000, 2_000, 3_000])
+    expect(graph.map((s) => s.at)).toEqual([1_000, 1_250, 1_500])
     expect(graph.map((s) => s.cpuRam.cpu)).toEqual([10, 20, 30])
     expect(graph.map((s) => s.cpuRam.ram)).toEqual([500, 600, 700])
   })

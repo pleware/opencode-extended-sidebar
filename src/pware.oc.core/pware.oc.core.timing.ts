@@ -41,5 +41,11 @@ export const EVENT_SCAN_DEBOUNCE_MS = 100
 /** Sliding window over which the live token rate is measured. */
 export const TOKEN_RATE_WINDOW_MS = 5_000
 
+/** Realtime CPU/RAM measurement cadence (CPU% is averaged over a rolling window). */
+export const REALTIME_CPU_SAMPLE_MS = 30
+
+/** Realtime token/cache chart re-render cadence — data still arrives on `session.updated`. */
+export const REALTIME_TOKEN_RENDER_MS = 40
+
 /** Session-switch status row safety: hide the indicator even if no snapshot lands. */
 export const SWITCH_TIMEOUT_MS = 3_000

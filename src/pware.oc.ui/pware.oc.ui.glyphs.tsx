@@ -36,7 +36,11 @@ export { workStatusGlyph } from "../pware.oc.core/pware.oc.core.status.js"
 export {
   SPINNER_FRAMES,
   QUEUED_GLYPH,
+  ENGAGE_MIN_FRAMES,
+  ENGAGE_MAX_FRAMES,
   spinnerFrame,
+  engageFill,
+  engageDone,
   flowBlinkOn,
   markTone,
   stateGlyph,

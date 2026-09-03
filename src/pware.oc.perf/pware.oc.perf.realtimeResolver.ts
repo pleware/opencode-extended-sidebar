@@ -45,8 +45,14 @@ export function mergeRealtimeHistories(
   return [...byAt.values()].sort((a, b) => a.at - b.at)
 }
 
-/** Regular time-grid step for `interpolateRealtimeHistory`. */
+/** Regular time-grid step for `interpolateRealtimeHistory` (token/cache series). */
 export const REALTIME_INTERPOLATE_STEP_MS = 1_000
+
+/** CPU/RAM history retention — shorter than tokens so a 50 ms cadence stays bounded. */
+export const REALTIME_CPU_WINDOW_MS = 60_000
+
+/** Time-grid step the CPU/RAM graph is interpolated to (~4 points/s from a 50 ms stream). */
+export const REALTIME_CPU_GRAPH_STEP_MS = 250
 
 function lerp(a: number | null, b: number | null, t: number): number | null {
   if (a == null) return b
@@ -145,11 +151,11 @@ export class StatRealtimeResolver {
     const snap = emptyStatRealtimeSnapshot(at)
     snap.cpuRam.cpu = cpu
     snap.cpuRam.ram = ram
-    this.cpuRamHistory = pushStatRealtimeHistory(this.cpuRamHistory, snap, STAT_REALTIME_HISTORY_WINDOW_MS)
+    this.cpuRamHistory = pushStatRealtimeHistory(this.cpuRamHistory, snap, REALTIME_CPU_WINDOW_MS)
   }
 
   getForGraphCpuRam(): StatRealtimeSnapshotHistory[] {
-    return interpolateRealtimeHistory(this.cpuRamHistory, REALTIME_INTERPOLATE_STEP_MS)
+    return interpolateRealtimeHistory(this.cpuRamHistory, REALTIME_CPU_GRAPH_STEP_MS)
   }
 
   reset(): void {

@@ -1,7 +1,11 @@
 import { describe, expect, test } from "bun:test"
 import {
+  ENGAGE_MAX_FRAMES,
+  ENGAGE_MIN_FRAMES,
   defaultBodyTone,
   directionGlyph,
+  engageDone,
+  engageFill,
   flowBlinkOn,
   markTone,
   spinnerFrame,
@@ -23,6 +27,34 @@ describe("flowBlinkOn", () => {
     expect(flowBlinkOn(2)).toBe(false)
     expect(flowBlinkOn(3)).toBe(false)
     expect(flowBlinkOn(4)).toBe(true)
+  })
+})
+
+describe("engageFill", () => {
+  test("ramps linearly to 1 over the minimum frames and clamps", () => {
+    expect(engageFill(0)).toBe(0)
+    expect(engageFill(-3)).toBe(0)
+    expect(engageFill(ENGAGE_MIN_FRAMES / 2)).toBeCloseTo(0.5)
+    expect(engageFill(ENGAGE_MIN_FRAMES)).toBe(1)
+    expect(engageFill(ENGAGE_MIN_FRAMES + 5)).toBe(1)
+  })
+})
+
+describe("engageDone", () => {
+  test("ends only when ready after the minimum show time", () => {
+    expect(engageDone(0, false)).toBe(false)
+    expect(engageDone(ENGAGE_MIN_FRAMES, false)).toBe(false)
+    expect(engageDone(ENGAGE_MIN_FRAMES - 1, true)).toBe(false)
+    expect(engageDone(ENGAGE_MIN_FRAMES, true)).toBe(true)
+  })
+
+  test("hard ceiling ends a boot that never becomes ready", () => {
+    expect(engageDone(ENGAGE_MAX_FRAMES - 1, false)).toBe(false)
+    expect(engageDone(ENGAGE_MAX_FRAMES, false)).toBe(true)
+  })
+
+  test("clamps negative frames to zero", () => {
+    expect(engageDone(-1, true)).toBe(false)
   })
 })
 

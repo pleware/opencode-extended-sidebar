@@ -176,10 +176,10 @@ Plugin registration: `id = "opencode-extended-sidebar"`, load toast,
 | `paths.ts` | OpenCode path resolution, path folding | `getOpenCodeDbPath()`, `pluginRoot()`, `resolveProjectFile()`, `basenameOf()`, `fileStamp()`, `dbStamp()`, `str()`, `finiteNum()` |
 | `preview.ts` | text/markdown preview limits | `previewViewportRows()`, `canPreviewPath()`, `isMarkdownPath()`, `readTextPreview()` |
 | `pulse.ts` | agent marks, flow, time/token formatting | `toEpochMs()`, `pulseAgeMs()`, `composeMark()`, `hottestMark()`, `activeFlow()`, `applyFlow()`, `flowFromEvent()`, `sessionBusyFromEvent()`, `sessionIdFromEvent()`, `stripSessionPrefix()`, `shortToolLabel()`, `toolHitFromEvent()`, `formatAge()`, `formatDuration()`, `formatTokens()`, `formatUsd()`, `packChips()` |
-| `glyph.ts` | every glyph as one char+tone spec; tone keys | `ToneKey`, `GlyphSpec`, `SPINNER_FRAMES`, `spinnerFrame()`, `flowBlinkOn()`, `markTone()`, `stateGlyph()`, `directionGlyph()`, `defaultBodyTone()`, `QUEUED_GLYPH` |
+| `glyph.ts` | every glyph as one char+tone spec; tone keys | `ToneKey`, `GlyphSpec`, `SPINNER_FRAMES`, `spinnerFrame()`, `flowBlinkOn()`, `markTone()`, `stateGlyph()`, `directionGlyph()`, `defaultBodyTone()`, `QUEUED_GLYPH`, `ENGAGE_MIN_FRAMES`, `ENGAGE_MAX_FRAMES`, `engageFill()`, `engageDone()` |
 | `sqlite.ts` | readonly `bun:sqlite` / `node:sqlite` handle, fail-fast busy timeout (logs `sql.busy`) | `openReadonlyDb()`, `withDbRead()`, `resetReadonlyDb()`, `uniqueIds()`, `isBusyError()` |
 | `status.ts` | canonical lifecycle/tool/work status | `normalizeStatus()`, `toToolStatus()`, `toWorkLabel()`, `workStatusGlyph()`, `workIsTerminal()`, `taskRank()` |
-| `timing.ts` | panel clock budgets | `TICK_MS`, `NOW_MS`, `FPS_READ_EVERY_TICKS`, `BLINK_TICKS`, `MONITOR_POLL_MS`, `MONITOR_WATCH_DEBOUNCE_MS`, `EVENT_SCAN_DEBOUNCE_MS` |
+| `timing.ts` | panel clock budgets | `TICK_MS`, `NOW_MS`, `FPS_READ_EVERY_TICKS`, `BLINK_TICKS`, `MONITOR_POLL_MS`, `MONITOR_WATCH_DEBOUNCE_MS`, `EVENT_SCAN_DEBOUNCE_MS`, `REALTIME_CPU_SAMPLE_MS`, `REALTIME_TOKEN_RENDER_MS` |
 
 ### `pware.oc.core/constants` — host literals + the plugin's own vocabularies
 
@@ -279,9 +279,9 @@ Plugin registration: `id = "opencode-extended-sidebar"`, load toast,
 | `charts.ts` | pure chart/stat helpers: null-fill, smoothing, downsampling, ANSI strip, bars, trends, histograms, gauges | `interpolateSeries()`, `smoothSeries()`, `downsampleAvg()`, `stripAnsi()`, `asciiTrend()`, `shareBar()`, `perfStatLine()`, `waitHistogram()`, `shareGauge()`, `shareDonut()` |
 | `realtime.ts` | realtime metric samples (tokens/cache/cpu·ram/network) + pure history push/prune | `StatRealtimeSnapshot`, `StatRealtimeSnapshotHistory`, `StatRealtimeTokensSeries`, `StatRealtimeCacheSeries`, `StatRealtimeCpuRamSeries`, `StatRealtimeNetworkSeries`, `STAT_REALTIME_HISTORY_WINDOW_MS`, `sumSeries()`, `emptyStatRealtimeSnapshot()`, `pushStatRealtimeHistory()` |
 | `realtimeBlock.ts` | static definition of the OES realtime widget: tabs, selector rows, series readers | `StatRealtimeBlock`, `StatRealtimeTab`, `StatRealtimeRowTab`, `StatRealtimeTabId`, `StatRealtimeSeriesKey`, `seriesValues()`, `STAT_REALTIME_BLOCK` |
-| `realtimeResolver.ts` | event-driven per-session delta rates → per-session + aggregate chart series (no DB) | `StatRealtimeResolver`, `StatRealtimeEventTokens`, `mergeRealtimeHistories()`, `interpolateRealtimeHistory()`, `REALTIME_INTERPOLATE_STEP_MS` |
+| `realtimeResolver.ts` | event-driven per-session delta rates → per-session + aggregate chart series (no DB) | `StatRealtimeResolver`, `StatRealtimeEventTokens`, `mergeRealtimeHistories()`, `interpolateRealtimeHistory()`, `REALTIME_INTERPOLATE_STEP_MS`, `REALTIME_CPU_WINDOW_MS`, `REALTIME_CPU_GRAPH_STEP_MS` |
 | `realtimeSampler.ts` | subscribes to `session.updated`, extracts token totals, feeds the resolver | `EventDriverSampler`, `RealtimeEventSubscribe`, `extractSessionTokens()` |
-| `realtimeCpuRam.ts` | process-level CPU/RAM sampling (built-ins, cross-platform) | `CpuRamSampler`, `CpuRamSamplerOptions`, `CpuRamReading`, `cpuPercent()`, `ramMb()` |
+| `realtimeCpuRam.ts` | process-level CPU/RAM sampling (built-ins, cross-platform) | `CpuRamSampler`, `CpuRamSamplerOptions`, `CpuRamReading`, `CpuRamStampedReading`, `cpuPercent()`, `cpuPercentOverWindow()`, `ramMb()` |
 | `asciichart.d.ts` | ambient `asciichart` module typings (plain, ANSI-free output) | `plot()` |
 | `view.tsx` | Perf tab | `PerfPanel` |
 

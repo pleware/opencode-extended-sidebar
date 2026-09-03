@@ -81,10 +81,13 @@ import {
 import { DOC_KIND_DRAFT } from "../pware.oc.omo/constants/pware.oc.omo.constants.docKind.js"
 import {
   GROUP_GLYPH,
+  engageDone,
+  engageFill,
   fileLetterGlyph,
   markTone,
   myWorkGlyph,
   reviewStateSuffix,
+  spinnerFrame,
 } from "./pware.oc.ui.glyphs.js"
 import { dismissQuestion, kvReadOne, kvWriteOne, readDismissedQuestions, ClickText, type ThemeColors } from "./pware.oc.ui.chrome.js"
 import {
@@ -103,7 +106,7 @@ import {
 } from "./pware.oc.ui.sections.js"
 import { emptyPerf, readPerfSnapshot } from "../pware.oc.perf/pware.oc.perf.reader.js"
 import { PerfPanel } from "../pware.oc.perf/pware.oc.perf.view.js"
-import { rateSparkline } from "../pware.oc.perf/pware.oc.perf.charts.js"
+import { rateSparkline, shareBar } from "../pware.oc.perf/pware.oc.perf.charts.js"
 import { StatRealtimeResolver } from "../pware.oc.perf/pware.oc.perf.realtimeResolver.js"
 import { EventDriverSampler } from "../pware.oc.perf/pware.oc.perf.realtimeSampler.js"
 import { CpuRamSampler } from "../pware.oc.perf/pware.oc.perf.realtimeCpuRam.js"
@@ -141,6 +144,7 @@ import {
   FPS_READ_EVERY_TICKS,
   GLYPH_TICK_MS,
   NOW_MS,
+  REALTIME_TOKEN_RENDER_MS,
   SWITCH_TIMEOUT_MS,
   TICK_MS,
   TOKEN_RATE_WINDOW_MS,
@@ -201,6 +205,13 @@ const TAB_LABELS: Record<string, string> = {
   perf: "Stats",
 }
 
+/**
+ * The cold-start "engage" bar (and its success toast) plays once per plugin
+ * boot. The module latch survives sidebar remounts across route changes so a
+ * session switch never replays the animation.
+ */
+let engageSeen = false
+
 function emptyRuntime(): RuntimeSnapshot {
   const dbPath = getOpenCodeDbPath()
   return {
@@ -228,11 +239,16 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   const [liveFiles, setLiveFiles] = createSignal<Record<string, FileView>>({})
   const [tokenTicks, setTokenTicks] = createSignal<readonly TokenTick[]>([])
   const [rtVersion, setRtVersion] = createSignal(0)
+  const [rtCpuVersion, setRtCpuVersion] = createSignal(0)
   const [rtTab, setRtTab] = createSignal<StatRealtimeTabId>("tokens")
   const [rtRow, setRtRow] = createSignal<StatRealtimeSeriesKey>("sum")
   const [gitTick, setGitTick] = createSignal(0)
   const [switching, setSwitching] = createSignal<{ id: string; at: number } | null>(null)
   const [coldTab, setColdTab] = createSignal<string | null>(null)
+
+  const engageBootFrame = glyphFrame()
+  const [engaging, setEngaging] = createSignal(!engageSeen)
+  const engageTick = (): number => Math.max(0, glyphFrame() - engageBootFrame)
 
   const colors = (): ThemeColors => props.theme.current as unknown as ThemeColors
 
@@ -447,6 +463,9 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   const glyphTick = setInterval(() => setGlyphFrame((n) => n + 1), GLYPH_TICK_MS)
 
   const rtResolver = StatRealtimeResolver.build(null)
+  // Token redraws are coalesced to a 40ms cadence: the session.updated handler
+  // only marks dirty; the tick below flushes once (no events → line stands still).
+  let rtTokenDirty = false
   const rtSampler = EventDriverSampler.create(rtResolver, (handler) => {
     try {
       const on = props.api.event.on as (
@@ -457,7 +476,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
         const dir = projectDir()
         if (dir && meta?.directory && String(meta.directory) !== dir) return
         handler(evt)
-        setRtVersion((n) => n + 1)
+        rtTokenDirty = true
       })
       return typeof off === "function" ? () => off() : () => {}
     } catch {
@@ -467,9 +486,16 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   rtSampler.start()
 
   const cpuRamSampler = CpuRamSampler.create(rtResolver, {
-    onSample: () => setRtVersion((n) => n + 1),
+    onSample: () => setRtCpuVersion((n) => n + 1),
   })
   cpuRamSampler.start()
+
+  const rtTokenTick = setInterval(() => {
+    if (rtTokenDirty) {
+      rtTokenDirty = false
+      setRtVersion((n) => n + 1)
+    }
+  }, REALTIME_TOKEN_RENDER_MS)
 
   const offGit = onGitMarksChange(() => {
     profile("git", () => {
@@ -504,9 +530,30 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     onCleanup(() => clearTimeout(timer))
   })
 
+  // End the boot bar once the first real snapshot landed after the minimum
+  // show time (or the hard ceiling) — then toast exactly once per boot.
+  createEffect(() => {
+    if (!engaging()) return
+    if (engageDone(engageTick(), Boolean(snap().fingerprint))) {
+      setEngaging(false)
+      engageSeen = true
+      try {
+        props.api.ui.toast({
+          message: "OpenCode Extended Sidebar Loaded. Engage!",
+          variant: "success",
+          duration: 7000,
+        })
+      } catch {
+        // host without toast
+      }
+      requestRender()
+    }
+  })
+
   onCleanup(() => {
     clearInterval(tick)
     clearInterval(glyphTick)
+    clearInterval(rtTokenTick)
     rtSampler.stop()
     cpuRamSampler.stop()
     bridge.stop()
@@ -752,6 +799,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
       let fixed = 8 // OES status bar + realtime block (tabs + 3 selector rows) + self line + brand line + top padding
       if (modeLine()) fixed += 1 // debug/profile flag row
       if (modeDirLine()) fixed += 1
+      if (engaging()) fixed += 1 // cold-start engage bar row
       let blocks = 0
 
       const header = () => {
@@ -1014,13 +1062,17 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     () => rtActiveTab().rows.find((r) => r.key === rtRow()) ?? rtActiveTab().rows[0]!,
   )
   const rtHistory = createMemo(() => {
+    if (rtActiveTab().id === "cpu-ram") {
+      rtCpuVersion()
+      return rtResolver.getForGraphCpuRam()
+    }
     rtVersion()
-    return rtActiveTab().id === "cpu-ram" ? rtResolver.getForGraphCpuRam() : rtResolver.getForGraph(null)
+    return rtResolver.getForGraph(null)
   })
   const rtLines = createMemo(() =>
     rateSparkline(seriesValues(rtHistory(), rtActiveRow().read), {
       width: Math.max(8, oes().lineMax - 8),
-      height: 2,
+      height: 3,
       charset: "braille",
     }),
   )
@@ -1048,6 +1100,12 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
 
   return (
     <box flexDirection="column" gap={1} paddingTop={1}>
+      <Show when={engaging()}>
+        <box flexDirection="row" gap={1}>
+          <text fg={colors().primary}>{`${spinnerFrame(engageTick())} engage`}</text>
+          <text fg={colors().textMuted}>{shareBar(engageFill(engageTick()), 10)}</text>
+        </box>
+      </Show>
       <Show when={modeLine()}>
         <text fg={colors().warning || colors().text}>{modeLine()}</text>
       </Show>
