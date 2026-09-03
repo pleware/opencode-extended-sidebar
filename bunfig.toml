@@ -1,0 +1,14 @@
+[test]
+# Thin TUI wrappers are tested via extracted helpers + snapshot fixtures, not by
+# mounting OpenTUI (see tests-sync / try-testable rules). The runtime monitor /
+# source / worker are fs.watch + timer + worker glue whose logic
+# (computeFingerprint, readRuntimeSnapshot) is snapshot-tested. Exclude both so
+# coverage measures the extractable logic that actually carries the decisions.
+coveragePathIgnorePatterns = [
+  "src/pware.oc.ui.tsx",
+  "src/pware.oc.ui/**",
+  "src/pware.oc.perf/pware.oc.perf.view.tsx",
+  "src/pware.oc.runtime/pware.oc.runtime.monitor.ts",
+  "src/pware.oc.runtime/pware.oc.runtime.source.ts",
+  "src/pware.oc.runtime/pware.oc.runtime.worker.ts",
+]

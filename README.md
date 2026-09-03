@@ -8,7 +8,7 @@
 
 Switch sessions, watch tools run live, see which files changed, and where the time went. No browser, no dashboard, four tiny dependencies.
 
-![OpenCode plugin](https://img.shields.io/badge/OpenCode-TUI%20plugin-000?style=flat-square) ![CI](https://github.com/pleware/opencode-extended-sidebar/actions/workflows/ci.yml/badge.svg) ![Runtime deps](https://img.shields.io/badge/runtime%20deps-4-brightgreen?style=flat-square) ![Read only](https://img.shields.io/badge/database-read--only-blue?style=flat-square) ![License](https://img.shields.io/badge/license-MIT-lightgrey?style=flat-square)
+![OpenCode plugin](https://img.shields.io/badge/OpenCode-TUI%20plugin-000?style=flat-square) ![CI](https://github.com/pleware/opencode-extended-sidebar/actions/workflows/ci.yml/badge.svg) [![codecov](https://codecov.io/gh/pleware/opencode-extended-sidebar/branch/main/graph/badge.svg)](https://codecov.io/gh/pleware/opencode-extended-sidebar) ![Runtime deps](https://img.shields.io/badge/runtime%20deps-4-brightgreen?style=flat-square) ![Read only](https://img.shields.io/badge/database-read--only-blue?style=flat-square) ![License](https://img.shields.io/badge/license-MIT-lightgrey?style=flat-square)
 
 ---
 
@@ -54,17 +54,17 @@ OpenCode gives you one conversation at a time. Real work looks different: an orc
 
 > **Perf** splits the wall clock into wait, think, stream and tools, then ranks models and slow calls. Click a phase, a section title, or a tool row for a dated column log. The scan runs only while this tab is open.
 >
-> A single **OES status bar** sits at the very top of the panel — `OES • 50 tok/s`. The glyph is a braille spinner while a tab loads or a session switch is in flight, `×` on a real error (with the message), and a static `•` once ready. On a cold start the bar's first line is briefly taken by a one-row `engage` boot line — a braille spinner plus a block fill that completes in about a second — which ends when the first snapshot lands and hands over to the `Loaded. Engage!` success toast. The trailing number is a **live token-rate estimate**: streaming text deltas are counted (≈ code points ÷ 4) over a rolling 5-second window, so it reads `50 tok/s` while tokens stream in and settles to `0 tok/s` when idle — the rate is always shown, rounded to whole tokens. No prompt or output text ever leaves the panel — only the count. Right below the bar sits a **realtime block** with category tabs (`Tokens | Cache | CPU/RAM | Network`) and a row selector (`sum` / `in` / `out`, cache `read`/`write`, `cpu`/`ram`); picking a row switches the one shared braille chart to that series, each with a `F` fullscreen placeholder (future). A compact axis column flanks the chart (`0` at the baseline, the recent max on top, ≤3 chars — `100`, `1k`). `Network` (kbit/s) is estimated from the token flow at ≈ 4 bytes/token — `out` is what the session sends to the model (input + cache), `in` is what streams back (output + reasoning) — a live proxy for traffic, not a socket meter.
+> A single **OES status bar** sits at the very top of the panel — `OES • 50 tok/s`. The glyph is a braille spinner while a tab loads or a session switch is in flight, `×` on a real error (with the message), and a static `•` once ready. On a cold start the bar's first line is briefly taken by a one-row `engage` boot line — a braille spinner plus a block fill that completes in about a second — which ends when the first snapshot lands and hands over to the `Loaded. Engage!` success toast. The trailing number is a **live token-rate estimate**: streaming text deltas are counted (≈ code points ÷ 4) over a rolling 5-second window, so it reads `50 tok/s` while tokens stream in and settles to `0 tok/s` when idle — the rate is always shown, rounded to whole tokens. No prompt or output text ever leaves the panel — only the count. Right below the bar sits a **realtime block** with compact category tabs — `Tok`, `Cache`, `CPU/RAM`, `Net`, each led by a muted `•` — and a row selector (`sum` / `in` / `out`, cache `read`/`write`, `cpu`/`ram`); picking a row switches the one shared braille chart to that series, each with a `F` fullscreen placeholder (future). A compact axis column flanks the chart (`0` at the baseline, the recent max on top, ≤3 chars — `100`, `1k`). `Net` (kbit/s) is estimated from the token flow at ≈ 4 bytes/token — `out` is what the session sends to the model (input + cache), `in` is what streams back (output + reasoning) — a live proxy for traffic, not a socket meter.
 >
-> A muted **self** line above the tab row — `self 0.4ms/ev · 1.2ms/sc · 59fps` — shows what the plugin itself costs: average event-handler ms, average scan (fingerprint + snapshot) ms, and the TUI renderer's FPS. It measures the plugin's own runtime, not the model's. `OES_DEBUG_OPENCODE=1` additionally writes `self`-tagged JSON lines to the debug log.
+> A muted **self** line above the tab row — `self 0.4ms/ev · 1.2ms/sc · 59fps` — shows what the plugin itself costs: average event-handler ms, average scan (fingerprint + snapshot) ms, and the TUI renderer's FPS. It measures the plugin's own runtime, not the model's. The line is diagnostic: it renders — and its timing runs — only while `OES_DEBUG_OPENCODE` or `OES_DEBUG_PROFILE` is active, so a normal session pays nothing for it. `OES_DEBUG_OPENCODE=1` additionally writes `self`-tagged JSON lines to the debug log.
 
 ## ▣ One group, four views
 
 > ```
-> My work | Session | Project | Stats
+> • My work  • Session  • Project  • Stats
 > ```
 >
-> **Session** is this agent, its delegates, tools, files and — with OMO — the last five drafts behind a `view all` picker. **My work** is the queue of things waiting on you — open questions and OMO plan approvals grouped by the action they need. **Project** is the project-wide view — recent sessions (Chat history) plus the tools and files every one of them touched. **Stats** is timing. Tabs and folds are remembered. Clickable labels underline on hover. While a tab waits for its data a transient status row sits at its top — a braille spinner with `switching · <id>` while a session switch is in flight, `loading` on a cold tab, or an error/empty note (`no turns yet` on Stats) — and disappears the moment the data lands, so a switch never reads as a broken panel.
+> **Session** is this agent, its delegates, tools, files and — with OMO — the last five drafts behind a `view all` picker. **My work** is the queue of things waiting on you — open questions and OMO plan approvals grouped by the action they need. **Project** is the project-wide view — recent sessions (Chat history) plus the tools and files every one of them touched. **Stats** is timing. Each tab is led by a status light in place of a separator: `Session`, `Project` and `Stats` always show a muted `•`, while the **My work** light turns into `×` / `?` / `!` / `▶` / `⊘` whenever something is waiting on you (a failed or open question, a plan to review or start, an interrupted question) — it is scanned live while My work is open and every 5 seconds project-wide while it is not. Tabs and folds are remembered. Clickable labels underline on hover. While a tab waits for its data a transient status row sits at its top — a braille spinner with `switching · <id>` while a session switch is in flight, `loading` on a cold tab, or an error/empty note (`no turns yet` on Stats) — and disappears the moment the data lands, so a switch never reads as a broken panel.
 
 ## ⇕ Rows that fit the window
 
@@ -177,7 +177,7 @@ Ignored files come from `.oesignore` and, when enabled, `.gitignore` — both at
 
 ## Debug
 
-Set `OES_DEBUG_OPENCODE` in the environment **before** starting OpenCode, then restart the TUI. While either logger is active the sidebar shows a flag row above the `self` line — `debug mode` and/or `profile`, one next to the other (yellow). A second muted row prints the **resolved log directory** (`logs <path>`) so you can see exactly where files are being written.
+Set `OES_DEBUG_OPENCODE` in the environment **before** starting OpenCode, then restart the TUI. While either logger is active the sidebar shows the muted `self` cost line with a yellow flag row above it — `debug mode` and/or `profile` — plus a second muted row that prints the **resolved log directory** (`logs <path>`) so you can see exactly where files are being written. With no logger on, the `self` line and its measurement are off entirely.
 
 ```bash
 # writes to <plugin>/logs/oes-debug-YYYY-MM-DD.log
@@ -206,7 +206,7 @@ The panel is a read-only view of data OpenCode already stores.
 | `oes.json`      | plugin / user config / project                                 | display limits                    |
 | ignore files    | `<project>/.oesignore` (always) · `.gitignore` (with `skipGitignore`) | files hidden from the panel     |
 
-It refreshes from database stamps, file watches, and OpenCode events. The always-on runtime snapshot is read off the TUI main thread in a Bun worker (with a synchronous fallback if the worker is unavailable), so SQLite reads never block the UI. Cost is shown only when the provider reports it. The `self` line measures the plugin's own runtime with `performance.now()` and the TUI renderer's native frame stats — no extra data source.
+It refreshes from database stamps, file watches, and OpenCode events. The always-on runtime snapshot is read off the TUI main thread in a Bun worker (with a synchronous fallback if the worker is unavailable), so SQLite reads never block the UI. Cost is shown only when the provider reports it. The `self` line measures the plugin's own runtime with `performance.now()` and the TUI renderer's native frame stats — no extra data source — and it runs only while a debug or profile logger is active.
 
 ## Contributing
 
