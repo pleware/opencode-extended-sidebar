@@ -302,6 +302,20 @@ export function omoFileIndex(
 }
 
 /**
+ * The writer session for a rel path from an already-built index. The per-file
+ * half of `sessionForOmoFile`, split out so a caller can filter a whole list
+ * against one index build instead of one stamp lookup per file.
+ */
+export function omoWriterSession(
+  index: OmoFileIndex,
+  relPath: string | null | undefined,
+): string | null {
+  const base = basenameOf(relPath ?? "")
+  if (!base || base === "file") return null
+  return index.fileWriter.get(base)?.sessionId ?? null
+}
+
+/**
  * The session that last wrote a `.omo/` file of `kind`, if any. Matches
  * write-ish tool parts by the file's basename.
  */
@@ -310,9 +324,7 @@ export function sessionForOmoFile(
   relPath: string | null | undefined,
   kind: OmoFileKind,
 ): string | null {
-  const base = basenameOf(relPath ?? "")
-  if (!base || base === "file") return null
-  return omoFileIndex(db, null, null, kind).fileWriter.get(base)?.sessionId ?? null
+  return omoWriterSession(omoFileIndex(db, null, null, kind), relPath)
 }
 
 /** A per-kind omo-file resolver: the index builder + the writer-session lookup. */

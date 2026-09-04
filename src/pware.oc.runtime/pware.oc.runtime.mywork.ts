@@ -14,6 +14,7 @@ import type { ReviewState } from "../pware.oc.omo/resolver/pware.oc.omo.resolver
 import type { EnrichedApproval } from "./pware.oc.runtime.mywork-enrich.js"
 import {
   MY_WORK_GROUP_DISMISSED,
+  MY_WORK_GROUP_DRAFT_DOCS,
   MY_WORK_GROUP_DRAFTING,
   MY_WORK_GROUP_FINISHED,
   MY_WORK_GROUP_READY_REVIEW,
@@ -65,6 +66,12 @@ export type MyWorkItem =
       status: AgentStatus
       timeUpdated: number | null
     }
+  | {
+      kind: typeof MY_WORK_GROUP_DRAFT_DOCS
+      name: string
+      rel: string
+      updatedAt: number | null
+    }
 
 export type MyWorkKind = MyWorkItem["kind"]
 
@@ -78,6 +85,7 @@ export const MY_WORK_ORDER: readonly MyWorkKind[] = [
   MY_WORK_GROUP_FINISHED,
   MY_WORK_GROUP_DISMISSED,
   MY_WORK_GROUP_DRAFTING,
+  MY_WORK_GROUP_DRAFT_DOCS,
 ]
 
 const MY_WORK_LABELS: Record<MyWorkKind, string> = {
@@ -90,6 +98,7 @@ const MY_WORK_LABELS: Record<MyWorkKind, string> = {
   [MY_WORK_GROUP_FINISHED]: "Finished",
   [MY_WORK_GROUP_DISMISSED]: "Dismissed questions",
   [MY_WORK_GROUP_DRAFTING]: "Drafting",
+  [MY_WORK_GROUP_DRAFT_DOCS]: "Draft docs",
 }
 
 export function myWorkLabel(kind: MyWorkKind): string {
@@ -158,6 +167,13 @@ export function toApprovalItems(approvals: readonly EnrichedApproval[]): MyWorkI
     })
   }
   return out
+}
+
+/** Build the Draft docs items — drafts no action group covers, browsed as files. */
+export function toDraftDocItems(
+  docs: readonly { name: string; rel: string; updatedAt: number | null }[],
+): MyWorkItem[] {
+  return docs.map((d) => ({ kind: MY_WORK_GROUP_DRAFT_DOCS, name: d.name, rel: d.rel, updatedAt: d.updatedAt }))
 }
 
 /** Build the sessions group from recent main sessions — every session, live or idle. */

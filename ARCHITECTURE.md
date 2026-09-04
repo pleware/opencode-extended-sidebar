@@ -194,7 +194,7 @@ Plugin registration: `id = "opencode-extended-sidebar"`, load toast,
 | `pulse.ts` | the plugin's pulse / flow / mark vocabulary | `PULSE_*`, `PULSES`, `Pulse`, `FLOW_*`, `FLOW_DIRS`, `FlowDir`, `FLOW_HINT_CLEAR`, `FlowHint`, `MARK_*`, `AGENT_MARKS`, `AgentMark` |
 | `eventKind.ts` | the plugin's host-event classification buckets | `EVENT_KIND_*`, `EVENT_KINDS`, `EventKind` |
 | `rowKind.ts` | the sidebar row taxonomy | `ROW_KIND_*`, `ROW_KINDS`, `RowKind` |
-| `myWork.ts` | the "My work" approval groups | `MY_WORK_GROUP_*`, `MY_WORK_GROUPS`, `ApprovalGroupKind` |
+| `myWork.ts` | the "My work" groups | `MY_WORK_GROUP_*` (incl. `MY_WORK_GROUP_DRAFT_DOCS`), `MY_WORK_GROUPS`, `ApprovalGroupKind` |
 | `phase.ts` | Perf wall-clock phases + self-cost phases | `PERF_PHASE_*`, `PERF_PHASES`, `PerfPhase`, `PERF_LOG_KIND_*`, `PerfLogKind`, `SELF_PHASE_*`, `SELF_PHASES`, `SelfPhase` |
 
 ### `pware.oc.core/git` — project git + ignore
@@ -232,13 +232,13 @@ Plugin registration: `id = "opencode-extended-sidebar"`, load toast,
 |---|---|---|
 | `resolver/boulder.ts` | `boulder.json` → works/tasks/delegates/plan | `readOmo()`, `emptyOmo()`, `findBoulder()`, `findOmoWatchDirs()`, `isOmoPresent()`, `omoStamp()`, `currentTask()`, `workRowView()`, `workStatusLabel`, `planWorkStateByPlanName()` |
 | `resolver/plan.ts` | plan markdown frontmatter parsing | `parsePlanStatus()`, `parsePlanPendingAction()`, `parseReviewBlock()`, `approvalName()` |
-| `resolver/planFile.ts` | omo file → writer-session index (reads the OpenCode DB via `SqlDb`); one generic engine for every document kind, plus the plan-file listing | `planSessionIndex()`, `sessionForPlanFile()`, `PlanSessionIndex`, `omoFileIndex()`, `sessionForOmoFile()`, `OMO_FILE_KINDS`, `OmoFileKind`, `OmoFileIndex`, `PlanFile.list()` |
+| `resolver/planFile.ts` | omo file → writer-session index (reads the OpenCode DB via `SqlDb`); one generic engine for every document kind, plus the plan-file listing | `planSessionIndex()`, `sessionForPlanFile()`, `PlanSessionIndex`, `omoFileIndex()`, `omoWriterSession()`, `sessionForOmoFile()`, `OMO_FILE_KINDS`, `OmoFileKind`, `OmoFileIndex`, `PlanFile.list()` |
 | `resolver/draftFile.ts` | draft-file → writer-session index (thin wrapper over `planFile.ts`) | `draftSessionIndex()`, `sessionForDraftFile()`, `DraftFile.list()` |
 | `resolver/notepadsFile.ts` | notepad-file → writer-session index (thin wrapper over `planFile.ts`) | `notepadsSessionIndex()`, `sessionForNotepadFile()`, `NotepadFile.list()` |
 | `resolver/proofFile.ts` | evidence (proof) file → writer-session index (thin wrapper over `planFile.ts`) | `proofSessionIndex()`, `sessionForProofFile()`, `ProofFile.list()` |
 | `resolver/rulesFile.ts` | rule-file → writer-session index (thin wrapper over `planFile.ts`) | `rulesSessionIndex()`, `sessionForRuleFile()` |
 | `resolver/runContinuationFile.ts` | run-continuation file → writer-session index (thin wrapper over `planFile.ts`) | `runContinuationSessionIndex()`, `sessionForRunContinuationFile()` |
-| `resolver/approval.ts` | the four "My work" approval buckets (ready-to-review / ready-to-start / finished / drafting; TTL, lazy) | `listApprovals()`, `resetApprovalsCache()` |
+| `resolver/approval.ts` | the "My work" approval buckets — four action groups (ready-to-review / ready-to-start / finished / drafting) plus the `draftDocs` archive (TTL, lazy) | `listApprovals()`, `resetApprovalsCache()` |
 | `resolver/approvalGroup.ts` | "My work" approval grouping from OMO plan status + draft path, reconciled against boulder + writer todos | `approvalGroup()`, `isDraftOf()`, `resolveApprovalGroup()`, `planWorkDone()`, `isDrafting()`, `isReadyToReview()`, `isReadyToStart()`, `isFinished()` |
 | `resolver/approvalState.ts` | `.omo/run-continuation` background-task marker | `readRunContinuationState()`, `firstRunContinuationDir()` |
 | `resolver/doc.ts` | docs index: per-kind listing of plan/drafts/notepads/proof, with session + plan-status filters | `listOmoFiles()`, `ListOmoFilesOptions`, `resetDocsCache()`, `DOC_KIND_LABEL` |
@@ -266,7 +266,7 @@ Plugin registration: `id = "opencode-extended-sidebar"`, load toast,
 | `pware.oc.runtime.source.ts` | runtime source orchestration: monitor lifecycle + debounced refresh from `pware.oes.*`/`pware.omo.*` hints; shuts the worker down on stop | `startRuntimeSource()`, `RuntimeSourceHandle` |
 | `pware.oc.runtime.worker.ts` | Bun Worker entry running `readRuntimeSnapshot` off the TUI main thread | (worker entry) |
 | `pware.oc.runtime.snapshotClient.ts` | async snapshot client: lazy singleton worker + sync fallback | `readRuntimeSnapshotAsync()`, `shutdownSnapshotWorker()`, `SnapshotRequestOpts` |
-| `pware.oc.runtime.mywork.ts` | the "My work" queue (questions + sessions + approvals) | `MyWorkItem`, `groupMyWork()`, `toQuestionItems()`, `toSessionItems()`, `toApprovalItems()`, `dropDismissed()`, `parseDismissed()`, `formatDismissed()`, `approvalContinueHint()`, `startWorkCommand()`, `StartWorkMode` |
+| `pware.oc.runtime.mywork.ts` | the "My work" queue (questions + sessions + approvals + draft docs) | `MyWorkItem`, `groupMyWork()`, `toQuestionItems()`, `toSessionItems()`, `toApprovalItems()`, `toDraftDocItems()`, `dropDismissed()`, `parseDismissed()`, `formatDismissed()`, `approvalContinueHint()`, `startWorkCommand()`, `StartWorkMode` |
 | `pware.oc.runtime.mywork-enrich.ts` | planner session state for approval rows (opencode SQLite + omo run-continuation) | `planSessionStateLabel()`, `enrichApprovalSessionStates()` |
 | `pware.oc.runtime.questions.ts` | in-memory per-session open-question cache (seed/reconcile/touch) | `createQuestionCache()`, `mergeQuestions()`, `QuestionCache` |
 | `resolver/index.ts` | unified runtime snapshot | `RuntimeSnapshot`, `readRuntimeSnapshot()`, `computeFingerprint()`, `resetRuntimeCache()` |

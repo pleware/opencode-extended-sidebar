@@ -20,6 +20,7 @@ import {
   groupMyWork,
   myWorkLabel,
   toApprovalItems,
+  toDraftDocItems,
   toQuestionItems,
   toSessionItems,
   type MyWorkItem,
@@ -73,6 +74,7 @@ import {
 } from "../pware.oc.opencode/constants/pware.oc.opencode.constants.questionKind.js"
 import {
   MY_WORK_GROUP_DISMISSED,
+  MY_WORK_GROUP_DRAFT_DOCS,
   MY_WORK_GROUP_DRAFTING,
   MY_WORK_GROUP_FINISHED,
   MY_WORK_GROUP_READY_REVIEW,
@@ -743,12 +745,14 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
 
   const omoPresent = createMemo(() => snap().omo.present)
 
-  /** Drafts under `.omo/drafts/` — last five inline, the full list behind "view all". */
+  /** Drafts under `.omo/drafts/` that this session wrote — last five inline, the full list behind "view all". */
   const draftsAll = createMemo<DocView[]>(() => {
-    if (tab() !== "current" || !omoPresent()) return []
+    if (tab() !== "current" || !omoPresent() || !props.sessionId) return []
     now() // re-scan while open; the docs cache TTL gates the filesystem read
+    const db = openReadonlyDb(snap().db.dbPath)
+    if (!db) return [] // no writer attribution without the DB
     try {
-      return DraftFile.list(projectDir())
+      return DraftFile.list(projectDir(), props.sessionId, { db })
     } catch (e) {
       dbg("drafts", "error", String(e))
       return []
@@ -770,27 +774,31 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     }
   })
 
-  /** OMO drafts/plans across all four states, enriched with planner-session state. */
+  /** OMO plans/drafts in the action groups, enriched with planner-session state, plus the Draft docs archive. */
   const myWorkApprovals = createMemo<MyWorkItem[]>(() => {
     if (tab() !== "mywork" || coldTab() === "mywork" || !omoPresent()) return []
     now() // re-scan while open; the plans cache TTL gates the filesystem read
     const dir = projectDir()
     try {
       const buckets = listApprovals(dir)
-      return toApprovalItems(
-        enrichApprovalSessionStates(
-          [
-            ...buckets.readyReview,
-            ...buckets.readyStart,
-            ...buckets.finished,
-            ...buckets.drafting,
-          ],
-          {
-            dbPath: snap().db.dbPath,
-            projectRoot: dir,
-          },
+      return [
+        ...toApprovalItems(
+          enrichApprovalSessionStates(
+            [
+              ...buckets.readyReview,
+              ...buckets.readyStart,
+              ...buckets.finished,
+              ...buckets.drafting,
+            ],
+            {
+              dbPath: snap().db.dbPath,
+              projectRoot: dir,
+            },
+          ),
         ),
-      )
+        // Draft docs are not queue items — no session enrichment needed.
+        ...toDraftDocItems(buckets.draftDocs),
+      ]
     } catch (e) {
       dbg("mywork.approvals", "error", String(e))
       return []
@@ -948,6 +956,24 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
         current: item.sessionId === props.sessionId,
         suffix: item.sessionId === props.sessionId ? "[C]" : undefined,
         onSelect: () => goSession(item.sessionId),
+      }
+    }
+    if (item.kind === MY_WORK_GROUP_DRAFT_DOCS) {
+      const age = pulseAgeMs(now(), item.updatedAt)
+      const doc: DocView = {
+        kind: DOC_KIND_DRAFT,
+        name: item.name,
+        rel: item.rel,
+        updatedAt: item.updatedAt,
+        sizeBytes: 0,
+        previewable: true,
+      }
+      return {
+        kind: ROW_KIND_FILE,
+        glyph: myWorkGlyph(item.kind),
+        name: item.name,
+        suffix: formatAge(age),
+        onSelect: () => openDocDetail(props.api, doc, projectRoots(), colors()),
       }
     }
     if ("sessionId" in item) {

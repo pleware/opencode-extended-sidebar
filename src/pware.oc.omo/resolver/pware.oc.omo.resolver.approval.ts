@@ -57,16 +57,18 @@ function listMdFiles(base: string): string[] {
   return out
 }
 
-/** The four "My work" approval buckets, keyed by group, in scan order. */
+/** The "My work" approval buckets, keyed by group, in scan order. */
 export type ScanResult = {
   drafting: ApprovalItem[]
   readyReview: ApprovalItem[]
   readyStart: ApprovalItem[]
   finished: ApprovalItem[]
+  /** Draft documents no action group covers — approved/done, unknown or no status. */
+  draftDocs: ApprovalItem[]
 }
 
 function emptyScan(): ScanResult {
-  return { drafting: [], readyReview: [], readyStart: [], finished: [] }
+  return { drafting: [], readyReview: [], readyStart: [], finished: [], draftDocs: [] }
 }
 
 function sortApprovals(items: ApprovalItem[]): ApprovalItem[] {
@@ -79,6 +81,7 @@ function scan(root: string): ScanResult {
   const readyReview: ApprovalItem[] = []
   const readyStart: ApprovalItem[] = []
   const finished: ApprovalItem[] = []
+  const draftDocs: ApprovalItem[] = []
   const seen = new Set<string>()
   const workStates = planWorkStateByPlanName(root)
   for (const omoDir of findOmoWatchDirs(root)) {
@@ -94,12 +97,13 @@ function scan(root: string): ScanResult {
           continue
         }
         const status = parsePlanStatus(text)
-        if (!status) continue
         const name = approvalName(rel)
         const workState = workStates.get(name) ?? "absent"
-        const group = resolveApprovalGroup(status, isDraft, workState, false)
-        if (!group) continue
-        seen.add(rel)
+        // A plan with no parseable status is not a plan at all — skip. A draft
+        // without a status is still a working document, so it is kept as a
+        // Draft doc below (isDraft is decided before this status guard).
+        if (!isDraft && !status) continue
+        const group = status ? resolveApprovalGroup(status, isDraft, workState, false) : null
         const item: ApprovalItem = {
           rel,
           name,
@@ -109,6 +113,15 @@ function scan(root: string): ScanResult {
           review: parseReviewBlock(text),
           workState,
         }
+        if (!group) {
+          // A draft no action group covers (superseded approved/done, unknown
+          // or no status) is a document, not a queue item — Draft docs.
+          if (!isDraft) continue
+          seen.add(rel)
+          draftDocs.push(item)
+          continue
+        }
+        seen.add(rel)
         switch (group) {
           case MY_WORK_GROUP_DRAFTING:
             drafting.push(item)
@@ -131,6 +144,7 @@ function scan(root: string): ScanResult {
     readyReview: sortApprovals(readyReview),
     readyStart: sortApprovals(readyStart),
     finished: sortApprovals(finished),
+    draftDocs: sortApprovals(draftDocs),
   }
 }
 

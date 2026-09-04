@@ -11,7 +11,8 @@ export type ApprovalItem = {
   /** Project-relative path. The panel must never show a root. */
   rel: string
   name: string
-  status: string
+  /** Frontmatter `status:`; null when the draft has none (a bare working note). */
+  status: string | null
   /** What happens after approval — e.g. `write .omo/plans/<slug>.md`. */
   pendingAction: string | null
   updatedAt: number | null

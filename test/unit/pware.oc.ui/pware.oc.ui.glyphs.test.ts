@@ -27,6 +27,10 @@ describe("myWorkGlyph", () => {
     expect(myWorkGlyph("drafting")).toEqual({ char: "…", tone: "textMuted" })
   })
 
+  test("draft docs are a muted dot — a browsable document, not a live draft", () => {
+    expect(myWorkGlyph("draft-docs")).toEqual({ char: "•", tone: "textMuted" })
+  })
+
   test("sessions is the primary ◔", () => {
     expect(myWorkGlyph("sessions")).toEqual({ char: "◔", tone: "primary" })
   })
@@ -43,9 +47,9 @@ describe("tabAttentionGlyph", () => {
     expect(TAB_NEUTRAL_GLYPH).toEqual({ char: "•", tone: "textMuted" })
   })
 
-  test("sessions, drafting and finished never light the tab", () => {
+  test("sessions, drafting, draft docs and finished never light the tab", () => {
     expect(
-      tabAttentionGlyph([item("sessions"), item("drafting"), item("finished")]),
+      tabAttentionGlyph([item("sessions"), item("drafting"), item("draft-docs"), item("finished")]),
     ).toEqual(TAB_NEUTRAL_GLYPH)
   })
 

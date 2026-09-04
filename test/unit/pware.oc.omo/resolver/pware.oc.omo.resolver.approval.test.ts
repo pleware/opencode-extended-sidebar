@@ -19,7 +19,7 @@ function project(files: Record<string, string>): string {
   return proj.root
 }
 
-const EMPTY = { drafting: [], readyReview: [], readyStart: [], finished: [] }
+const EMPTY = { drafting: [], readyReview: [], readyStart: [], finished: [], draftDocs: [] }
 
 describe("listApprovals", () => {
   test("buckets a mixed tree by status and file type", () => {
@@ -31,6 +31,7 @@ describe("listApprovals", () => {
       ".omo/plans/ready.md": "# plan\n\n## State\n\n- status: `approved`\n- slug: `ready`\n",
       ".omo/plans/done.md": "# plan\n\n## State\n\n- status: `done`\n- slug: `done`\n",
       ".omo/drafts/no-status.md": "just notes",
+      ".omo/drafts/odd.md": "---\nstatus: something-else\n---",
     })
     const out = listApprovals(root)
     expect(out.readyReview.map((a) => a.name).sort()).toEqual(["a"])
@@ -40,6 +41,8 @@ describe("listApprovals", () => {
     // a draft `approved`/`done` is superseded — absent from every bucket
     expect(out.drafting.map((a) => a.name)).not.toContain("approved")
     expect(out.readyStart.map((a) => a.name)).not.toContain("approved")
+    // a draft no action group covers is a Draft doc — approved, unknown, no status
+    expect(out.draftDocs.map((a) => a.name).sort()).toEqual(["approved", "no-status", "odd"])
   })
 
   test("a draft awaiting-approval lands in readyReview with pendingAction + rel", () => {

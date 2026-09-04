@@ -19,6 +19,7 @@ import {
 } from "../pware.oc.omo/constants/pware.oc.omo.constants.reviewStatus.js"
 import {
   MY_WORK_GROUP_DISMISSED,
+  MY_WORK_GROUP_DRAFT_DOCS,
   MY_WORK_GROUP_DRAFTING,
   MY_WORK_GROUP_FINISHED,
   MY_WORK_GROUP_READY_REVIEW,
@@ -65,6 +66,7 @@ export function myWorkGlyph(kind: MyWorkKind): GlyphSpec {
   if (kind === MY_WORK_GROUP_SESSIONS) return { char: "◔", tone: "primary" }
   if (kind === MY_WORK_GROUP_READY_REVIEW) return { char: "!", tone: "warning" }
   if (kind === MY_WORK_GROUP_DRAFTING) return { char: "…", tone: "textMuted" }
+  if (kind === MY_WORK_GROUP_DRAFT_DOCS) return { char: "•", tone: "textMuted" }
   if (kind === MY_WORK_GROUP_READY_START) return { char: "▶", tone: "primary" }
   if (kind === MY_WORK_GROUP_FINISHED) return { char: "✓", tone: "success" }
   if (kind === MY_WORK_GROUP_DISMISSED) return { char: "⊘", tone: "textMuted" }

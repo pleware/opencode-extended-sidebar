@@ -399,7 +399,7 @@ describe("My work queue", () => {
         },
       ],
     })
-    expect(listApprovals(projFix.root)).toEqual({ drafting: [], readyReview: [], readyStart: [], finished: [] })
+    expect(listApprovals(projFix.root)).toEqual({ drafting: [], readyReview: [], readyStart: [], finished: [], draftDocs: [] })
     expect(listOpenQuestions({ dbPath: dbFix.dbPath, projectId: "proj_a" })).toHaveLength(1)
   })
 
@@ -592,6 +592,8 @@ describe("My work queue", () => {
         ".omo/drafts/awaiting-review.md": "---\nstatus: awaiting-approval\n---",
         ".omo/plans/approved-plan.md": "---\nstatus: approved\n---",
         ".omo/plans/shipped-plan.md": "---\nstatus: done\n---",
+        ".omo/drafts/superseded.md": "---\nstatus: approved\n---",
+        ".omo/drafts/bare-note.md": "no frontmatter at all",
       },
     })
     const approvals = listApprovals(projFix.root)
@@ -599,6 +601,7 @@ describe("My work queue", () => {
     expect(approvals.readyStart.map((a) => a.name)).toEqual(["approved-plan"])
     expect(approvals.finished.map((a) => a.name)).toEqual(["shipped-plan"])
     expect(approvals.drafting).toEqual([])
+    expect(approvals.draftDocs.map((a) => a.name).sort()).toEqual(["bare-note", "superseded"])
     assertPrivacy({ approvals })
   })
 

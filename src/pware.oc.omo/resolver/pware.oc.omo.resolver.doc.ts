@@ -24,7 +24,7 @@ import {
 import { PLAN_STATUS_DONE, WORK_STATE_COMPLETED, type WorkState } from "../constants/pware.oc.omo.constants.planStatus.js"
 import { findOmoWatchDirs, planWorkStateByPlanName } from "./pware.oc.omo.resolver.boulder.js"
 import { approvalName, parsePlanStatus } from "./pware.oc.omo.resolver.plan.js"
-import { sessionForOmoFile } from "./pware.oc.omo.resolver.planFile.js"
+import { omoFileIndex, omoWriterSession } from "./pware.oc.omo.resolver.planFile.js"
 
 export type { DocKind }
 
@@ -197,8 +197,10 @@ export function listOmoFiles(
   let docs = all
   const sessionId = opts.sessionId
   const db = opts.db
-  if (sessionId && db) {
-    docs = docs.filter((d) => sessionForOmoFile(db, d.rel, kind) === sessionId)
+  if (sessionId && db && docs.length > 0) {
+    // One index build per listing — the writer lookup per file is a map read.
+    const writers = omoFileIndex(db, null, null, kind)
+    docs = docs.filter((d) => omoWriterSession(writers, d.rel) === sessionId)
   }
   if (opts.status && (kind === DOC_KIND_PLAN || kind === DOC_KIND_DRAFT)) {
     const want = opts.status.toLowerCase()

@@ -20,6 +20,13 @@ export const MY_WORK_GROUP_READY_START = "ready-to-start"
 export const MY_WORK_GROUP_FINISHED = "finished"
 export const MY_WORK_GROUP_DISMISSED = "dismissed"
 
+/**
+ * My work group: draft documents that no action group covers — a draft file
+ * whose status is approved/done (superseded), unknown, or absent. Listed for
+ * browsing (preview), never for an action.
+ */
+export const MY_WORK_GROUP_DRAFT_DOCS = "draft-docs"
+
 /** My work group: the project's recent sessions — jump straight back into any of them. */
 export const MY_WORK_GROUP_SESSIONS = "sessions"
 

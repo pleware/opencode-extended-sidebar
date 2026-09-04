@@ -9,6 +9,7 @@ import {
   parseDismissed,
   startWorkCommand,
   toApprovalItems,
+  toDraftDocItems,
   toQuestionItems,
   toSessionItems,
   type MyWorkItem,
@@ -44,6 +45,7 @@ describe("myWorkLabel", () => {
     expect(myWorkLabel("finished")).toBe("Finished")
     expect(myWorkLabel("dismissed")).toBe("Dismissed questions")
     expect(myWorkLabel("drafting")).toBe("Drafting")
+    expect(myWorkLabel("draft-docs")).toBe("Draft docs")
   })
 })
 
@@ -167,6 +169,23 @@ describe("toSessionItems", () => {
   })
 })
 
+describe("toDraftDocItems", () => {
+  test("maps each leftover draft to the draft-docs variant with name, rel and updatedAt", () => {
+    const items = toDraftDocItems([
+      { name: "old", rel: "drafts/old.md", updatedAt: 1_000 },
+      { name: "notes", rel: "drafts/notes.md", updatedAt: null },
+    ])
+    expect(items).toEqual([
+      { kind: "draft-docs", name: "old", rel: "drafts/old.md", updatedAt: 1_000 },
+      { kind: "draft-docs", name: "notes", rel: "drafts/notes.md", updatedAt: null },
+    ])
+  })
+
+  test("an empty bucket stays empty", () => {
+    expect(toDraftDocItems([])).toEqual([])
+  })
+})
+
 describe("toApprovalItems", () => {
   test("maps status + draftness to the group kind and keeps sessionState", () => {
     const items = toApprovalItems([
@@ -207,9 +226,9 @@ describe("toApprovalItems", () => {
     expect(items.map((i) => i.kind)).toEqual(["drafting", "ready-to-start", "ready-to-review"])
     const plan = items[0]
     expect(plan?.kind).toBe("drafting")
-    if (plan && !("sessionId" in plan)) expect(plan.sessionState).toEqual({ running: true, state: "streaming" })
+    if (plan?.kind === "drafting") expect(plan.sessionState).toEqual({ running: true, state: "streaming" })
     const lone = items[2]
-    if (lone && !("sessionId" in lone)) expect(lone.sessionState).toBeNull()
+    if (lone?.kind === "ready-to-review") expect(lone.sessionState).toBeNull()
   })
 
   test("drops superseded plans — approved/done drafts and unknown status", () => {
@@ -265,7 +284,7 @@ describe("toApprovalItems", () => {
     ])
     expect(items.map((i) => i.kind)).toEqual(["drafting"])
     const item = items[0]
-    if (!item || "sessionId" in item) throw new Error("expected an approval item")
+    if (!item || item.kind !== "drafting") throw new Error("expected a drafting item")
     expect(item.review?.required).toBe(true)
   })
 })
@@ -285,8 +304,9 @@ describe("groupMyWork", () => {
     const finished: MyWorkItem = { ...approval, kind: "finished" }
     const dismissed: MyWorkItem = { ...question, kind: "dismissed", reason: "The user dismissed this question" }
     const drafting: MyWorkItem = { ...approval, kind: "drafting" }
+    const draftDoc: MyWorkItem = { kind: "draft-docs", name: "old", rel: "drafts/old.md", updatedAt: null }
     expect(
-      groupMyWork([finished, dismissed, approval, readyStart, drafting, question, interrupted, errored, sessions]).map(
+      groupMyWork([finished, draftDoc, dismissed, approval, readyStart, drafting, question, interrupted, errored, sessions]).map(
         (g) => g.kind,
       ),
     ).toEqual([
@@ -299,6 +319,7 @@ describe("groupMyWork", () => {
       "finished",
       "dismissed",
       "drafting",
+      "draft-docs",
     ])
     expect(groupMyWork([question]).map((g) => g.kind)).toEqual(["question"])
     expect(groupMyWork([])).toEqual([])
@@ -315,6 +336,7 @@ describe("groupMyWork", () => {
       "finished",
       "dismissed",
       "drafting",
+      "draft-docs",
     ])
   })
 })
