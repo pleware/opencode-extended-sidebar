@@ -9,6 +9,9 @@ jobs:
   check:
     name: Typecheck + tests + coverage
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
@@ -32,13 +35,16 @@ jobs:
           path: coverage/
           if-no-files-found: error
 
-      # Tokenless upload works for public repos. For a private repo, add a
-      # CODECOV_TOKEN secret and pass `token: ${{ secrets.CODECOV_TOKEN }}`.
+      # OIDC upload needs no repository secret: the action exchanges the
+      # job's GitHub OIDC token (permissions.id-token above) for a Codecov
+      # upload token. Tokenless (secret-less, non-OIDC) upload is no longer
+      # accepted by Codecov, even for public repos.
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
         with:
           files: coverage/lcov.info
           fail_ci_if_error: true
+          use_oidc: true
 
   bench:
     name: Benchmarks (informational)
