@@ -33,7 +33,7 @@ import {
 } from "./pware.oc.ui.glyphs.js"
 import { profile } from "../pware.oc.core/pware.oc.core.debug.js"
 import { moreRevealVisible, sliceShown } from "../pware.oc.core/pware.oc.core.layout.js"
-import { statusBarLine, type TabStatus } from "../pware.oc.core/pware.oc.core.status.js"
+import { oesBarParts, statusBarLine, type TabStatus } from "../pware.oc.core/pware.oc.core.status.js"
 import {
   formatTokens,
   formatUsd,
@@ -83,21 +83,24 @@ export function useReveal(step: number): RevealState {
   return { more, reveal: () => setMore((n) => n + step) }
 }
 
+/** The inline trend is a background hint, and so is a reading of zero. */
+const RATE_BAR_OPACITY = 0.3
+
 /**
- * The global OES status bar: `OES {glyph} {label}`. Always renders one row —
- * loading reads `glyphFrame` only in this leaf, so the spinner steps on the
- * fast tick without rebuilding the panel. A ready bar with nothing to say is a
- * bare `OES`: the realtime category tabs on the same line already lead with a
- * `•`, so a trailing dot would read `OES ••Tok`.
- *
- * Everything derives through `createMemo` — a plain body computation would
- * freeze the row at its first render (`waiting for session`, frame `⠋`),
- * because SolidJS only re-runs JSX expressions, not the component body.
+ * The global OES status bar: `OES {glyph} {label}` or, when quiet,
+ * `OES  {8-col bar} {tok/s}`. The trend always renders at
+ * {@link RATE_BAR_OPACITY}, and an idle `0 tok/s` fades with it — only a rate
+ * that is actually moving gets full contrast. Loading reads `glyphFrame` only
+ * in this leaf.
  */
 export function OesStatusRow(props: {
   status: TabStatus
   colors: ThemeColors
   glyphFrame: () => number
+  /** 8-column bar from the live token-rate window — dropped while a status label shows. */
+  rateBar?: string
+  /** Live tokens per second; `0` / `null` render faded, `undefined` hides the reading. */
+  rate?: number | null
 }): JSX.Element {
   const line = createMemo(() => statusBarLine(props.status))
   const glyph = createMemo(() => {
@@ -112,12 +115,22 @@ export function OesStatusRow(props: {
         ? props.colors.primary || props.colors.text
         : props.colors.text,
   )
-  const text = createMemo(() => {
-    const g = glyph()
-    const label = line().label
-    return label ? `OES ${g} ${label}` : g ? `OES ${g}` : "OES"
-  })
-  return <text fg={fg()}>{text()}</text>
+  const parts = createMemo(() => oesBarParts(line().label, glyph(), props.rateBar, props.rate))
+  return (
+    <box flexDirection="row">
+      <text fg={fg()}>{parts().head}</text>
+      <Show when={parts().bar}>
+        <text fg={fg()} opacity={RATE_BAR_OPACITY}>
+          {parts().bar}
+        </text>
+      </Show>
+      <Show when={parts().rate}>
+        <text fg={fg()} opacity={parts().rateIdle ? RATE_BAR_OPACITY : 1}>
+          {parts().rate}
+        </text>
+      </Show>
+    </box>
+  )
 }
 
 /** Clickable truncation line: "… +N more", or "… less" in expand-all (toggle) mode. */

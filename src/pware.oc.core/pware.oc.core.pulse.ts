@@ -416,6 +416,12 @@ export function deltaKindFromEvent(evt: unknown): "out" | "reasoning" {
 /** A single streaming token-count sample: `n` estimated tokens at `at`. */
 export type TokenTick = { at: number; n: number }
 
+/** One-row OES bar width — bucket count for {@link tokenRateBars}. */
+export const TOKEN_RATE_BAR_WIDTH = 8
+
+/** Block ramp for {@link tokenRateBars} — space = empty bucket. */
+export const TOKEN_RATE_BAR_BLOCKS = " ▁▂▃▄▅▆▇█" as const
+
 /** Append a tick and drop samples older than the sliding window (immutable). */
 export function pushTokenTick(
   ticks: readonly TokenTick[],
@@ -440,6 +446,40 @@ export function tokenRate(
   const spanMs = at - win[0]!.at
   if (spanMs <= 0) return null
   return (sum / spanMs) * 1000
+}
+
+/**
+ * One-row bar strip for the OES status line: bucket estimated token deltas over
+ * the trailing window into `width` columns, oldest on the left and newest on
+ * the right. Empty buckets render as a space; the tallest bucket uses the top
+ * block from {@link TOKEN_RATE_BAR_BLOCKS}.
+ */
+export function tokenRateBars(
+  ticks: readonly TokenTick[],
+  at: number,
+  windowMs: number,
+  width = TOKEN_RATE_BAR_WIDTH,
+): string {
+  const w = Math.max(1, Math.round(width))
+  const buckets = new Array<number>(w).fill(0)
+  for (const t of ticks) {
+    const age = at - t.at
+    if (age < 0 || age > windowMs || !Number.isFinite(t.n) || t.n <= 0) continue
+    const idx = Math.min(w - 1, Math.floor((age / windowMs) * w))
+    buckets[w - 1 - idx]! += t.n
+  }
+  const max = Math.max(1, ...buckets)
+  const blocks = TOKEN_RATE_BAR_BLOCKS
+  return buckets
+    .map((n) => {
+      if (n <= 0) return " "
+      const level = Math.min(
+        blocks.length - 1,
+        Math.max(1, Math.round((n / max) * (blocks.length - 1))),
+      )
+      return blocks[level]!
+    })
+    .join("")
 }
 
 export function formatPercent(share: number | null | undefined): string {

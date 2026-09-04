@@ -16,8 +16,9 @@ import type { ToolView } from "../pware.oc.opencode/resolver/pware.oc.opencode.r
 import type { FileView } from "../pware.oc.opencode/pware.oc.opencode.files.js"
 import { readPerfLog, type PerfLogKind, type PerfSnapshot } from "../pware.oc.perf/pware.oc.perf.reader.js"
 import { asciiTrend, perfStatLine, realtimeSeriesLines, shareDonut, shareGauge, smoothSeries, waitHistogram } from "../pware.oc.perf/pware.oc.perf.charts.js"
-import { STAT_REALTIME_BLOCK, seriesValues, type StatRealtimeTabId } from "../pware.oc.perf/pware.oc.perf.realtimeBlock.js"
+import { STAT_REALTIME_BLOCK, realtimeRow, realtimeTab, seriesValues, type StatRealtimeSeriesKey, type StatRealtimeTabId } from "../pware.oc.perf/pware.oc.perf.realtimeBlock.js"
 import type { StatRealtimeTimeline } from "../pware.oc.perf/pware.oc.perf.realtimeTimeline.js"
+import { RT_DIALOG_CHART_ROWS, dialogInnerWidth, type HostDialogSize } from "../pware.oc.core/pware.oc.core.layout.js"
 import { TICK_MS } from "../pware.oc.core/pware.oc.core.timing.js"
 import { formatDiffStat } from "../pware.oc.opencode/pware.oc.opencode.files.js"
 import type { DocView } from "../pware.oc.omo/resolver/pware.oc.omo.resolver.doc.js"
@@ -38,6 +39,16 @@ import {
   readTextPreview,
 } from "../pware.oc.core/pware.oc.core.preview.js"
 import { formatAge, formatDuration, formatRate, formatWhen } from "../pware.oc.core/pware.oc.core.pulse.js"
+
+function hostDialogSize(api: TuiPluginApi): HostDialogSize {
+  try {
+    const s = api.ui.dialog.size
+    if (s === "medium" || s === "large" || s === "xlarge") return s
+  } catch {
+    // host without a size getter
+  }
+  return "xlarge"
+}
 
 function closeDialog(api: TuiPluginApi): void {
   try {
@@ -89,19 +100,51 @@ function ActionRow(props: {
   )
 }
 
+/**
+ * Body chrome of a host dialog. Matches `DialogAlert` / `DialogConfirm` /
+ * `DialogHelp`: `paddingLeft/Right 2` and a bottom row. No top padding — the
+ * host panel box already adds `paddingTop 1` around the stack element. Our
+ * rows are dense line lists, so the column keeps `gap 0` and the one-row
+ * breathing space under the title lives on {@link DialogHeader}.
+ */
 function DialogPad(props: { children: JSX.Element }): JSX.Element {
   return (
-    <box flexDirection="column" gap={0} padding={1}>
+    <box flexDirection="column" gap={0} paddingLeft={2} paddingRight={2} paddingBottom={1}>
       {props.children}
     </box>
   )
 }
 
 /**
+ * The header every host dialog wears: bold title left, muted clickable `esc`
+ * right. The host `DialogProvider` binds the Escape key itself — this row is
+ * the affordance plus a mouse target, exactly like the native dialogs.
+ */
+function DialogHeader(props: { title: string; colors: ThemeColors; onClose: () => void }): JSX.Element {
+  return (
+    <box flexDirection="row" justifyContent="space-between" gap={1} paddingBottom={1}>
+      <text fg={props.colors.text} attributes={textAttrs(true)}>
+        {props.title}
+      </text>
+      <text fg={props.colors.textMuted} onMouseUp={props.onClose}>
+        esc
+      </text>
+    </box>
+  )
+}
+
+/**
  * Sets the dialog stack size AFTER render so it survives the replace()
- * size-reset (host bug #44754). Does NOT wrap in api.ui.Dialog — the host
- * DialogProvider already supplies the backdrop; adding a second Dialog creates
- * a double-backdrop with double-dark background.
+ * size-reset (host bug #44754).
+ *
+ * Deliberately NOT wrapped in `api.ui.Dialog`. That component *is* the frame:
+ * the host maps it straight onto its own `ui/dialog.tsx` `Dialog`, and
+ * `DialogProvider` already renders one around `stack.at(-1)` — a full-screen
+ * absolute backdrop plus the centred panel box. A second one nests another
+ * backdrop and another `paddingTop = height / 4` inside a 60-column box.
+ * Every native content dialog (`DialogSelect`, `DialogAlert`, `DialogConfirm`,
+ * `DialogHelp`) is a bare `<box>` handed to `replace()` for the same reason;
+ * {@link DialogPad} + {@link DialogHeader} reproduce their chrome.
  */
 function SizedDialog(props: {
   api: TuiPluginApi
@@ -216,12 +259,11 @@ function PreviewDialog(props: {
   return (
     <DialogPad>
       <box flexDirection="column" gap={0} flexShrink={0}>
-        <box flexDirection="row" justifyContent="space-between" gap={1}>
-          <text fg={props.colors.text} attributes={textAttrs(true)}>
-            {props.heading ?? "Preview"}
-          </text>
-          <text fg={props.colors.text}>{props.title}</text>
-        </box>
+        <DialogHeader
+          title={[props.heading ?? "Preview", props.title].filter(Boolean).join(" · ")}
+          colors={props.colors}
+          onClose={() => closeDialog(props.api)}
+        />
         <Show when={showPath()}>
           <DetailLine text={props.subtitle!} colors={props.colors} muted />
         </Show>
@@ -247,7 +289,6 @@ function PreviewDialog(props: {
             else copyRelativePath(props.api, props.subtitle)
           }}
         />
-        <ActionRow label="Close" colors={props.colors} onPick={() => closeDialog(props.api)} />
       </box>
     </DialogPad>
   )
@@ -357,18 +398,13 @@ export function openToolDetail(api: TuiPluginApi, tool: ToolView, colors: ThemeC
   const header = [tool.tool, dur, tool.status].filter(Boolean).join(" · ")
   openDialog(api, "medium", () => (
     <DialogPad>
-      <text fg={colors.text} attributes={textAttrs(true)}>
-        {header}
-      </text>
+      <DialogHeader title={header} colors={colors} onClose={() => closeDialog(api)} />
       {divider(colors)}
       <DetailLine text={`Label: ${tool.name}`} colors={colors} />
       <DetailLine text={`Tool: ${tool.tool}`} colors={colors} muted />
       <DetailLine text={`Started: ${formatWhen(tool.startedAt)}`} colors={colors} muted />
       <DetailLine text={`Duration: ${dur || "—"}`} colors={colors} muted />
       <DetailLine text={`Status: ${tool.status}`} colors={colors} muted />
-      <box flexDirection="column" gap={0} paddingTop={1}>
-        <ActionRow label="Close" colors={colors} onPick={() => closeDialog(api)} />
-      </box>
     </DialogPad>
   ))
 }
@@ -535,9 +571,7 @@ export function openDocDetail(
 
   openDialog(api, "medium", () => (
     <DialogPad>
-      <text fg={colors.text} attributes={textAttrs(true)}>
-        {doc.name}
-      </text>
+      <DialogHeader title={doc.name} colors={colors} onClose={() => closeDialog(api)} />
       {divider(colors)}
       <DetailLine text={`Kind: ${DOC_KIND_LABEL[doc.kind]}`} colors={colors} />
       <DetailLine
@@ -552,7 +586,6 @@ export function openDocDetail(
           colors={colors}
           onPick={() => copyRelativePath(api, doc.rel)}
         />
-        <ActionRow label="Close" colors={colors} onPick={() => closeDialog(api)} />
       </box>
     </DialogPad>
   ))
@@ -643,12 +676,11 @@ export function openPerfCharts(
 
   openDialog(api, "xlarge", () => (
     <DialogPad>
-      <box flexDirection="row" justifyContent="space-between" gap={1}>
-        <text fg={colors.text} attributes={textAttrs(true)}>
-          Perf charts
-        </text>
-        <text fg={colors.text}>{title}</text>
-      </box>
+      <DialogHeader
+        title={["Perf charts", title].filter(Boolean).join(" · ")}
+        colors={colors}
+        onClose={() => closeDialog(api)}
+      />
       <Show when={showSubtitle}>
         <DetailLine text={subtitle} colors={colors} muted />
       </Show>
@@ -672,9 +704,6 @@ export function openPerfCharts(
       <For each={asciiTrend(rate, { width: 60, height: 6 }).split("\n")}>
         {(line) => <text fg={colors.success}>{line || " "}</text>}
       </For>
-      <box flexDirection="column" gap={0} paddingTop={1}>
-        <ActionRow label="Close" colors={colors} onPick={() => closeDialog(api)} />
-      </box>
     </DialogPad>
   ))
 }
@@ -685,18 +714,21 @@ export function openPerfCharts(
  * interval bumps a `version` signal and calls `api.renderer.requestRender()`,
  * and the `createMemo(version)` recomputes the chart lines every tick — the
  * `version()` read inside the memo is what re-renders the body. Category
- * selection is dialog-local (never persisted to kv); each tab's selector rows
- * render as braille sparklines, one colour per series, with a muted
- * `label · unit` legend.
+ * selection is dialog-local (never persisted to kv). One ASCII trend at a
+ * time (`asciiTrend`, `RT_DIALOG_CHART_ROWS` tall): the category tabs pick
+ * the family, the row labels under them pick the series, same as the sidebar.
+ * The sidebar's `C` on the OES row opens this dialog; the dialog itself has no `C`.
  */
 function RealtimeChartsDialog(props: {
   api: TuiPluginApi
   colors: ThemeColors
   getTimeline: () => StatRealtimeTimeline
   initialTabId: StatRealtimeTabId
+  initialRowKey: StatRealtimeSeriesKey
 }): JSX.Element {
   const dimensions = useTerminalDimensions()
   const [selectedTab, setSelectedTab] = createSignal<StatRealtimeTabId>(props.initialTabId)
+  const [selectedRow, setSelectedRow] = createSignal<StatRealtimeSeriesKey>(props.initialRowKey)
   const [version, setVersion] = createSignal(0)
 
   const interval = setInterval(() => {
@@ -709,37 +741,45 @@ function RealtimeChartsDialog(props: {
   }, TICK_MS)
   onCleanup(() => clearInterval(interval))
 
-  const dialogChartWidth = () => Math.max(40, dimensions().width - 20)
+  const dialogChartWidth = () => dialogInnerWidth(dimensions().width, hostDialogSize(props.api))
+  const activeTab = () => realtimeTab(STAT_REALTIME_BLOCK.tabs, selectedTab())
+  const activeRow = () => realtimeRow(activeTab(), selectedRow())
+
+  const pickTab = (id: StatRealtimeTabId): void => {
+    setSelectedTab(id)
+    setSelectedRow(realtimeTab(STAT_REALTIME_BLOCK.tabs, id).rows[0]!.key)
+  }
 
   const lines = createMemo(() => {
     version()
     const history = props.getTimeline().getTimeline()
-    const tab =
-      STAT_REALTIME_BLOCK.tabs.find((t) => t.id === selectedTab()) ??
-      STAT_REALTIME_BLOCK.tabs[0]!
+    const row = activeRow()
     return realtimeSeriesLines(
-      tab.rows.map((r) => ({
-        key: r.key,
-        label: r.label,
-        unit: r.unit,
-        values:
-          r.key === "avg"
-            ? smoothSeries(seriesValues(history, r.read), 5)
-            : seriesValues(history, r.read),
-      })),
-      { width: dialogChartWidth(), height: 2 },
+      [
+        {
+          key: row.key,
+          label: row.label,
+          unit: row.unit,
+          values:
+            row.key === "avg"
+              ? smoothSeries(seriesValues(history, row.read), 5)
+              : seriesValues(history, row.read),
+        },
+      ],
+      { width: dialogChartWidth(), height: RT_DIALOG_CHART_ROWS },
     )
   })
 
-  const palette: Array<string | undefined> = [
-    props.colors.success,
-    props.colors.warning,
-    props.colors.primary,
-    props.colors.error,
-  ]
+  const entry = () => lines()[0]
+  const fg = () => props.colors.success || props.colors.text
 
   return (
     <DialogPad>
+      <DialogHeader
+        title="Realtime charts"
+        colors={props.colors}
+        onClose={() => closeDialog(props.api)}
+      />
       <box flexDirection="row" gap={1}>
         <For each={STAT_REALTIME_BLOCK.tabs}>
           {(tab) => (
@@ -747,29 +787,37 @@ function RealtimeChartsDialog(props: {
               fg={tab.id === selectedTab() ? props.colors.primary || props.colors.text : props.colors.textMuted}
               bold={tab.id === selectedTab()}
               underline
-              onMouseUp={() => setSelectedTab(tab.id)}
+              onMouseUp={() => pickTab(tab.id)}
             >
               {tab.label}
             </ClickText>
           )}
         </For>
       </box>
-      <For each={lines()}>
-        {(entry, i) => {
-          const fg = palette[i() % palette.length] ?? props.colors.text
-          return (
-            <>
-              <For each={entry.lines}>
-                {(line) => <text fg={fg}>{line || " "}</text>}
-              </For>
-              <text fg={props.colors.textMuted}>{`${entry.label} · ${entry.unit}`}</text>
-            </>
-          )
-        }}
-      </For>
-      <box flexDirection="column" gap={0} paddingTop={1}>
-        <ActionRow label="Close" colors={props.colors} onPick={() => closeDialog(props.api)} />
+      <box flexDirection="row" gap={1}>
+        <For each={activeTab().rows}>
+          {(row) => (
+            <ClickText
+              fg={row.key === activeRow().key ? props.colors.primary || props.colors.text : props.colors.textMuted}
+              bold={row.key === activeRow().key}
+              underline
+              onMouseUp={() => setSelectedRow(row.key)}
+            >
+              {row.label}
+            </ClickText>
+          )}
+        </For>
       </box>
+      <Show when={entry()}>
+        <box flexDirection="column" gap={0} flexShrink={0}>
+          <text fg={props.colors.textMuted}>{`${entry()!.label} · ${entry()!.unit}`}</text>
+          <box flexDirection="column" height={RT_DIALOG_CHART_ROWS} flexShrink={0}>
+            <For each={entry()!.lines}>
+              {(line) => <text fg={fg()}>{line || " "}</text>}
+            </For>
+          </box>
+        </box>
+      </Show>
     </DialogPad>
   )
 }
@@ -777,7 +825,11 @@ function RealtimeChartsDialog(props: {
 export function openRealtimeCharts(
   api: TuiPluginApi,
   colors: ThemeColors,
-  opts: { getTimeline: () => StatRealtimeTimeline; initialTabId: StatRealtimeTabId },
+  opts: {
+    getTimeline: () => StatRealtimeTimeline
+    initialTabId: StatRealtimeTabId
+    initialRowKey: StatRealtimeSeriesKey
+  },
 ): void {
   openDialog(api, "xlarge", () => (
     <RealtimeChartsDialog
@@ -785,6 +837,7 @@ export function openRealtimeCharts(
       colors={colors}
       getTimeline={opts.getTimeline}
       initialTabId={opts.initialTabId}
+      initialRowKey={opts.initialRowKey}
     />
   ))
 }

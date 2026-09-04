@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import {
   STAT_REALTIME_BLOCK,
+  realtimeRow,
+  realtimeTab,
   seriesValues,
 } from "../../../src/pware.oc.perf/pware.oc.perf.realtimeBlock.js"
 import { emptyStatRealtimeSnapshot } from "../../../src/pware.oc.perf/pware.oc.perf.realtime.js"
@@ -39,5 +41,18 @@ describe("STAT_REALTIME_BLOCK", () => {
     s.tokens.in = 3
     s.tokens.out = 4
     expect(sum(s)).toBe(7)
+  })
+})
+
+describe("realtimeTab / realtimeRow", () => {
+  test("resolves a known tab and falls back to the first tab", () => {
+    expect(realtimeTab(STAT_REALTIME_BLOCK.tabs, "cpu-ram").id).toBe("cpu-ram")
+    expect(realtimeTab(STAT_REALTIME_BLOCK.tabs, "tokens").id).toBe("tokens")
+    expect(realtimeTab(STAT_REALTIME_BLOCK.tabs, "missing" as "tokens").id).toBe("tokens")
+  })
+  test("resolves a known row and falls back to the first row", () => {
+    const proc = realtimeTab(STAT_REALTIME_BLOCK.tabs, "cpu-ram")
+    expect(realtimeRow(proc, "ram").key).toBe("ram")
+    expect(realtimeRow(proc, "avg").key).toBe("cpu")
   })
 })

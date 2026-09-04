@@ -107,11 +107,26 @@ export function axisLabel(x: number): string {
  * → downsample to at most `width` points → asciichart `plot`. No `colors`
  * config is passed, so the output is ANSI-free. Y-axis labels use `axisLabel`
  * (rounded) instead of asciichart's `toFixed(2)`. Empty or all-null input
- * returns `""`.
+ * returns `""`. Optional `min` / `max` pin the y-domain (the OES dialog
+ * charts leave them unset so a high flat series does not draw a dummy zero
+ * baseline).
+ *
+ * Each output row starts with an 11-column min/max label plus asciichart's
+ * 3-column offset; joined length is plot-points + {@link ASCII_TREND_AXIS_COLS}.
+ * Callers that have a hard line budget (the dialog) must pass
+ * `asciiTrendPlotWidth(lineBudget)` as `width`, or the labels wrap onto the
+ * next row and read as a second series.
  */
+export const ASCII_TREND_AXIS_COLS = 13
+
+/** Plot-point count that keeps an asciiTrend row within `lineWidth` columns. */
+export function asciiTrendPlotWidth(lineWidth: number): number {
+  return Math.max(8, Math.floor(lineWidth) - ASCII_TREND_AXIS_COLS)
+}
+
 export function asciiTrend(
   values: Array<number | null>,
-  opts: { width: number; height?: number },
+  opts: { width: number; height?: number; min?: number; max?: number },
 ): string {
   const dense = interpolateSeries(values)
   if (dense.length === 0) return ""
@@ -121,6 +136,8 @@ export function asciiTrend(
   return plot(ds, {
     height: opts.height ?? 3,
     format: (x: number) => (pad + axisLabel(x)).slice(-pad.length),
+    ...(opts.min !== undefined ? { min: opts.min } : {}),
+    ...(opts.max !== undefined ? { max: opts.max } : {}),
   })
 }
 
@@ -227,37 +244,40 @@ export function rateSparkline(
 }
 
 /**
- * One braille sparkline per realtime series for the fullscreen Perf modal.
- * Each entry renders independently: empty series are skipped, and every series
- * gets its own y-domain `[0, ownMax]` (`ownMax` is `Math.max(1, …)` so an
- * all-zero series still draws a flat baseline rather than collapsing). Mirrors
- * `rateSparkline` exactly: `chart({ width: opts.width + 8, … })` plus
- * `slice(8)` drops the 8-column `@crafter/charts` y-axis gutter so each line
- * spans the full requested width. Rendered through `renderToString` (ANSI-free);
- * the TUI colours it via the `fg` prop.
+ * One ASCII trend (`asciiTrend` / asciichart) per realtime series for the
+ * fullscreen Perf modal. Braille is reserved for the compact sidebar sparkline
+ * — `@crafter/charts` line marks always paint a braille canvas (even with
+ * `charset: "ascii"`), which reads as scattered dots at dialog size. Callers
+ * pick the body height (`RT_DIALOG_CHART_ROWS`). Each entry is independent;
+ * empty series are skipped. Y-domain follows the series (not pinned to
+ * `[0, max]`) so a high flat reading does not draw a dummy zero baseline that
+ * reads as a second series. `opts.width` is the **line budget** (dialog inner
+ * columns): plot points are `asciiTrendPlotWidth(width)` so the min/max labels
+ * at the start of each row stay on that row. Output is clipped to `width` as
+ * a last wrap guard. ANSI-free; the TUI colours it via the `fg` prop.
  */
 export function realtimeSeriesLines(
   series: { key: string; label: string; unit: string; values: number[] }[],
   opts: { width: number; height: number },
 ): { key: string; label: string; unit: string; lines: string[] }[] {
   const out: { key: string; label: string; unit: string; lines: string[] }[] = []
+  const lineWidth = Math.max(8, Math.floor(opts.width))
+  const plotWidth = asciiTrendPlotWidth(lineWidth)
+  const plotHeight = Math.max(1, opts.height - 1)
   for (const s of series) {
     if (s.values.length === 0) continue
-    const down = downsampleAvg(s.values, opts.width)
-    const smoothed = smoothSeries(down, 3)
-    const ownMax = Math.max(1, ...smoothed)
-    const rows = smoothed.map((v, i) => ({ x: i, v }))
-    const rendered = renderToString(
-      chart({ width: opts.width + 8, height: opts.height, charset: "braille" })
-        .data(rows, { xKey: "x" })
-        .yDomain([0, ownMax])
-        .line({ key: "v" }),
-    )
+    const rendered = asciiTrend(s.values, {
+      width: plotWidth,
+      height: plotHeight,
+    })
+    const lines = rendered === "" ? [] : rendered.split("\n")
+    while (lines.length < opts.height) lines.push("")
+    if (lines.length > opts.height) lines.length = opts.height
     out.push({
       key: s.key,
       label: s.label,
       unit: s.unit,
-      lines: rendered.split("\n").map((line) => line.slice(8)),
+      lines: lines.map((line) => (line.length <= lineWidth ? line : line.slice(0, lineWidth))),
     })
   }
   return out

@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import {
   asciiTrend,
+  asciiTrendPlotWidth,
+  ASCII_TREND_AXIS_COLS,
   axisLabel,
   downsampleAvg,
   interpolateSeries,
@@ -123,6 +125,21 @@ describe("asciiTrend", () => {
 
   test("all-null input returns empty string", () => {
     expect(asciiTrend([null], { width: 5 })).toBe("")
+  })
+
+  test("pinned min/max keep a zero series on a 0-based scale", () => {
+    const out = asciiTrend([0, 0, 0, 0], { width: 8, height: 3, min: 0, max: 1 })
+    expect(out).toContain("0.0")
+    expect(out).toContain("1.0")
+    expect(out).not.toContain("\x1b[")
+  })
+
+  test("plot width plus the min/max gutter is the line length", () => {
+    expect(asciiTrendPlotWidth(58)).toBe(45)
+    expect(ASCII_TREND_AXIS_COLS).toBe(13)
+    const plot = asciiTrendPlotWidth(40)
+    const lines = asciiTrend([0, 10, 20, 10, 0], { width: plot, height: 3 }).split("\n")
+    for (const line of lines) expect(line.length).toBeLessThanOrEqual(40)
   })
 })
 
@@ -253,55 +270,69 @@ describe("realtimeSeriesLines", () => {
     expect(out.map((e) => e.key)).toEqual(["a", "b"])
   })
 
-  test("every line is ANSI-free", () => {
+  test("every line is ANSI-free and has no braille", () => {
     const out = realtimeSeriesLines(
       [entry("a", [0, 10, 20, 30, 20, 10, 0]), entry("b", [0, 1, 2, 1, 0])],
-      { width: 20, height: 2 },
+      { width: 40, height: 5 },
     )
     expect(out.length).toBeGreaterThan(0)
     for (const e of out) {
-      for (const line of e.lines) expect(line).not.toContain("\x1b[")
+      for (const line of e.lines) {
+        expect(line).not.toContain("\x1b[")
+        expect(line).not.toMatch(/[\u2800-\u28FF]/)
+      }
     }
   })
 
-  test("a flat series (all 5s) renders a single flat non-empty line", () => {
+  test("a flat series (all 5s) still draws a baseline", () => {
     const out = realtimeSeriesLines([entry("flat", [5, 5, 5, 5, 5])], {
-      width: 20,
-      height: 2,
+      width: 40,
+      height: 5,
     })
     expect(out).toHaveLength(1)
-    const drawn = out[0]!.lines.filter((l) => l.trim().length > 0)
-    expect(drawn.length).toBe(1) // one horizontal row → flat
-    expect(drawn[0]!.length).toBeGreaterThan(0)
-    expect(drawn[0]).not.toContain("\x1b[")
+    expect(out[0]!.lines).toHaveLength(5)
+    const drawn = out[0]!.lines.filter((l) => l.includes("─") || l.includes("┼"))
+    expect(drawn.length).toBeGreaterThanOrEqual(1)
+    expect(out[0]!.lines.join("\n")).not.toMatch(/[\u2800-\u28FF]/)
   })
 
   test("an all-zero non-empty series still renders a non-empty baseline line", () => {
     const out = realtimeSeriesLines([entry("zero", [0, 0, 0, 0, 0])], {
-      width: 20,
-      height: 2,
+      width: 40,
+      height: 5,
     })
     expect(out).toHaveLength(1)
     expect(out[0]!.lines.some((l) => l.trim().length > 0)).toBe(true)
+    expect(out[0]!.lines.some((l) => l.includes("─") || l.includes("┼"))).toBe(true)
   })
 
-  test("1200 points at width 60 downsample to exactly-60-char lines", () => {
+  test("1200 points stay within the requested width (axis reserved)", () => {
     const values = Array.from({ length: 1200 }, (_, i) => 50 + 50 * Math.sin(i / 30))
     const out = realtimeSeriesLines([entry("big", values)], {
       width: 60,
-      height: 4,
+      height: 5,
     })
     expect(out).toHaveLength(1)
+    expect(out[0]!.lines).toHaveLength(5)
     for (const line of out[0]!.lines) {
       expect(line).not.toContain("\x1b[")
+      expect(line).not.toMatch(/[\u2800-\u28FF]/)
       expect(line.length).toBeLessThanOrEqual(60)
     }
-    expect(Math.max(...out[0]!.lines.map((l) => l.length))).toBe(60)
   })
 
   test("empty input contributes no entry", () => {
     const out = realtimeSeriesLines([entry("empty", [])], { width: 20, height: 2 })
     expect(out).toEqual([])
+  })
+
+  test("height is honoured at the dialog size", () => {
+    const out = realtimeSeriesLines(
+      [entry("a", [0, 5, 10, 15, 10, 5, 0])],
+      { width: 12, height: 8 },
+    )
+    expect(out).toHaveLength(1)
+    expect(out[0]!.lines).toHaveLength(8)
   })
 
   test("a ~100-scale and a ~5-scale series each render a varied (non-collapsed) line", () => {
@@ -310,13 +341,16 @@ describe("realtimeSeriesLines", () => {
         entry("big", [0, 25, 50, 75, 100, 75, 50, 25, 0]),
         entry("small", [0, 1, 2, 3, 4, 5, 4, 3, 2, 1, 0]),
       ],
-      { width: 30, height: 4 },
+      { width: 40, height: 5 },
     )
     expect(out).toHaveLength(2)
     for (const e of out) {
-      const drawn = e.lines.filter((l) => l.trim().length > 0)
-      expect(drawn.length).toBeGreaterThanOrEqual(2) // vertical extent → per-series scale, not squashed
-      for (const line of e.lines) expect(line).not.toContain("\x1b[")
+      const plot = e.lines.filter((l) => /[─│╭╮╰╯]/.test(l))
+      expect(plot.length).toBeGreaterThanOrEqual(2)
+      for (const line of e.lines) {
+        expect(line).not.toContain("\x1b[")
+        expect(line).not.toMatch(/[\u2800-\u28FF]/)
+      }
     }
   })
 })

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import {
   isRunningLifecycle,
   normalizeStatus,
+  oesBarParts,
   sessionStatusLabel,
   statusBarLine,
   tabStatus,
@@ -233,6 +234,59 @@ describe("statusBarLine", () => {
     expect(statusBarLine({ label: "no turns yet", tone: "muted" })).toEqual({
       label: "no turns yet",
       tone: "muted",
+    })
+  })
+})
+
+describe("oesBarParts", () => {
+  test("a quiet bar splits the trend from the reading so the bar can render faded", () => {
+    expect(oesBarParts("", "", "▁▃▅█", 50)).toEqual({
+      head: "OES  ",
+      bar: "▁▃▅█",
+      rate: " 50 tok/s",
+      rateIdle: false,
+    })
+  })
+
+  test("a reading of zero is idle, so the row fades it with the trend", () => {
+    expect(oesBarParts("", "", "    ", 0).rateIdle).toBe(true)
+    expect(oesBarParts("", "", "    ", null).rateIdle).toBe(true)
+  })
+
+  test("idleness follows the printed number, so a trickle rounding to 0 fades too", () => {
+    expect(oesBarParts("", "", "▁", 0.4)).toEqual({
+      head: "OES  ",
+      bar: "▁",
+      rate: " 0 tok/s",
+      rateIdle: true,
+    })
+    expect(oesBarParts("", "", "▁", 0.6).rateIdle).toBe(false)
+  })
+
+  test("a null rate still reads 0 tok/s rather than blanking the row", () => {
+    expect(oesBarParts("", "", "", null).rate).toBe(" 0 tok/s")
+  })
+
+  test("a busy label wins — the live reading is dropped, not appended", () => {
+    expect(oesBarParts("switching · x", "⠋", "▁▃▅█", 50)).toEqual({
+      head: "OES ⠋ switching · x",
+      bar: "",
+      rate: "",
+      rateIdle: false,
+    })
+  })
+
+  test("with neither a label nor a reading the row is a bare OES plus its glyph", () => {
+    expect(oesBarParts("", "")).toEqual({ head: "OES", bar: "", rate: "", rateIdle: false })
+    expect(oesBarParts("", "×")).toEqual({ head: "OES ×", bar: "", rate: "", rateIdle: false })
+  })
+
+  test("a trend with no rate passed keeps the bar and omits the reading", () => {
+    expect(oesBarParts("", "", "▁▃▅█")).toEqual({
+      head: "OES  ",
+      bar: "▁▃▅█",
+      rate: "",
+      rateIdle: true,
     })
   })
 })

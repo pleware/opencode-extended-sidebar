@@ -62,3 +62,5 @@ skills-lock.json
 .agentize/
 opencode.json
 .omo/
+
+.agentize_worktrees/

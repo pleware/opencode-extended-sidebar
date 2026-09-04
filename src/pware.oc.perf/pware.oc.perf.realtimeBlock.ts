@@ -52,6 +52,22 @@ export function seriesValues(
   return history.map((s) => read(s) ?? 0)
 }
 
+/** The tab for `id`, or the first tab if `id` is unknown. */
+export function realtimeTab(
+  tabs: readonly StatRealtimeTab[],
+  id: StatRealtimeTabId,
+): StatRealtimeTab {
+  return tabs.find((t) => t.id === id) ?? tabs[0]!
+}
+
+/** The selector row for `key` on `tab`, or the tab's first row if `key` is missing. */
+export function realtimeRow(
+  tab: StatRealtimeTab,
+  key: StatRealtimeSeriesKey,
+): StatRealtimeRowTab {
+  return tab.rows.find((r) => r.key === key) ?? tab.rows[0]!
+}
+
 /** The default OES realtime block. Network is estimated from the token flow (kbit/s). */
 export const STAT_REALTIME_BLOCK: StatRealtimeBlock = {
   tabs: [

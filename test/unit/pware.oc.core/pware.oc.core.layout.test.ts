@@ -1,5 +1,27 @@
 import { describe, expect, test } from "bun:test"
-import { ROW_MIN, ROW_RANK, clampScrollOffset, contextActionsLine, CONTEXT_ACTION_COL_WIDTH, moreRevealVisible, packSections, panelRows, rowsForPlan, scrollByStep, sliceShown } from "../../../src/pware.oc.core/pware.oc.core.layout.js"
+import { ROW_MIN, ROW_RANK, clampScrollOffset, contextActionsLine, CONTEXT_ACTION_COL_WIDTH, dialogInnerWidth, moreRevealVisible, packSections, panelRows, rowsForPlan, scrollByStep, sliceShown, RT_CHART_ROWS, RT_DIALOG_CHART_ROWS } from "../../../src/pware.oc.core/pware.oc.core.layout.js"
+
+describe("realtime chart row counts", () => {
+  test("sidebar sparkline is 3 rows and the dialog sparkline is 8", () => {
+    expect(RT_CHART_ROWS).toBe(3)
+    expect(RT_DIALOG_CHART_ROWS).toBe(8)
+  })
+})
+
+describe("dialogInnerWidth", () => {
+  test("medium / large / xlarge use the host box caps minus DialogPad", () => {
+    expect(dialogInnerWidth(200, "medium")).toBe(56)
+    expect(dialogInnerWidth(200, "large")).toBe(76)
+    expect(dialogInnerWidth(200, "xlarge")).toBe(112)
+  })
+  test("clamps to the terminal maxWidth inset", () => {
+    expect(dialogInnerWidth(50, "xlarge")).toBe(44)
+    expect(dialogInnerWidth(10, "medium")).toBe(8)
+  })
+  test("a missing width uses the 80-col fallback", () => {
+    expect(dialogInnerWidth(Number.NaN, "medium")).toBe(56)
+  })
+})
 
 describe("panelRows", () => {
   test("subtracts host chrome and never returns less than the floor", () => {

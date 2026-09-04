@@ -16,7 +16,7 @@ import {
   type CanonicalStatus,
   type ToolStatus,
 } from "./constants/pware.oc.core.constants.status.js"
-import { shortMiddle } from "./pware.oc.core.pulse.js"
+import { formatTokenRate, shortMiddle } from "./pware.oc.core.pulse.js"
 
 export type { CanonicalStatus, ToolStatus }
 
@@ -156,6 +156,41 @@ export function statusBarLine(status: TabStatus): StatusBarLine {
   const line = tabStatusLine(status)
   if (!line) return { label: "", tone: "ready" }
   return { label: line.label, tone: line.tone }
+}
+
+/**
+ * The OES bar split into the pieces the row draws separately, because the
+ * inline trend renders faded while the reading next to it stays full strength.
+ * Empty `bar` / `rate` mean the row is a single run of text. `rateIdle` marks
+ * a reading of zero, which the row fades to match the trend behind it.
+ */
+export type OesBarParts = { head: string; bar: string; rate: string; rateIdle: boolean }
+
+/**
+ * What the OES bar says. A busy label always wins — while the bar is reporting
+ * a load, a switch or an error, the live token reading is noise and is dropped.
+ * On a quiet bar the trend and the rate follow a bare `OES`; with neither, the
+ * row is `OES` plus whatever glyph the tone asked for. Pass `rate` as the raw
+ * per-second number; idleness follows the number the row actually prints, so a
+ * trickle that rounds down to `0 tok/s` fades like a dead stop.
+ */
+export function oesBarParts(
+  label: string,
+  glyph: string,
+  rateBar = "",
+  rate?: number | null,
+): OesBarParts {
+  if (label) return { head: `OES ${glyph} ${label}`, bar: "", rate: "", rateIdle: false }
+  if (rateBar || rate !== undefined) {
+    const shown = typeof rate === "number" && Number.isFinite(rate) ? Math.round(rate) : 0
+    return {
+      head: "OES  ",
+      bar: rateBar,
+      rate: rate === undefined ? "" : ` ${formatTokenRate(rate)}`,
+      rateIdle: shown <= 0,
+    }
+  }
+  return { head: glyph ? `OES ${glyph}` : "OES", bar: "", rate: "", rateIdle: false }
 }
 
 /** Paused and abandoned are deliberate stops — they must not keep pulsing. */

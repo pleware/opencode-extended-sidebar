@@ -41,7 +41,6 @@ import {
   ROW_RANK,
   clampScrollOffset,
   RT_ACTION_COL_WIDTH,
-  RT_CHART_ROWS,
   packSections,
   panelRows,
   rowsForPlan,
@@ -112,11 +111,10 @@ import {
 } from "./pware.oc.ui.sections.js"
 import { emptyPerf, readPerfSnapshot } from "../pware.oc.perf/pware.oc.perf.reader.js"
 import { PerfPanel } from "../pware.oc.perf/pware.oc.perf.view.js"
-import { rateSparkline, shareBar, smoothSeries } from "../pware.oc.perf/pware.oc.perf.charts.js"
+import { shareBar } from "../pware.oc.perf/pware.oc.perf.charts.js"
 import { StatRealtimeTimeline } from "../pware.oc.perf/pware.oc.perf.realtimeTimeline.js"
 import { EventDriverSampler } from "../pware.oc.perf/pware.oc.perf.realtimeSampler.js"
 import { readCpuRam } from "../pware.oc.perf/pware.oc.perf.realtimeCpuRam.js"
-import { STAT_REALTIME_BLOCK, seriesValues, type StatRealtimeSeriesKey, type StatRealtimeTabId } from "../pware.oc.perf/pware.oc.perf.realtimeBlock.js"
 import { formatSelfLine, readRendererFps, readSelfStats, resetSelfStats, selfDiagActive, selfTime, setSelfFps } from "../pware.oc.perf/pware.oc.perf.self.js"
 import {
   decorateFiles,
@@ -130,7 +128,6 @@ import { onGitMarksChange } from "../pware.oc.core/git/pware.oc.core.git.js"
 import { getOes } from "../pware.oc.core/pware.oc.core.oes.js"
 import {
   TAB_STATUS_SESSION_NOT_IN_DB,
-  statusBarLine,
   tabStatus,
 } from "../pware.oc.core/pware.oc.core.status.js"
 import { createEventBus } from "../pware.oc.core/pware.oc.core.bus.js"
@@ -154,22 +151,26 @@ import {
   NOW_MS,
   SWITCH_TIMEOUT_MS,
   TICK_MS,
+  TOKEN_RATE_WINDOW_MS,
 } from "../pware.oc.core/pware.oc.core.timing.js"
 import {
   activeFlow,
   applyFlow,
   composeMark,
   formatAge,
-  formatCompact,
   formatDuration,
   hottestMark,
   phaseAgeMs,
   pulseAgeMs,
+  pushTokenTick,
+  tokenRate,
+  tokenRateBars,
   toolFlow,
   toolMark,
   type AgentMark,
   type FlowDir,
   type FlowEntry,
+  type TokenTick,
   type ToolHit,
 } from "../pware.oc.core/pware.oc.core.pulse.js"
 import {
@@ -195,7 +196,6 @@ const KV_FOLD_DELEGATES = "oes.fold.delegates"
 const KV_FOLD_TOOLS = "oes.fold.tools"
 const KV_FOLD_FILES = "oes.fold.files"
 const KV_FOLD_DRAFTS = "oes.fold.drafts"
-const KV_FOLD_RT = "oes.fold.rt"
 const KV_TAB = "oes.tab"
 
 const OES_TABS = ["mywork", "current", "sessions", "perf"] as const
@@ -244,9 +244,8 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   const dimensions = useTerminalDimensions()
   const [liveTools, setLiveTools] = createSignal<Record<string, ToolHit>>({})
   const [liveFiles, setLiveFiles] = createSignal<Record<string, FileView>>({})
+  const [tokenTicks, setTokenTicks] = createSignal<readonly TokenTick[]>([])
   const [rtVersion, setRtVersion] = createSignal(0)
-  const [rtTab, setRtTab] = createSignal<StatRealtimeTabId>("tokens")
-  const [rtRow, setRtRow] = createSignal<StatRealtimeSeriesKey>("avg")
   const [gitTick, setGitTick] = createSignal(0)
   const [switching, setSwitching] = createSignal<{ id: string; at: number } | null>(null)
   const [coldTab, setColdTab] = createSignal<string | null>(null)
@@ -374,6 +373,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
       watchedId = id
       setLiveTools({})
       setLiveFiles({})
+      setTokenTicks([])
       source.setSession(id)
       queueMicrotask(hydrateDiff)
     })
@@ -455,9 +455,11 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     const payload = data as Record<string, unknown>
     const tokens = payload.tokens
     if (typeof tokens !== "number" || !Number.isFinite(tokens) || tokens <= 0) return
+    const at = Date.now()
+    setTokenTicks((prev) => pushTokenTick(prev, at, tokens, TOKEN_RATE_WINDOW_MS))
     const sessionId = typeof payload.sessionId === "string" && payload.sessionId ? payload.sessionId : props.sessionId
     const kind = payload.kind === "reasoning" ? "reasoning" : "out"
-    rtTimeline.ingestEstimate(sessionId, kind, tokens, Date.now())
+    rtTimeline.ingestEstimate(sessionId, kind, tokens, at)
   })
 
   const offSessionSelect = bus.on(EV_OES_SESSION_SELECT, () => remount())
@@ -677,13 +679,6 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   const foldTools = useFold(props.api, KV_FOLD_TOOLS, { after: requestRender })
   const foldFiles = useFold(props.api, KV_FOLD_FILES, { after: requestRender })
   const foldDrafts = useFold(props.api, KV_FOLD_DRAFTS, { after: requestRender })
-  const [rtOpen, setRtOpen] = createSignal(!kvRead(props.api, KV_FOLD_RT, true))
-  const toggleRt = (): void => {
-    const next = !rtOpen()
-    setRtOpen(next)
-    kvWrite(props.api, KV_FOLD_RT, !next)
-    requestRender()
-  }
 
   const myWorkFold = {} as Record<MyWorkKind, ReturnType<typeof useFold>>
   for (const kind of MY_WORK_ORDER) {
@@ -868,7 +863,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
       const t = tab()
       const omo = omoPresent()
       const sections: { key: string; want: number; min: number; rank: number }[] = []
-      let fixed = 2 + (rtOpen() ? RT_CHART_ROWS + 1 : 0) // OES header + chart + padding + brand line
+      let fixed = 2 // OES status line + brand/tabs row
       if (selfDiagActive()) fixed += 1 // self line — only while debug/profile is on
       if (modeLine()) fixed += 1 // debug/profile flag row
       if (modeDirLine()) fixed += 1
@@ -1122,46 +1117,14 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     />
   )
 
-  const rtActiveTab = createMemo(
-    () => STAT_REALTIME_BLOCK.tabs.find((t) => t.id === rtTab()) ?? STAT_REALTIME_BLOCK.tabs[0]!,
-  )
-  const rtActiveRow = createMemo(
-    () => rtActiveTab().rows.find((r) => r.key === rtRow()) ?? rtActiveTab().rows[0]!,
-  )
-  const rtHistory = createMemo(() => {
-    rtVersion()
-    return rtTimeline.getTimeline()
+  /** Live token rate from streaming deltas — recomputes on each delta and on the coarse now tick. */
+  const liveTokenRate = createMemo(() => {
+    now()
+    return tokenRate(tokenTicks(), Date.now(), TOKEN_RATE_WINDOW_MS)
   })
-  const rtSeries = createMemo(() => {
-    const series = seriesValues(rtHistory(), rtActiveRow().read)
-    // avg = the OES bar's old live reading, drawn as a gentle moving average.
-    return rtActiveRow().key === "avg" ? smoothSeries(series, 5) : series
-  })
-  const rtSeriesMax = createMemo(() => {
-    let max = 0
-    for (const v of rtSeries()) {
-      if (Number.isFinite(v) && v > max) max = v
-    }
-    return max
-  })
-  const rtLines = createMemo(() =>
-    rateSparkline(rtSeries(), {
-      width: Math.max(8, oes().lineMax - 12 - RT_ACTION_COL_WIDTH),
-      height: RT_CHART_ROWS,
-      charset: "braille",
-    }),
-  )
-  /** Axis column beside the chart: dynamic max on top, the chart's 0 baseline on the bottom. */
-  const rtAxisLines = createMemo(() => {
-    const n = rtLines().length
-    if (n === 0) return []
-    const pad = (s: string): string => s.padStart(3)
-    // CPU is a 0–100 % reading; the axis reads it as a 0.0–1.0 fraction.
-    const top = rtActiveRow().key === "cpu" ? rtSeriesMax() / 100 : rtSeriesMax()
-    const out = [pad(formatCompact(top))]
-    for (let i = 1; i < n - 1; i += 1) out.push("   ")
-    out.push(pad("0"))
-    return out
+  const liveRateBar = createMemo(() => {
+    now()
+    return tokenRateBars(tokenTicks(), Date.now(), TOKEN_RATE_WINDOW_MS)
   })
 
   /** Live self-cost line — reads the tick clock so the Solid insert re-evaluates every tick. */
@@ -1186,8 +1149,12 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     return `logs ${clip(uniq.join(" | "), 78)}`
   }
 
-  /** The OES bar shows a text label (loading/switching/error) — realtime tabs are hidden then. */
-  const oesBarBusy = createMemo(() => statusBarLine(tabStatusFor(tab())).label !== "")
+  const openRealtimeModal = (): void =>
+    openRealtimeCharts(props.api, colors(), {
+      getTimeline: () => rtTimeline,
+      initialTabId: "tokens",
+      initialRowKey: "avg",
+    })
 
   return (
     <box flexDirection="column" gap={0}>
@@ -1203,73 +1170,21 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
       <Show when={modeDirLine()}>
         <text fg={colors().textMuted}>{modeDirLine()}</text>
       </Show>
-      <box flexDirection="column" gap={0} paddingBottom={rtOpen() ? 1 : 0}>
-        <box flexDirection="row" gap={1}>
-          <box flexDirection="row" gap={1} onMouseUp={toggleRt}>
-            <text fg={colors().textMuted}>{rtOpen() ? "▼" : "▶"}</text>
-            <OesStatusRow
-              status={tabStatusFor(tab())}
-              colors={colors()}
-              glyphFrame={glyphFrame}
-            />
-          </box>
-          <Show when={rtOpen() && !oesBarBusy()}>
-            <For each={STAT_REALTIME_BLOCK.tabs}>
-              {(t) => (
-                <ClickText
-                  fg={rtTab() === t.id ? colors().primary || colors().text : colors().textMuted}
-                  bold={rtTab() === t.id}
-                  underline
-                  onMouseUp={() => {
-                    setRtTab(t.id)
-                    setRtRow(t.rows[0]!.key)
-                  }}
-                >
-                  {`${TAB_NEUTRAL_GLYPH.char} ${t.label}`}
-                </ClickText>
-              )}
-            </For>
-          </Show>
+      <box flexDirection="row" gap={1} width="100%">
+        <box flexDirection="row" flexGrow={1} flexShrink={1} minWidth={0}>
+          <OesStatusRow
+            status={tabStatusFor(tab())}
+            colors={colors()}
+            glyphFrame={glyphFrame}
+            rateBar={liveRateBar()}
+            rate={liveTokenRate()}
+          />
         </box>
-        <Show when={rtOpen()}>
-          <box flexDirection="row" gap={1}>
-            <box flexDirection="column" gap={0}>
-              <For each={rtActiveTab().rows}>
-                {(r) => (
-                  <ClickText
-                    fg={rtRow() === r.key ? colors().primary || colors().text : colors().textMuted}
-                    bold={rtRow() === r.key}
-                    underline
-                    onMouseUp={() => setRtRow(r.key)}
-                  >
-                    {r.label}
-                  </ClickText>
-                )}
-              </For>
-            </box>
-            <box flexDirection="column">
-              <For each={rtLines()}>
-                {(line) => <text fg={colors().success}>{line || " "}</text>}
-              </For>
-            </box>
-            <box flexDirection="column" gap={0}>
-              <For each={rtAxisLines()}>
-                {(line) => <text fg={colors().textMuted}>{line}</text>}
-              </For>
-            </box>
-            <box flexDirection="column" gap={0} width={RT_ACTION_COL_WIDTH} flexShrink={0}>
-              <For each={rtActiveTab().rows}>
-                {() => (
-                  <ContextActions
-                    actions={[{ label: "F", bold: false, onPick: () => openRealtimeCharts(props.api, colors(), { getTimeline: () => rtTimeline, initialTabId: rtTab() }) }]}
-                    colors={colors()}
-                    width={RT_ACTION_COL_WIDTH}
-                  />
-                )}
-              </For>
-            </box>
-          </box>
-        </Show>
+        <ContextActions
+          actions={[{ label: "C", onPick: openRealtimeModal }]}
+          colors={colors()}
+          width={RT_ACTION_COL_WIDTH}
+        />
       </box>
       <Show when={selfDiagActive()}>
         <text fg={colors().textMuted}>{selfLine()}</text>

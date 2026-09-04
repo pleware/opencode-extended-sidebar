@@ -7,8 +7,8 @@ import path from "node:path"
 
 const PREVIEW_MAX_LINES = 200
 const PREVIEW_MAX_BYTES = 128_000
-/** DialogPad 2 + header 1 + footer 3 + slack 1. Extra is the optional relative-path line. */
-const PREVIEW_CHROME = 7
+/** DialogPad bottom 1 + header 2 + footer 2 + slack 1. Extra is the optional relative-path line. */
+const PREVIEW_CHROME = 6
 const PREVIEW_MIN_ROWS = 8
 
 const PREVIEW_EXT = new Set([

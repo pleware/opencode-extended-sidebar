@@ -30,11 +30,38 @@ const PANEL_MIN_ROWS = 8
 /** Shared right rail for context actions (`switch new`, `view all`, …). */
 export const CONTEXT_ACTION_COL_WIDTH = 10
 
-/** Realtime's own action column — just the `F` toggle, so one column, not the rail. */
+/** Realtime charts link on the OES row (`C` → fullscreen dialog). */
 export const RT_ACTION_COL_WIDTH = 1
 
-/** Realtime chart body rows. */
-export const RT_CHART_ROWS = 4
+/** Compact sparkline body rows — sidebar inline chart removed; kept for docs/tests. */
+export const RT_CHART_ROWS = 3
+
+/** Per-series sparkline body rows in the realtime fullscreen dialog. */
+export const RT_DIALOG_CHART_ROWS = 8
+
+/**
+ * Host `api.ui.Dialog` inner box widths (`packages/opencode/.../dialog.tsx`).
+ * `maxWidth` is `terminal − 2`. `xlarge` is 116 on hosts that implement it
+ * (#44754); older builds only switch `large` (80) vs else (60).
+ */
+export const HOST_DIALOG_OUTER_WIDTH = { medium: 60, large: 80, xlarge: 116 } as const
+export type HostDialogSize = keyof typeof HOST_DIALOG_OUTER_WIDTH
+
+/** `maxWidth={dimensions().width - 2}` on the host inner box. */
+const HOST_DIALOG_MAX_INSET = 2
+/** `DialogPad` left + right, matching the host dialog bodies (`paddingLeft/Right 2`). */
+const DIALOG_PAD_X = 4
+
+/**
+ * Columns inside the padded dialog body. Subtracts the host box cap, the
+ * `maxWidth` inset, and DialogPad — this is the line budget a chart may use,
+ * including the asciiTrend min/max labels on the left of each row.
+ */
+export function dialogInnerWidth(termWidth: number, size: HostDialogSize): number {
+  const w = Number.isFinite(termWidth) && termWidth > 0 ? Math.floor(termWidth) : 80
+  const outer = Math.min(HOST_DIALOG_OUTER_WIDTH[size], Math.max(1, w - HOST_DIALOG_MAX_INSET))
+  return Math.max(8, outer - DIALOG_PAD_X)
+}
 
 /**
  * One right-aligned action line padded to {@link CONTEXT_ACTION_COL_WIDTH}.

@@ -56,12 +56,12 @@ describe("preview helpers", () => {
 
 describe("previewViewportRows", () => {
   test("caps at three quarters of the terminal minus chrome", () => {
-    expect(previewViewportRows(40)).toBe(23)
-    expect(previewViewportRows(40, 1)).toBe(22)
+    expect(previewViewportRows(40)).toBe(24)
+    expect(previewViewportRows(40, 1)).toBe(23)
   })
 
   test("markdown fill uses nine tenths of the terminal", () => {
-    expect(previewViewportRows(40, 0, true)).toBe(29)
+    expect(previewViewportRows(40, 0, true)).toBe(30)
     expect(previewViewportRows(8, 0, true)).toBe(12)
   })
 
