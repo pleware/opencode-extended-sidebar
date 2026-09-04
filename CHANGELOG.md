@@ -1,5 +1,6 @@
 # Changelog
 
+- **0.2.80** (2026-09-04) describe the realtime fullscreen modal and prune inline-fullscreen references.
 - **0.2.79** (2026-09-04) route the realtime fullscreen F into a live modal instead of inline expansion.
 - **0.2.78** (2026-09-04) fullscreen realtime modal with category selector and multi-line series.
 - **0.2.77** (2026-09-04) add a pure multi-series realtime line renderer with per-series scale.
