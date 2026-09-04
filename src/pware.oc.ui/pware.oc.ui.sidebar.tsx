@@ -29,7 +29,6 @@ import {
   emptyDb,
   emptyProjectFeed,
   isRealSession,
-  listOpenQuestions,
   mergeTools,
   readProjectFeed,
   type ProjectFeed,
@@ -230,6 +229,7 @@ function emptyRuntime(): RuntimeSnapshot {
     omo: emptyOmo(),
     omoConfig: { present: false, path: null, teamMode: null, agents: [] },
     delegates: [],
+    openQuestions: [],
   }
 }
 
@@ -766,10 +766,9 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   /** Open `question` tools anywhere in this project — the "answer me" queue. */
   const myWorkQuestions = createMemo<MyWorkItem[]>(() => {
     if (tab() !== "mywork" || coldTab() === "mywork") return []
-    const db = snap().db
     try {
       return dropDismissed(
-        toQuestionItems(listOpenQuestions({ dbPath: db.dbPath, projectId: db.projectId })),
+        toQuestionItems(snap().openQuestions),
         readDismissedQuestions(props.api),
       )
     } catch (e) {
@@ -824,11 +823,10 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   let lastMyWorkScan = 0
 
   const scanMyWorkBadge = () => {
-    const db = snap().db
     const items: TabAttentionItem[] = []
     try {
       const dismissed = readDismissedQuestions(props.api)
-      const open = listOpenQuestions({ dbPath: db.dbPath, projectId: db.projectId })
+      const open = snap().openQuestions
       for (const q of open) {
         if (dismissed.has(q.partId)) continue
         items.push({ kind: q.kind, ended: q.ended })

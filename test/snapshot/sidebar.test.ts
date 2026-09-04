@@ -364,6 +364,15 @@ describe("My work queue", () => {
     // The question text and options live in state.input — never read, never shown.
     assertPrivacy({ questions })
 
+    // The snapshot read (worker path) carries the same open-question list.
+    const snap = readRuntimeSnapshot({
+      sessionId: "ses_main",
+      projectRoot: projFix.root,
+      dbPath: dbFix.dbPath,
+    })
+    expect(snap.openQuestions.map((q) => q.sessionId)).toEqual(["ses_main"])
+    assertPrivacy({ questions: snap.openQuestions })
+
     const approvals = listApprovals(projFix.root).readyReview
     expect(approvals.map((a) => a.name)).toEqual(["oes-v2-hardening"])
     expect(approvals[0]?.pendingAction).toBe("write .omo/plans/oes-v2-hardening.md")

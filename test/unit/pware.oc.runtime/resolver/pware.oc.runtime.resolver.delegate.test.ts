@@ -35,6 +35,7 @@ function live(over: Partial<RuntimeSnapshot> = {}): RuntimeSnapshot {
     omo: emptyOmo(),
     omoConfig: { present: false, path: null, teamMode: null, agents: [] },
     delegates: [],
+    openQuestions: [],
     ...over,
     db: over.db ?? db,
   }

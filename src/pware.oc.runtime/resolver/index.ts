@@ -9,12 +9,15 @@ import { gitignoreStamp } from "../../pware.oc.core/git/pware.oc.core.gitignore.
 import { oesStamp } from "../../pware.oc.core/pware.oc.core.oes.js"
 import { dbStamp, getOpenCodeDbPath } from "../../pware.oc.core/pware.oc.core.paths.js"
 import { openReadonlyDb, withDbRead, type SqlDb } from "../../pware.oc.core/pware.oc.core.sqlite.js"
+import { profile } from "../../pware.oc.core/pware.oc.core.debug.js"
 import {
   emptyDb,
   readDbSnapshot,
   refreshSessionStatus,
   sessionScanStamp,
+  listOpenQuestions,
   type DbSnapshot,
+  type OpenQuestion,
   type SessionView,
 } from "../../pware.oc.opencode/resolver/index.js"
 import {
@@ -38,6 +41,8 @@ export type RuntimeSnapshot = {
   omo: OmoSnapshot
   omoConfig: OmoConfigView
   delegates: DelegateView[]
+  /** Open `question` tools across the project — computed off the UI thread. */
+  openQuestions: OpenQuestion[]
 }
 
 /** Cheap poll key: WAL + omo/oes stamps. No git, no boulder JSON. */
@@ -131,6 +136,10 @@ export function readRuntimeSnapshot(opts: {
         : emptyDb(dbPath, "db read failed"),
   )
 
+  const openQuestions = db.projectId
+    ? profile("db.questions", () => listOpenQuestions({ dbPath, projectId: db.projectId }))
+    : []
+
   const snap: RuntimeSnapshot = {
     generatedAt: Date.now(),
     fingerprint: cacheId,
@@ -139,6 +148,7 @@ export function readRuntimeSnapshot(opts: {
     omo,
     omoConfig: readOmoConfig(),
     delegates: enrichDelegates(omo, db),
+    openQuestions,
   }
   lastGood = snap
   liveCache.set(cacheId, snap)
