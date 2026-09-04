@@ -214,7 +214,15 @@ describe("readGitMarksFor / runGit / gitLetterFor", () => {
     const fakeDir = fs.mkdtempSync(path.join(os.tmpdir(), "oes-fakegit-"))
     const prevPath = process.env.PATH
     try {
-      fs.writeFileSync(path.join(fakeDir, "git.cmd"), "@echo off\r\nping -n 5 127.0.0.1 > nul\r\n")
+      // A decoy `git` that hangs, so the real binary never runs. Windows needs
+      // a .cmd (spawn resolves PATHEXT); POSIX needs an executable script.
+      if (process.platform === "win32") {
+        fs.writeFileSync(path.join(fakeDir, "git.cmd"), "@echo off\r\nping -n 5 127.0.0.1 > nul\r\n")
+      } else {
+        const fakeGit = path.join(fakeDir, "git")
+        fs.writeFileSync(fakeGit, "#!/bin/sh\nexec sleep 5\n")
+        fs.chmodSync(fakeGit, 0o755)
+      }
       process.env.PATH = fakeDir + path.delimiter + prevPath
       readGitMarksFor([repo.abs], repo.root)
       // wait past GIT_TIMEOUT_MS (1500) so the kill timer fires
