@@ -21,10 +21,11 @@ export type StatRealtimeSeriesKey =
   | "ram"
   | "tok/s"
 
-/** One selector row: its key, label, and how to read the series from a sample. */
+/** One selector row: its key, label, unit, and how to read the series from a sample. */
 export type StatRealtimeRowTab = {
   key: StatRealtimeSeriesKey
   label: string
+  unit: string
   read: (snap: StatRealtimeSnapshot) => number | null
 }
 
@@ -60,12 +61,12 @@ export const STAT_REALTIME_BLOCK: StatRealtimeBlock = {
       unit: "tok/s",
       rows: [
         // avg is the OES bar's old live reading — the chart smooths this series.
-        { key: "avg", label: "avg", read: (s) => sumSeries(s.tokens.in, s.tokens.out) },
-        { key: "sum", label: "sum", read: (s) => sumSeries(s.tokens.in, s.tokens.out) },
-        { key: "in", label: "in", read: (s) => s.tokens.in },
-        { key: "out", label: "out", read: (s) => s.tokens.out },
+        { key: "avg", label: "avg", unit: "tok/s", read: (s) => sumSeries(s.tokens.in, s.tokens.out) },
+        { key: "sum", label: "sum", unit: "tok/s", read: (s) => sumSeries(s.tokens.in, s.tokens.out) },
+        { key: "in", label: "in", unit: "tok/s", read: (s) => s.tokens.in },
+        { key: "out", label: "out", unit: "tok/s", read: (s) => s.tokens.out },
         // tok/s duplicates sum (in+out) — kept as the bar's old label per UX.
-        { key: "tok/s", label: "tok/s", read: (s) => sumSeries(s.tokens.in, s.tokens.out) },
+        { key: "tok/s", label: "tok/s", unit: "tok/s", read: (s) => sumSeries(s.tokens.in, s.tokens.out) },
       ],
     },
     {
@@ -73,9 +74,9 @@ export const STAT_REALTIME_BLOCK: StatRealtimeBlock = {
       label: "Cache",
       unit: "tok/s",
       rows: [
-        { key: "sum", label: "sum", read: (s) => sumSeries(s.cache.read, s.cache.write) },
-        { key: "read", label: "read", read: (s) => s.cache.read },
-        { key: "write", label: "write", read: (s) => s.cache.write },
+        { key: "sum", label: "sum", unit: "tok/s", read: (s) => sumSeries(s.cache.read, s.cache.write) },
+        { key: "read", label: "read", unit: "tok/s", read: (s) => s.cache.read },
+        { key: "write", label: "write", unit: "tok/s", read: (s) => s.cache.write },
       ],
     },
     {
@@ -83,8 +84,8 @@ export const STAT_REALTIME_BLOCK: StatRealtimeBlock = {
       label: "Proc",
       unit: "%/MB",
       rows: [
-        { key: "cpu", label: "cpu", read: (s) => s.cpuRam.cpu },
-        { key: "ram", label: "ram", read: (s) => s.cpuRam.ram },
+        { key: "cpu", label: "cpu", unit: "%", read: (s) => s.cpuRam.cpu },
+        { key: "ram", label: "ram", unit: "MB", read: (s) => s.cpuRam.ram },
       ],
     },
     {
@@ -92,9 +93,9 @@ export const STAT_REALTIME_BLOCK: StatRealtimeBlock = {
       label: "Net",
       unit: "kbit/s",
       rows: [
-        { key: "in", label: "in", read: (s) => s.network.in },
-        { key: "out", label: "out", read: (s) => s.network.out },
-        { key: "sum", label: "sum", read: (s) => sumSeries(s.network.in, s.network.out) },
+        { key: "in", label: "in", unit: "kbit/s", read: (s) => s.network.in },
+        { key: "out", label: "out", unit: "kbit/s", read: (s) => s.network.out },
+        { key: "sum", label: "sum", unit: "kbit/s", read: (s) => sumSeries(s.network.in, s.network.out) },
       ],
     },
   ],
