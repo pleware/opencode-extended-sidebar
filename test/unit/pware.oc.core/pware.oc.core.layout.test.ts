@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { ROW_MIN, ROW_RANK, clampScrollOffset, moreRevealVisible, packSections, panelRows, rowsForPlan, scrollByStep, sliceShown } from "../../../src/pware.oc.core/pware.oc.core.layout.js"
+import { ROW_MIN, ROW_RANK, clampScrollOffset, contextActionsLine, CONTEXT_ACTION_COL_WIDTH, moreRevealVisible, packSections, panelRows, rtChartRowSpan, rowsForPlan, RT_CHART_ROWS, RT_CHART_ROWS_FULL, scrollByStep, sliceShown } from "../../../src/pware.oc.core/pware.oc.core.layout.js"
 
 describe("panelRows", () => {
   test("subtracts host chrome and never returns less than the floor", () => {
@@ -8,6 +8,25 @@ describe("panelRows", () => {
     expect(panelRows(10)).toBe(8)
     expect(panelRows(0)).toBe(14)
     expect(panelRows(Number.NaN)).toBe(14)
+  })
+})
+
+describe("contextActionsLine", () => {
+  test("right-pads short labels to the shared column width", () => {
+    expect(contextActionsLine(["F"]).length).toBe(CONTEXT_ACTION_COL_WIDTH)
+    expect(contextActionsLine(["F"]).endsWith("F")).toBe(true)
+    expect(contextActionsLine(["switch", "new"])).toBe("switch new")
+  })
+
+  test("keeps the trailing characters when the rail is full", () => {
+    expect(contextActionsLine(["view all"]).length).toBe(CONTEXT_ACTION_COL_WIDTH)
+  })
+})
+
+describe("rtChartRowSpan", () => {
+  test("doubles the chart body when fullscreen is on", () => {
+    expect(rtChartRowSpan(false)).toBe(RT_CHART_ROWS)
+    expect(rtChartRowSpan(true)).toBe(RT_CHART_ROWS_FULL)
   })
 })
 

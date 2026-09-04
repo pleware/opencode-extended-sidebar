@@ -4,7 +4,15 @@ import { createSignal, For, Show, type JSX } from "solid-js"
 import { TextAttributes } from "@opentui/core"
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import type { GlyphSpec, ToneKey } from "../pware.oc.core/pware.oc.core.glyph.js"
+import { CONTEXT_ACTION_COL_WIDTH } from "../pware.oc.core/pware.oc.core.layout.js"
 import { formatDismissed, parseDismissed } from "../pware.oc.runtime/pware.oc.runtime.mywork.js"
+
+/** One clickable context action in the shared right rail. */
+export type ContextAction = {
+  label: string
+  onPick: () => void
+  bold?: boolean
+}
 
 /** OpenTUI has no bold/underline props on `<text>` — only the `attributes` bitmask. */
 export function textAttrs(bold?: boolean, underline?: boolean): number {
@@ -163,6 +171,43 @@ export function DiffStat(props: {
   )
 }
 
+/**
+ * Right-rail action labels — fold headers, realtime `F`, and any future row
+ * actions share {@link CONTEXT_ACTION_COL_WIDTH} so the column lines up.
+ */
+export function ContextActions(props: {
+  actions: readonly ContextAction[]
+  colors: ThemeColors
+  width?: number
+}): JSX.Element {
+  return (
+    <box
+      flexDirection="row"
+      width={props.width ?? CONTEXT_ACTION_COL_WIDTH}
+      justifyContent="flex-end"
+      flexShrink={0}
+    >
+      <For each={props.actions}>
+        {(action, i) => (
+          <>
+            <Show when={i() > 0}>
+              <text> </text>
+            </Show>
+            <ClickText
+              fg={props.colors.primary || props.colors.text}
+              bold={action.bold}
+              underline
+              onMouseUp={action.onPick}
+            >
+              {action.label}
+            </ClickText>
+          </>
+        )}
+      </For>
+    </box>
+  )
+}
+
 /** Header text for a fold row: title, optional `(N)` / `(live/N)` / `(countLabel)` parenthetical, optional suffix. */
 export function foldHeaderTitle(
   title: string,
@@ -192,8 +237,8 @@ export function FoldHeader(props: {
   onToggle: () => void
   /** Title click opens a detail (fold stays on the chevron). */
   onDetail?: () => void
-  /** Extra clickable labels at the end of the row, e.g. switch / new actions. */
-  actions?: ReadonlyArray<{ label: string; onPick: () => void }>
+  /** Context actions in the shared right rail (`switch` / `new`, `view all`, …). */
+  actions?: readonly ContextAction[]
 }): JSX.Element {
   const rest = () => foldHeaderTitle(props.title, props)
   const hasDiff = () =>
@@ -202,41 +247,32 @@ export function FoldHeader(props: {
   const actions = () => props.actions ?? []
   const split = Boolean(props.onDetail || actions().length > 0)
   return (
-    <box flexDirection="row" onMouseUp={split ? undefined : props.onToggle}>
-      <ClickText
-        fg={props.colors.text}
-        underline={!props.onDetail}
-        onMouseUp={split ? props.onToggle : undefined}
-      >
-        {props.onDetail ? `${chevron()} ` : `${chevron()} ${rest()}`}
-      </ClickText>
-      <Show when={props.onDetail}>
-        <ClickText fg={props.colors.text} underline onMouseUp={props.onDetail}>
-          {rest()}
+    <box flexDirection="row" width="100%" onMouseUp={split ? undefined : props.onToggle}>
+      <box flexDirection="row" flexGrow={1} flexShrink={1} minWidth={0}>
+        <ClickText
+          fg={props.colors.text}
+          underline={!props.onDetail}
+          onMouseUp={split ? props.onToggle : undefined}
+        >
+          {props.onDetail ? `${chevron()} ` : `${chevron()} ${rest()}`}
         </ClickText>
+        <Show when={props.onDetail}>
+          <ClickText fg={props.colors.text} underline onMouseUp={props.onDetail}>
+            {rest()}
+          </ClickText>
+        </Show>
+        <Show when={hasDiff()}>
+          <text> </text>
+          <DiffStat
+            additions={props.diff?.additions ?? 0}
+            deletions={props.diff?.deletions ?? 0}
+            colors={props.colors}
+          />
+        </Show>
+      </box>
+      <Show when={actions().length > 0}>
+        <ContextActions actions={actions()} colors={props.colors} />
       </Show>
-      <Show when={hasDiff()}>
-        <text> </text>
-        <DiffStat
-          additions={props.diff?.additions ?? 0}
-          deletions={props.diff?.deletions ?? 0}
-          colors={props.colors}
-        />
-      </Show>
-      <For each={actions()}>
-        {(action) => (
-          <>
-            <text> </text>
-            <ClickText
-              fg={props.colors.primary || props.colors.text}
-              underline
-              onMouseUp={action.onPick}
-            >
-              {action.label}
-            </ClickText>
-          </>
-        )}
-      </For>
     </box>
   )
 }

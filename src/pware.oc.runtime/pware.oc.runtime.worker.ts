@@ -11,7 +11,7 @@ import { readRuntimeSnapshot } from "./resolver/index.js"
 type SnapshotRequest = {
   type: "snapshot"
   id: number
-  opts: { sessionId: string; projectRoot: string | null; dbPath?: string }
+  opts: { sessionId: string; projectRoot: string | null; dbPath?: string; questionHint?: string }
 }
 
 type ShutdownRequest = { type: "shutdown" }

@@ -9,6 +9,7 @@ import {
   type FlowHint,
   type ToolHit,
 } from "../pware.oc.core/pware.oc.core.pulse.js"
+import { eventType } from "../pware.oc.core/pware.oc.core.events.js"
 import {
   fileFilter,
   filesFromEvent,
@@ -149,4 +150,33 @@ export function hostEventToOcEvents(
   }
 
   return out
+}
+
+const QUESTION_EVENT_HINTS = ["question.asked", "question.replied", "question.rejected"] as const
+
+function isQuestionToolBag(bag: unknown): boolean {
+  if (!bag || typeof bag !== "object") return false
+  const b = bag as Record<string, unknown>
+  const tool = b.tool
+  if (typeof tool !== "string" || tool.toLowerCase() !== "question") return false
+  const type = b.type
+  return type == null || String(type).toLowerCase() === "tool"
+}
+
+/** Session id when a host event signals a `question` tool part changed state, else `null`. */
+export function questionSessionFromEvent(evt: unknown): string | null {
+  const type = eventType(evt)
+  if (QUESTION_EVENT_HINTS.some((hint) => type.includes(hint))) {
+    return sessionIdFromEvent(evt)
+  }
+  if (!evt || typeof evt !== "object") return null
+  const o = evt as Record<string, unknown>
+  const props =
+    o.properties && typeof o.properties === "object"
+      ? (o.properties as Record<string, unknown>)
+      : null
+  for (const bag of [o.part, props?.part, props]) {
+    if (isQuestionToolBag(bag)) return sessionIdFromEvent(evt)
+  }
+  return null
 }

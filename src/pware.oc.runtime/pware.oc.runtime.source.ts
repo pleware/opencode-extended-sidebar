@@ -1,6 +1,9 @@
 import type { PwareEventBus } from "../pware.oc.core/pware.oc.core.bus.js"
 import { EVENT_SCAN_DEBOUNCE_MS } from "../pware.oc.core/pware.oc.core.timing.js"
-import { EV_OES_REFRESH_HINT } from "../pware.oc.core/constants/pware.oc.core.constants.eventName.js"
+import {
+  EV_OES_QUESTION_HINT,
+  EV_OES_REFRESH_HINT,
+} from "../pware.oc.core/constants/pware.oc.core.constants.eventName.js"
 import {
   EV_OMO_BOULDER_CHANGED,
   EV_OMO_CONFIG_CHANGED,
@@ -27,6 +30,8 @@ export function startRuntimeSource(opts: RuntimeSourceOptions): RuntimeSourceHan
   let stopped = false
   let watchedSessionId = opts.sessionId
   let debounce: ReturnType<typeof setTimeout> | null = null
+  let questionDebounce: ReturnType<typeof setTimeout> | null = null
+  let pendingQuestionSession: string | null = null
 
   const bindMonitor = (sessionId: string): MonitorHandle =>
     startMonitor({
@@ -48,7 +53,23 @@ export function startRuntimeSource(opts: RuntimeSourceOptions): RuntimeSourceHan
     }, EVENT_SCAN_DEBOUNCE_MS)
   }
 
+  const scheduleQuestionHint = (sessionId: string): void => {
+    if (stopped) return
+    pendingQuestionSession = sessionId
+    if (questionDebounce) clearTimeout(questionDebounce)
+    questionDebounce = setTimeout(() => {
+      questionDebounce = null
+      const sid = pendingQuestionSession
+      pendingQuestionSession = null
+      if (sid) monitor.question(sid)
+    }, EVENT_SCAN_DEBOUNCE_MS)
+  }
+
   const offRefreshHint = opts.bus.on(EV_OES_REFRESH_HINT, scheduleRefresh)
+  const offQuestionHint = opts.bus.on(EV_OES_QUESTION_HINT, (evt) => {
+    const data = evt.data as { sessionId?: string } | null | undefined
+    if (data?.sessionId) scheduleQuestionHint(data.sessionId)
+  })
   const offBoulderChanged = opts.bus.on(EV_OMO_BOULDER_CHANGED, scheduleRefresh)
   const offDocsChanged = opts.bus.on(EV_OMO_DOCS_CHANGED, scheduleRefresh)
   const offConfigChanged = opts.bus.on(EV_OMO_CONFIG_CHANGED, scheduleRefresh)
@@ -69,7 +90,11 @@ export function startRuntimeSource(opts: RuntimeSourceOptions): RuntimeSourceHan
       stopped = true
       if (debounce) clearTimeout(debounce)
       debounce = null
+      if (questionDebounce) clearTimeout(questionDebounce)
+      questionDebounce = null
+      pendingQuestionSession = null
       offRefreshHint()
+      offQuestionHint()
       offBoulderChanged()
       offDocsChanged()
       offConfigChanged()

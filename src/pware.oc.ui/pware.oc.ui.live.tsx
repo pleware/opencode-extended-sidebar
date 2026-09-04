@@ -6,11 +6,15 @@ import {
   PANEL_HOST_TYPES,
 } from "../pware.oc.core/constants/pware.oc.core.constants.eventType.js"
 import {
+  EV_OES_QUESTION_HINT,
   EV_OES_REFRESH_HINT,
   EV_OES_SESSION_SELECT,
 } from "../pware.oc.core/constants/pware.oc.core.constants.eventName.js"
 import { profile } from "../pware.oc.core/pware.oc.core.debug.js"
-import { hostEventToOcEvents } from "../pware.oc.opencode/pware.oc.opencode.events.js"
+import {
+  hostEventToOcEvents,
+  questionSessionFromEvent,
+} from "../pware.oc.opencode/pware.oc.opencode.events.js"
 
 export type HostEventBridgeOptions = {
   api: TuiPluginApi
@@ -45,6 +49,10 @@ export function startHostEventBridge(opts: HostEventBridgeOptions): { stop: () =
               projectRoot: opts.projectRoot(),
             })) {
               opts.bus.emit(e)
+            }
+            const qsid = questionSessionFromEvent(evt)
+            if (qsid) {
+              opts.bus.emit({ type: EV_OES_QUESTION_HINT, ts: Date.now(), data: { sessionId: qsid } })
             }
             if (shouldRefreshDb(eventType(evt))) {
               opts.bus.emit({ type: EV_OES_REFRESH_HINT, ts: Date.now(), data: {} })

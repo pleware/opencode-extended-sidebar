@@ -15,11 +15,12 @@ import {
   readDbSnapshot,
   refreshSessionStatus,
   sessionScanStamp,
-  listOpenQuestions,
   type DbSnapshot,
   type OpenQuestion,
   type SessionView,
 } from "../../pware.oc.opencode/resolver/index.js"
+import { QUESTION_RECONCILE_MS } from "../../pware.oc.core/pware.oc.core.timing.js"
+import { createQuestionCache } from "../pware.oc.runtime.questions.js"
 import {
   emptyOmo,
   omoStamp,
@@ -83,6 +84,7 @@ export function readRuntimeSnapshot(opts: {
   sessionId: string
   projectRoot: string | null
   dbPath?: string
+  questionHint?: string
 }): RuntimeSnapshot {
   const dbPath = opts.dbPath || getOpenCodeDbPath(process.env, undefined, opts.projectRoot)
   const cheap = computeFingerprint({
@@ -107,6 +109,19 @@ export function readRuntimeSnapshot(opts: {
   const hit = liveCache.peek(cacheId)
   if (hit) {
     const now = Date.now()
+    const questionHint = opts.questionHint
+    const projectId = hit.db.projectId
+    if (questionHint && projectId) {
+      profile("db.questions", () => questionCache.touch(dbPath, projectId, questionHint))
+      return {
+        ...hit,
+        generatedAt: now,
+        fingerprint: cacheId,
+        scanStamp: scan,
+        db: withAges(hit.db, now),
+        openQuestions: questionCache.get(),
+      }
+    }
     return {
       ...hit,
       generatedAt: now,
@@ -136,9 +151,23 @@ export function readRuntimeSnapshot(opts: {
         : emptyDb(dbPath, "db read failed"),
   )
 
-  const openQuestions = db.projectId
-    ? profile("db.questions", () => listOpenQuestions({ dbPath, projectId: db.projectId }))
-    : []
+  const projectId = db.projectId
+  const questionHint = opts.questionHint
+  let openQuestions: OpenQuestion[] = []
+  if (projectId) {
+    if (projectId !== questionProjectId) {
+      questionCache.reset()
+      questionProjectId = projectId
+      questionLastReconcile = 0
+    }
+    if (questionHint) {
+      profile("db.questions", () => questionCache.touch(dbPath, projectId, questionHint))
+    } else if (Date.now() - questionLastReconcile >= QUESTION_RECONCILE_MS) {
+      profile("db.questions", () => questionCache.reconcile(dbPath, projectId))
+      questionLastReconcile = Date.now()
+    }
+    openQuestions = questionCache.get()
+  }
 
   const snap: RuntimeSnapshot = {
     generatedAt: Date.now(),
@@ -160,10 +189,18 @@ const liveCache = createStampCache<RuntimeSnapshot>()
 /** Last successfully-read snapshot, served when a locked DB read fails. */
 let lastGood: RuntimeSnapshot | null = null
 
+/** Module-level open-question cache — seeded once, invalidated per-session via questionHint. */
+const questionCache = createQuestionCache()
+let questionLastReconcile = 0
+let questionProjectId: string | null = null
+
 /** Drop the in-memory live snapshot so the next read is a real load. */
 export function resetRuntimeCache(): void {
   liveCache.reset()
   lastGood = null
+  questionCache.reset()
+  questionLastReconcile = 0
+  questionProjectId = null
 }
 
 function withAges(db: DbSnapshot, now: number): DbSnapshot {

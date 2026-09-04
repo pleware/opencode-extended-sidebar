@@ -99,6 +99,7 @@ src/
 │   ├── pware.oc.runtime.snapshotClient.ts
 │   ├── pware.oc.runtime.mywork.ts
 │   ├── pware.oc.runtime.mywork-enrich.ts
+│   ├── pware.oc.runtime.questions.ts
 │   └── resolver/
 │       ├── index.ts
 │       └── pware.oc.runtime.resolver.delegate.ts
@@ -171,7 +172,7 @@ Plugin registration: `id = "opencode-extended-sidebar"`, load toast,
 | `debug.ts` | `OES_DEBUG_OPENCODE` / `OES_DEBUG_PROFILE` JSON-line file loggers + a 200-line in-memory screen ring for the sidebar's debug console | `dbg()`, `profile()`, `profileAsync()`, `readProfileStats()`, `writeProfileSummary()`, `debugLogDir()`, `profileLogDir()`, `resetDebug()`, `pushScreenLine()`, `readScreenLines()`, `subscribeScreenLines()` |
 | `bus.ts` | in-process plugin event bus (`pware.oc.*` / `pware.omo.*` / `pware.oes.*`) | `createEventBus()`, `PwareEvent`, `PwareEventBus` |
 | `events.ts` | host event type/kind classification | `eventType()`, `eventKind()`, `shouldRefreshDb()` |
-| `layout.ts` | vertical row budget, overflow slicing | `panelRows()`, `packSections()`, `rowsForPlan()`, `sliceShown()`, `clampScrollOffset()`, `scrollByStep()`, `ROW_MIN`, `ROW_RANK` |
+| `layout.ts` | vertical row budget, overflow slicing, shared action rail | `panelRows()`, `packSections()`, `rowsForPlan()`, `sliceShown()`, `clampScrollOffset()`, `scrollByStep()`, `contextActionsLine()`, `rtChartRowSpan()`, `CONTEXT_ACTION_COL_WIDTH`, `RT_CHART_ROWS`, `RT_CHART_ROWS_FULL`, `ROW_MIN`, `ROW_RANK` |
 | `oes.ts` | `oes.json` merge + clamp | `OesOptions`, `OES_DEFAULTS`, `pick()`, `getOes()`, `oesStamp()`, `resetOesCache()` |
 | `paths.ts` | OpenCode path resolution, path folding | `getOpenCodeDbPath()`, `pluginRoot()`, `resolveProjectFile()`, `basenameOf()`, `fileStamp()`, `dbStamp()`, `str()`, `finiteNum()` |
 | `preview.ts` | text/markdown preview limits | `previewViewportRows()`, `canPreviewPath()`, `isMarkdownPath()`, `readTextPreview()` |
@@ -179,7 +180,7 @@ Plugin registration: `id = "opencode-extended-sidebar"`, load toast,
 | `glyph.ts` | every glyph as one char+tone spec; tone keys | `ToneKey`, `GlyphSpec`, `SPINNER_FRAMES`, `spinnerFrame()`, `sinPulseAlpha()`, `flowBlinkOn()`, `markTone()`, `stateGlyph()`, `directionGlyph()`, `defaultBodyTone()`, `QUEUED_GLYPH`, `ENGAGE_MIN_FRAMES`, `ENGAGE_MAX_FRAMES`, `engageFill()`, `engageDone()` |
 | `sqlite.ts` | readonly `bun:sqlite` / `node:sqlite` handle, fail-fast busy timeout (logs `sql.busy`), pings the debug console's screen ring (`db open`) on a fresh open | `openReadonlyDb()`, `withDbRead()`, `resetReadonlyDb()`, `uniqueIds()`, `isBusyError()` |
 | `status.ts` | canonical lifecycle/tool/work status | `normalizeStatus()`, `toToolStatus()`, `toWorkLabel()`, `workStatusGlyph()`, `workIsTerminal()`, `taskRank()` |
-| `timing.ts` | panel clock budgets | `TICK_MS`, `NOW_MS`, `FPS_READ_EVERY_TICKS`, `BLINK_TICKS`, `MONITOR_POLL_MS`, `MONITOR_WATCH_DEBOUNCE_MS`, `EVENT_SCAN_DEBOUNCE_MS`, `REALTIME_WINDOW_MS`, `REALTIME_RATE_WINDOW_MS` |
+| `timing.ts` | panel clock budgets | `TICK_MS`, `NOW_MS`, `FPS_READ_EVERY_TICKS`, `BLINK_TICKS`, `MONITOR_POLL_MS`, `MONITOR_WATCH_DEBOUNCE_MS`, `EVENT_SCAN_DEBOUNCE_MS`, `QUESTION_RECONCILE_MS`, `REALTIME_WINDOW_MS`, `REALTIME_RATE_WINDOW_MS` |
 
 ### `pware.oc.core/constants` — host literals + the plugin's own vocabularies
 
@@ -187,7 +188,7 @@ Plugin registration: `id = "opencode-extended-sidebar"`, load toast,
 |---|---|---|
 | `partType.ts` | `part.data.type` values (SDK `Part` union) | `PART_TYPE_TEXT`, `PART_TYPE_REASONING`, `PART_TYPE_TOOL`, `PART_TYPE_STEP_START`, `PART_TYPE_STEP_FINISH`, `PART_TYPE_SNAPSHOT`, `PART_TYPE_PATCH`, `PART_TYPE_AGENT`, `PART_TYPE_SUBTASK`, `PART_TYPE_RETRY`, `PART_TYPE_COMPACTION`, `PART_TYPE_FILE`, `PART_TYPES`, `PartType` |
 | `eventType.ts` | host event `type` strings (SDK `Event` + stream) + sidebar subscription set | per-value `EVENT_*` consts, `EVENT_TYPES`, `EventType`, `PANEL_HOST_TYPES` |
-| `eventName.ts` | plugin-owned event names (`pware.oes.*`) | `EV_OES_REFRESH_HINT`, `EV_OES_SNAPSHOT`, `EV_OES_SESSION_SELECT` |
+| `eventName.ts` | plugin-owned event names (`pware.oes.*`) | `EV_OES_QUESTION_HINT`, `EV_OES_REFRESH_HINT`, `EV_OES_SNAPSHOT`, `EV_OES_SESSION_SELECT` |
 | `toolName.ts` | tool names by file-touch + special non-file tools | per-value `TOOL_*` consts, `WRITE_TOOLS`, `READ_TOOLS`, `NON_FILE_TOOLS`, `ToolName` |
 | `status.ts` | the plugin's canonical lifecycle/tool statuses | `STATUS_*`, `CANONICAL_STATUSES`, `CanonicalStatus`, `TOOL_STATUS_*`, `TOOL_STATUSES`, `ToolStatus` |
 | `pulse.ts` | the plugin's pulse / flow / mark vocabulary | `PULSE_*`, `PULSES`, `Pulse`, `FLOW_*`, `FLOW_DIRS`, `FlowDir`, `FLOW_HINT_CLEAR`, `FlowHint`, `MARK_*`, `AGENT_MARKS`, `AgentMark` |
@@ -208,11 +209,11 @@ Plugin registration: `id = "opencode-extended-sidebar"`, load toast,
 | Module | Responsibility | Key exports |
 |---|---|---|
 | `files.ts` | `FileView`: basename + diff stats only | `FileView`, `FileLetter`, `filesFromEvent()`, `filesFromPatchJson()`, `fileHitFromExtracted()`, `decorateFiles()`, `mergeFiles()`, `sumDiff()`, `shortFileName()`, `formatDiffStat()` |
-| `events.ts` | host-event translation to OpenCode domain bus events | `hostEventToOcEvents()`, `OcEvent` |
+| `events.ts` | host-event translation to OpenCode domain bus events | `hostEventToOcEvents()`, `questionSessionFromEvent()`, `OcEvent` |
 | `resolver/session.ts` | session rows → `SessionView`, hierarchy queries | `toSessionView()`, `inferStatus()`, `isRealSession()`, `sessionActivityState()`, `getSessionById()`, `listChildSessions()`, `listRecentMainSessions()`, `getSessionsByIds()`, `sessionScanStamp()` |
 | `resolver/tool.ts` | tool parts → `ToolView`, metadata only | `listToolEvents()`, `listRecentToolEvents()`, `mergeTools()`, `normalizeToolStatus` |
 | `resolver/file.ts` | file-touch parts → `FileView` | `listSessionFiles()`, `listRecentSessionFiles()` |
-| `resolver/question.ts` | open `question` queue | `listOpenQuestions()` |
+| `resolver/question.ts` | open `question` queue | `listOpenQuestions()`, `listSessionQuestions()`, `classifyQuestionRow()`, `OpenQuestionRow` |
 | `resolver/todo.ts` | todo rows | `listTodos()` |
 | `resolver/index.ts` | aggregate | `readDbSnapshot()`, `emptyDb()`, `readProjectFeed()`, `DbSnapshot`, `ProjectFeed` |
 
@@ -267,6 +268,7 @@ Plugin registration: `id = "opencode-extended-sidebar"`, load toast,
 | `pware.oc.runtime.snapshotClient.ts` | async snapshot client: lazy singleton worker + sync fallback | `readRuntimeSnapshotAsync()`, `shutdownSnapshotWorker()`, `SnapshotRequestOpts` |
 | `pware.oc.runtime.mywork.ts` | the "My work" queue (questions + sessions + approvals) | `MyWorkItem`, `groupMyWork()`, `toQuestionItems()`, `toSessionItems()`, `toApprovalItems()`, `dropDismissed()`, `parseDismissed()`, `formatDismissed()`, `approvalContinueHint()`, `startWorkCommand()`, `StartWorkMode` |
 | `pware.oc.runtime.mywork-enrich.ts` | planner session state for approval rows (opencode SQLite + omo run-continuation) | `planSessionStateLabel()`, `enrichApprovalSessionStates()` |
+| `pware.oc.runtime.questions.ts` | in-memory per-session open-question cache (seed/reconcile/touch) | `createQuestionCache()`, `mergeQuestions()`, `QuestionCache` |
 | `resolver/index.ts` | unified runtime snapshot | `RuntimeSnapshot`, `readRuntimeSnapshot()`, `computeFingerprint()`, `resetRuntimeCache()` |
 | `resolver/delegate.ts` | delegate enrichment + grouping | `enrichDelegates()`, `reconcileDelegateStatus()`, `groupDelegates()`, `delegatesForSession()` |
 
@@ -292,7 +294,7 @@ Plugin registration: `id = "opencode-extended-sidebar"`, load toast,
 
 | Module | Responsibility | Key exports |
 |---|---|---|
-| `chrome.tsx` | shared chrome, theme colours, kv persistence | `BrandTabs`, `ClickText`, `FoldHeader`, `DiffStat`, `textAttrs()`, `toneColor()`, `kvRead()`, `kvWrite()`, `kvReadOne()`, `kvWriteOne()`, `ThemeColors` |
+| `chrome.tsx` | shared chrome, theme colours, kv persistence | `BrandTabs`, `ClickText`, `ContextActions`, `ContextAction`, `FoldHeader`, `DiffStat`, `textAttrs()`, `toneColor()`, `kvRead()`, `kvWrite()`, `kvReadOne()`, `kvWriteOne()`, `ThemeColors` |
 | `sections.tsx` | shared sidebar primitives: kv-persisted fold state, foldable sections, the base row renderer + budget-sliced `RowList`, brand+tabs+panel columns | `useFold()`, `FoldSection`, `GroupSection`, `RowList`, `MoreReveal`, `useReveal()`, `AgentLine`, `RowData`, `TabColumn` |
 | `sidebar.tsx` | the panel: groups, tabs, live rows; consumes plugin event bus | `SidebarPanel` |
 | `live.tsx` | host event adapter (`api.event.on`) → plugin event bus (`pware.oc.*`, `pware.oes.*`) | `startHostEventBridge()` |

@@ -49,7 +49,8 @@ export type OpenQuestion = {
   ended?: boolean
 }
 
-type OpenQuestionRow = {
+/** Raw SELECT row for an open-question scan. Metadata only — never part.data text. */
+export type OpenQuestionRow = {
   id: string
   session_id: string
   title: string | null
@@ -59,6 +60,41 @@ type OpenQuestionRow = {
   tend: number | null
   error: string | null
   interrupted: number | null
+}
+
+/**
+ * Classify one SELECT row into an open question, or null when the part is not
+ * part of the queue (resolved / completed / a still-terminated interrupt).
+ * Pure — the same row always maps to the same answer.
+ */
+export function classifyQuestionRow(row: OpenQuestionRow): OpenQuestion | null {
+  const start = toEpochMs(row.tstart)
+  const end = toEpochMs(row.tend)
+  const status = toToolStatus(
+    str(row.status) || (end != null ? TOOL_STATUS_COMPLETED : start != null ? TOOL_STATUS_RUNNING : null),
+  )
+  if (status !== TOOL_STATUS_RUNNING && status !== TOOL_STATUS_PENDING && status !== TOOL_STATUS_ERROR) return null
+  const interrupted = row.interrupted === 1
+  // An interrupted question that terminated (has an end time) is resolved:
+  // the abort closed the tool and no answer is pending. Only a still-open
+  // interrupted part (no end time) stays "your call".
+  if (interrupted && end != null) return null
+  const reason = str(row.error) || null
+  const kind: OpenQuestionKind =
+    status === TOOL_STATUS_ERROR
+      ? interrupted
+        ? QUESTION_KIND_INTERRUPTED
+        : QUESTION_KIND_ERROR
+      : QUESTION_KIND_QUESTION
+  return {
+    partId: row.id,
+    sessionId: row.session_id,
+    title: str(row.title) || "untitled",
+    startedAt: start ?? toEpochMs(row.time_created),
+    kind,
+    reason: kind === QUESTION_KIND_QUESTION ? null : reason,
+    ended: end != null,
+  }
 }
 
 export function listOpenQuestions(opts: {
@@ -94,36 +130,56 @@ export function listOpenQuestions(opts: {
     } catch {
       return []
     }
-    const out: OpenQuestion[] = []
-    for (const row of rows) {
-      const start = toEpochMs(row.tstart)
-      const end = toEpochMs(row.tend)
-      const status = toToolStatus(
-        str(row.status) || (end != null ? TOOL_STATUS_COMPLETED : start != null ? TOOL_STATUS_RUNNING : null),
+    return rows
+      .map(classifyQuestionRow)
+      .filter((q): q is OpenQuestion => q != null)
+  }, () => [])
+}
+
+/**
+ * Session-scoped open questions. Same SELECT columns and filters as
+ * `listOpenQuestions`, but `WHERE p.session_id = ?` rides `part_session_idx`
+ * for a cheap targeted re-read. Foundation for later event-driven invalidation
+ * of the "My work" queue.
+ */
+export function listSessionQuestions(opts: {
+  dbPath: string
+  sessionId: string
+  projectId: string | null
+}): OpenQuestion[] {
+  if (!opts.dbPath || !opts.sessionId || !opts.projectId || !fs.existsSync(opts.dbPath)) return []
+  return withDbRead(() => {
+    const db = openReadonlyDb(opts.dbPath)
+    if (!db) return []
+    let rows: OpenQuestionRow[] = []
+    try {
+      rows = db.all<OpenQuestionRow>(
+        `SELECT p.id AS id,
+                p.session_id,
+                s.title AS title,
+                p.time_created,
+                json_extract(p.data,'$.state.status') AS status,
+                json_extract(p.data,'$.state.time.start') AS tstart,
+                json_extract(p.data,'$.state.time.end') AS tend,
+                json_extract(p.data,'$.state.error') AS error,
+                json_extract(p.data,'$.state.metadata.interrupted') AS interrupted
+         FROM part p
+         JOIN session s ON s.id = p.session_id
+         WHERE p.session_id = ?
+           AND json_extract(p.data,'$.type') = '${PART_TYPE_TOOL}'
+           AND json_extract(p.data,'$.tool') = '${TOOL_QUESTION}'
+           AND (s.time_archived IS NULL OR s.time_archived = 0)
+           AND s.project_id = ?
+         ORDER BY p.time_created DESC
+         LIMIT 20`,
+        opts.sessionId,
+        opts.projectId,
       )
-      if (status !== TOOL_STATUS_RUNNING && status !== TOOL_STATUS_PENDING && status !== TOOL_STATUS_ERROR) continue
-      const interrupted = row.interrupted === 1
-      // An interrupted question that terminated (has an end time) is resolved:
-      // the abort closed the tool and no answer is pending. Only a still-open
-      // interrupted part (no end time) stays "your call".
-      if (interrupted && end != null) continue
-      const reason = str(row.error) || null
-      const kind: OpenQuestionKind =
-        status === TOOL_STATUS_ERROR
-          ? interrupted
-            ? QUESTION_KIND_INTERRUPTED
-            : QUESTION_KIND_ERROR
-          : QUESTION_KIND_QUESTION
-      out.push({
-        partId: row.id,
-        sessionId: row.session_id,
-        title: str(row.title) || "untitled",
-        startedAt: start ?? toEpochMs(row.time_created),
-        kind,
-        reason: kind === QUESTION_KIND_QUESTION ? null : reason,
-        ended: end != null,
-      })
+    } catch {
+      return []
     }
-    return out
+    return rows
+      .map(classifyQuestionRow)
+      .filter((q): q is OpenQuestion => q != null)
   }, () => [])
 }

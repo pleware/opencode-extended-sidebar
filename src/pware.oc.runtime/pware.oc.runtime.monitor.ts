@@ -25,6 +25,7 @@ export type MonitorOptions = {
 export type MonitorHandle = {
   stop: () => void
   refresh: () => void
+  question: (sessionId: string) => void
 }
 
 export function startMonitor(opts: MonitorOptions): MonitorHandle {
@@ -35,6 +36,7 @@ export function startMonitor(opts: MonitorOptions): MonitorHandle {
   let stopped = false
   let emitGen = 0
   let debounce: ReturnType<typeof setTimeout> | null = null
+  let pendingQuestionHint: string | null = null
   const watchers: fs.FSWatcher[] = []
 
   const emit = (force = false) =>
@@ -49,10 +51,13 @@ export function startMonitor(opts: MonitorOptions): MonitorHandle {
       dbg("monitor", "emit", { force, fp: fp.slice(0, 40) })
       lastFp = fp
       const gen = ++emitGen
+      const questionHint = pendingQuestionHint ?? undefined
+      pendingQuestionHint = null
       void readRuntimeSnapshotAsync({
         sessionId: opts.sessionId,
         projectRoot: opts.projectRoot,
         dbPath,
+        questionHint,
       }).then((snapshot) => {
         if (stopped || gen !== emitGen) return
         opts.onChange?.(snapshot)
@@ -117,6 +122,10 @@ export function startMonitor(opts: MonitorOptions): MonitorHandle {
 
   return {
     refresh: () => emit(true),
+    question: (sessionId: string) => {
+      pendingQuestionHint = sessionId
+      emit(true)
+    },
     stop: () => {
       stopped = true
       if (debounce) clearTimeout(debounce)

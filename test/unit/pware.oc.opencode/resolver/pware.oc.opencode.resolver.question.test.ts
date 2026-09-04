@@ -1,5 +1,10 @@
 import { afterAll, describe, expect, test } from "bun:test"
-import { listOpenQuestions } from "../../../../src/pware.oc.opencode/resolver/pware.oc.opencode.resolver.question.js"
+import {
+  classifyQuestionRow,
+  listOpenQuestions,
+  listSessionQuestions,
+  type OpenQuestionRow,
+} from "../../../../src/pware.oc.opencode/resolver/pware.oc.opencode.resolver.question.js"
 import { createFixtureDb, toolPartData } from "../../../helpers/sqlite.js"
 
 describe("listOpenQuestions", () => {
@@ -167,5 +172,154 @@ describe("listOpenQuestions", () => {
     expect(listOpenQuestions({ dbPath: fix.dbPath, projectId: null })).toEqual([])
     expect(listOpenQuestions({ dbPath: fix.dbPath, projectId: "proj_nope" })).toEqual([])
     expect(listOpenQuestions({ dbPath: "C:/nope/missing.db", projectId: "proj_1" })).toEqual([])
+  })
+})
+
+describe("classifyQuestionRow", () => {
+  const t0 = 1_700_000_000_000
+  const row = (partial: Partial<OpenQuestionRow> & { id: string }): OpenQuestionRow => ({
+    session_id: "ses_x",
+    title: "T",
+    time_created: t0,
+    status: null,
+    tstart: null,
+    tend: null,
+    error: null,
+    interrupted: null,
+    ...partial,
+  })
+
+  test("running → question", () => {
+    const q = classifyQuestionRow(row({ id: "a", status: "running", tstart: t0 + 1 }))
+    expect(q?.kind).toBe("question")
+    expect(q?.partId).toBe("a")
+    expect(q?.startedAt).toBe(t0 + 1)
+    expect(q?.reason).toBeNull()
+    expect(q?.ended).toBe(false)
+  })
+
+  test("pending → question", () => {
+    const q = classifyQuestionRow(row({ id: "b", status: "pending", tstart: t0 + 2 }))
+    expect(q?.kind).toBe("question")
+  })
+
+  test("completed → null", () => {
+    expect(classifyQuestionRow(row({ id: "c", status: "completed", tstart: t0, tend: t0 + 5 }))).toBeNull()
+  })
+
+  test("error without interrupt → error", () => {
+    const q = classifyQuestionRow(row({ id: "d", status: "error", error: "boom", tstart: t0, tend: t0 + 5 }))
+    expect(q?.kind).toBe("error")
+    expect(q?.reason).toBe("boom")
+    expect(q?.ended).toBe(true)
+  })
+
+  test("error + interrupt without end → interrupted", () => {
+    const q = classifyQuestionRow(row({ id: "e", status: "error", error: "aborted", interrupted: 1, tstart: t0 }))
+    expect(q?.kind).toBe("interrupted")
+    expect(q?.reason).toBe("aborted")
+    expect(q?.ended).toBe(false)
+  })
+
+  test("error + interrupt + end → null", () => {
+    expect(classifyQuestionRow(row({ id: "f", status: "error", error: "aborted", interrupted: 1, tstart: t0, tend: t0 + 5 }))).toBeNull()
+  })
+
+  test("missing status with start → running → question", () => {
+    const q = classifyQuestionRow(row({ id: "g", status: null, tstart: t0 + 7 }))
+    expect(q?.kind).toBe("question")
+    expect(q?.startedAt).toBe(t0 + 7)
+  })
+
+  test("missing status with end → completed → null", () => {
+    expect(classifyQuestionRow(row({ id: "h", status: null, tend: t0 + 9 }))).toBeNull()
+  })
+
+  test("missing start falls back to time_created", () => {
+    const q = classifyQuestionRow(row({ id: "i", status: "running", time_created: t0 + 30 }))
+    expect(q?.startedAt).toBe(t0 + 30)
+  })
+})
+
+describe("listSessionQuestions", () => {
+  const t0 = 1_700_000_000_000
+  const fix = createFixtureDb({
+    sessions: [
+      { id: "ses_a", project_id: "proj_1", title: "A", time_created: t0 },
+      { id: "ses_b", project_id: "proj_1", title: "B", time_created: t0 },
+      { id: "ses_arch", project_id: "proj_1", title: "Arch", time_created: t0, time_archived: t0 + 10 },
+    ],
+    parts: [
+      {
+        id: "p_a1",
+        session_id: "ses_a",
+        time_created: t0 + 100,
+        data: { type: "tool", tool: "question", callID: "c1", state: { status: "running", time: { start: t0 + 100 } } },
+      },
+      {
+        id: "p_a2",
+        session_id: "ses_a",
+        time_created: t0 + 200,
+        data: { type: "tool", tool: "question", callID: "c2", state: { status: "error", error: "boom", time: { start: t0 + 200 } } },
+      },
+      {
+        id: "p_a3",
+        session_id: "ses_a",
+        time_created: t0 + 300,
+        data: { type: "tool", tool: "question", callID: "c3", state: { status: "completed", time: { start: t0 + 300, end: t0 + 400 } } },
+      },
+      {
+        id: "p_b1",
+        session_id: "ses_b",
+        time_created: t0 + 150,
+        data: { type: "tool", tool: "question", callID: "c4", state: { status: "running", time: { start: t0 + 150 } } },
+      },
+      {
+        id: "p_arch1",
+        session_id: "ses_arch",
+        time_created: t0 + 250,
+        data: { type: "tool", tool: "question", callID: "c5", state: { status: "running", time: { start: t0 + 250 } } },
+      },
+    ],
+  })
+
+  afterAll(() => fix.dispose())
+
+  test("returns only that session's questions, DESC by created", () => {
+    const out = listSessionQuestions({ dbPath: fix.dbPath, sessionId: "ses_a", projectId: "proj_1" })
+    expect(out.map((q) => q.partId)).toEqual(["p_a2", "p_a1"])
+  })
+
+  test("respects projectId — wrong project yields []", () => {
+    expect(listSessionQuestions({ dbPath: fix.dbPath, sessionId: "ses_a", projectId: "proj_2" })).toEqual([])
+  })
+
+  test("archived session is dropped even when its question is open", () => {
+    expect(listSessionQuestions({ dbPath: fix.dbPath, sessionId: "ses_arch", projectId: "proj_1" })).toEqual([])
+  })
+
+  test("missing db, null projectId or unknown session all yield []", () => {
+    expect(listSessionQuestions({ dbPath: fix.dbPath, sessionId: "ses_a", projectId: null })).toEqual([])
+    expect(listSessionQuestions({ dbPath: fix.dbPath, sessionId: "ses_nope", projectId: "proj_1" })).toEqual([])
+    expect(listSessionQuestions({ dbPath: "C:/nope/missing.db", sessionId: "ses_a", projectId: "proj_1" })).toEqual([])
+  })
+
+  test("respects LIMIT 20", () => {
+    const parts = Array.from({ length: 25 }, (_, i) => ({
+      id: `p_lim_${i}`,
+      session_id: "ses_lim",
+      time_created: t0 + i,
+      data: { type: "tool", tool: "question", callID: `c_${i}`, state: { status: "running", time: { start: t0 + i } } },
+    }))
+    const fx = createFixtureDb({
+      sessions: [{ id: "ses_lim", project_id: "proj_1", title: "Lim", time_created: t0 }],
+      parts,
+    })
+    try {
+      const out = listSessionQuestions({ dbPath: fx.dbPath, sessionId: "ses_lim", projectId: "proj_1" })
+      expect(out).toHaveLength(20)
+    } finally {
+      fx.dispose()
+    }
   })
 })

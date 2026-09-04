@@ -14,6 +14,7 @@ export type SnapshotRequestOpts = {
   sessionId: string
   projectRoot: string | null
   dbPath?: string
+  questionHint?: string
 }
 
 type SnapshotDoneMessage = {

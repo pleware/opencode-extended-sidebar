@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test"
+import { Database } from "bun:sqlite"
+import fs from "node:fs"
 import path from "node:path"
 import { listOpenQuestions, listSessionFiles, listToolEvents } from "../../src/pware.oc.opencode/resolver/index.js"
 import { delegatesForSession, readRuntimeSnapshot, resetRuntimeCache } from "../../src/pware.oc.runtime/resolver/index.js"
@@ -399,6 +401,189 @@ describe("My work queue", () => {
     })
     expect(listApprovals(projFix.root)).toEqual({ drafting: [], readyReview: [], readyStart: [], finished: [] })
     expect(listOpenQuestions({ dbPath: dbFix.dbPath, projectId: "proj_a" })).toHaveLength(1)
+  })
+
+  test("a questionHint touch merges the hinted session without a full reconcile", () => {
+    projFix = createFixtureProject({})
+    dbFix = createFixtureDb({
+      sessions: [
+        { id: "ses_main", project_id: "proj_a", title: "main", parent_id: null, time_updated: NOW },
+        { id: "ses_other", project_id: "proj_a", title: "other", parent_id: null, time_updated: NOW - 1_000 },
+      ],
+      parts: [
+        {
+          id: "prt_q",
+          session_id: "ses_main",
+          time_created: NOW - 2_000,
+          data: {
+            type: "tool",
+            tool: "question",
+            callID: "call_q",
+            state: { status: "running", time: { start: NOW - 2_000 } },
+          },
+        },
+      ],
+    })
+
+    const first = readRuntimeSnapshot({
+      sessionId: "ses_main",
+      projectRoot: projFix.root,
+      dbPath: dbFix.dbPath,
+    })
+    expect(first.openQuestions.map((q) => q.sessionId)).toEqual(["ses_main"])
+
+    const db = new Database(dbFix.dbPath)
+    try {
+      db.prepare(
+        `INSERT INTO part (id, session_id, message_id, time_created, time_updated, data) VALUES (?, ?, ?, ?, ?, ?)`,
+      ).run(
+        "prt_q2",
+        "ses_other",
+        "",
+        NOW - 1,
+        NOW - 1,
+        JSON.stringify({
+          type: "tool",
+          tool: "question",
+          callID: "call_q2",
+          state: { status: "running", time: { start: NOW - 1 } },
+        }),
+      )
+    } finally {
+      db.close()
+    }
+    resetReadonlyDb()
+
+    const second = readRuntimeSnapshot({
+      sessionId: "ses_main",
+      projectRoot: projFix.root,
+      dbPath: dbFix.dbPath,
+      questionHint: "ses_other",
+    })
+    expect(second.openQuestions.map((q) => q.sessionId).sort()).toEqual(["ses_main", "ses_other"])
+  })
+
+  test("a questionHint touch updates openQuestions on an unchanged fingerprint (cache hit)", () => {
+    projFix = createFixtureProject({})
+    dbFix = createFixtureDb({
+      sessions: [
+        { id: "ses_main", project_id: "proj_a", title: "main", parent_id: null, time_updated: NOW },
+        { id: "ses_other", project_id: "proj_a", title: "other", parent_id: null, time_updated: NOW - 1_000 },
+      ],
+      parts: [
+        {
+          id: "prt_q",
+          session_id: "ses_main",
+          time_created: NOW - 2_000,
+          data: {
+            type: "tool",
+            tool: "question",
+            callID: "call_q",
+            state: { status: "running", time: { start: NOW - 2_000 } },
+          },
+        },
+        {
+          id: "prt_q2",
+          session_id: "ses_other",
+          time_created: NOW - 500,
+          data: {
+            type: "tool",
+            tool: "question",
+            callID: "call_q2",
+            state: { status: "completed", time: { start: NOW - 500 } },
+          },
+        },
+      ],
+    })
+
+    // Pin the DB mtime to a whole millisecond before the first read, so the
+    // post-write restore below is exact (Windows fs.utimesSync drops sub-ms).
+    const pinned = new Date(Math.floor(Date.now() / 1000) * 1000)
+    fs.utimesSync(dbFix.dbPath, pinned, pinned)
+
+    const first = readRuntimeSnapshot({
+      sessionId: "ses_main",
+      projectRoot: projFix.root,
+      dbPath: dbFix.dbPath,
+    })
+    expect(first.openQuestions.map((q) => q.partId)).toEqual(["prt_q"])
+
+    // Flip ses_other's part to open with a same-length status word ("completed" →
+    // "cancelled") so the SQLite file size is unchanged, then restore the mtime
+    // so dbStamp (mtimeMs:size) is identical and the second read is a cache hit.
+    const db = new Database(dbFix.dbPath)
+    try {
+      db.prepare(`UPDATE part SET data = ? WHERE id = ?`).run(
+        JSON.stringify({
+          type: "tool",
+          tool: "question",
+          callID: "call_q2",
+          state: { status: "cancelled", time: { start: NOW - 500 } },
+        }),
+        "prt_q2",
+      )
+    } finally {
+      db.close()
+    }
+    resetReadonlyDb()
+    fs.utimesSync(dbFix.dbPath, pinned, pinned)
+
+    const second = readRuntimeSnapshot({
+      sessionId: "ses_main",
+      projectRoot: projFix.root,
+      dbPath: dbFix.dbPath,
+      questionHint: "ses_other",
+    })
+    expect(second.fingerprint).toBe(first.fingerprint)
+    expect(second.openQuestions.map((q) => q.partId).sort()).toEqual(["prt_q", "prt_q2"])
+  })
+
+  test("switching projectId does not leak the previous project's questions", () => {
+    projFix = createFixtureProject({})
+    dbFix = createFixtureDb({
+      sessions: [
+        { id: "ses_a", project_id: "proj_a", title: "a", parent_id: null, time_updated: NOW },
+        { id: "ses_b", project_id: "proj_b", title: "b", parent_id: null, time_updated: NOW - 1_000 },
+      ],
+      parts: [
+        {
+          id: "prt_a",
+          session_id: "ses_a",
+          time_created: NOW - 2_000,
+          data: {
+            type: "tool",
+            tool: "question",
+            callID: "call_a",
+            state: { status: "running", time: { start: NOW - 2_000 } },
+          },
+        },
+        {
+          id: "prt_b",
+          session_id: "ses_b",
+          time_created: NOW - 1_500,
+          data: {
+            type: "tool",
+            tool: "question",
+            callID: "call_b",
+            state: { status: "running", time: { start: NOW - 1_500 } },
+          },
+        },
+      ],
+    })
+
+    const first = readRuntimeSnapshot({
+      sessionId: "ses_a",
+      projectRoot: projFix.root,
+      dbPath: dbFix.dbPath,
+    })
+    expect(first.openQuestions.map((q) => q.partId)).toEqual(["prt_a"])
+
+    const second = readRuntimeSnapshot({
+      sessionId: "ses_b",
+      projectRoot: projFix.root,
+      dbPath: dbFix.dbPath,
+    })
+    expect(second.openQuestions.map((q) => q.partId)).toEqual(["prt_b"])
   })
 
   test("awaiting-approval draft, approved plan, done plan split into three groups", () => {

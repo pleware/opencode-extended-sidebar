@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test"
-import { hostEventToOcEvents } from "../../../src/pware.oc.opencode/pware.oc.opencode.events.js"
+import {
+  hostEventToOcEvents,
+  questionSessionFromEvent,
+} from "../../../src/pware.oc.opencode/pware.oc.opencode.events.js"
 import {
   EV_OC_FILES_TOUCHED,
   EV_OC_FLOW,
@@ -70,5 +73,74 @@ describe("hostEventToOcEvents", () => {
     expect(delta).toBeDefined()
     expect(delta?.data.kind).toBe("reasoning")
     expect(delta?.data.tokens).toBeGreaterThan(0)
+  })
+})
+
+describe("questionSessionFromEvent", () => {
+  test("returns sessionID for question.asked", () => {
+    expect(
+      questionSessionFromEvent({
+        type: "question.asked",
+        properties: { sessionID: "ses_q" },
+      }),
+    ).toBe("ses_q")
+  })
+
+  test("returns sessionID for question.replied", () => {
+    expect(
+      questionSessionFromEvent({
+        type: "question.replied",
+        properties: { sessionID: "ses_q" },
+      }),
+    ).toBe("ses_q")
+  })
+
+  test("returns sessionID for question.rejected", () => {
+    expect(
+      questionSessionFromEvent({
+        type: "question.rejected",
+        properties: { sessionID: "ses_q" },
+      }),
+    ).toBe("ses_q")
+  })
+
+  test("returns sessionID for message.part.updated with a question tool part", () => {
+    expect(
+      questionSessionFromEvent({
+        type: "message.part.updated",
+        properties: {
+          sessionID: "ses_q",
+          part: { type: "tool", tool: "question" },
+        },
+      }),
+    ).toBe("ses_q")
+  })
+
+  test("returns null for a non-question tool part", () => {
+    expect(
+      questionSessionFromEvent({
+        type: "message.part.updated",
+        properties: {
+          sessionID: "ses_q",
+          part: { type: "tool", tool: "bash" },
+        },
+      }),
+    ).toBeNull()
+  })
+
+  test("returns null when no question part is present", () => {
+    expect(
+      questionSessionFromEvent({
+        type: "message.part.updated",
+        properties: { sessionID: "ses_q", part: { type: "text", text: "hi" } },
+      }),
+    ).toBeNull()
+  })
+
+  test("returns null for malformed/non-object input", () => {
+    expect(questionSessionFromEvent(null)).toBeNull()
+    expect(questionSessionFromEvent(undefined)).toBeNull()
+    expect(questionSessionFromEvent("question.asked")).toBeNull()
+    expect(questionSessionFromEvent(42)).toBeNull()
   })
 })

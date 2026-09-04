@@ -27,6 +27,31 @@ const HOST_SIDEBAR_TITLE_RESERVE = 4
 const PANEL_CHROME = HOST_SIDEBAR_CHROME + HOST_SIDEBAR_TITLE_RESERVE
 const PANEL_MIN_ROWS = 8
 
+/** Shared right rail for context actions (`switch new`, `view all`, …). */
+export const CONTEXT_ACTION_COL_WIDTH = 10
+
+/** Realtime's own action column — just the `F` toggle, so one column, not the rail. */
+export const RT_ACTION_COL_WIDTH = 1
+
+/** Realtime chart body rows — compact and fullscreen (column `F`). */
+export const RT_CHART_ROWS = 4
+export const RT_CHART_ROWS_FULL = 8
+
+/** Chart rows for the OES realtime block at the current fullscreen flag. */
+export function rtChartRowSpan(full: boolean): number {
+  return full ? RT_CHART_ROWS_FULL : RT_CHART_ROWS
+}
+
+/**
+ * One right-aligned action line padded to {@link CONTEXT_ACTION_COL_WIDTH}.
+ * Long labels keep their trailing characters so `view all` still fits the rail.
+ */
+export function contextActionsLine(labels: readonly string[]): string {
+  const text = labels.join(" ")
+  if (text.length >= CONTEXT_ACTION_COL_WIDTH) return text.slice(-CONTEXT_ACTION_COL_WIDTH)
+  return text.padStart(CONTEXT_ACTION_COL_WIDTH)
+}
+
 /** Usable rows in the sidebar slot for a terminal that tall. */
 export function panelRows(termHeight: number): number {
   const h = Number.isFinite(termHeight) && termHeight > 0 ? termHeight : 24

@@ -47,6 +47,12 @@ export const MYWORK_BADGE_MS = 5_000
  */
 export const MYWORK_BADGE_COOLDOWN_MS = 1_000
 
+/**
+ * Question-reconcile backstop — the full-scan floor that re-checks for closed
+ * open questions when no event-driven hint arrives to trigger an earlier pass.
+ */
+export const QUESTION_RECONCILE_MS = 30_000
+
 /** Host event → scan debounce (trailing). */
 export const EVENT_SCAN_DEBOUNCE_MS = 100
 

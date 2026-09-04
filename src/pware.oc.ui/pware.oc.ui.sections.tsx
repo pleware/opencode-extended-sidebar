@@ -19,6 +19,7 @@ import {
   kvRead,
   kvWrite,
   toneColor,
+  type ContextAction,
   type ThemeColors,
 } from "./pware.oc.ui.chrome.js"
 import {
@@ -336,7 +337,7 @@ export function FoldSection(props: {
   countLabel?: string
   suffix?: string
   diff?: { additions: number; deletions: number }
-  actions?: ReadonlyArray<{ label: string; onPick: () => void }>
+  actions?: readonly ContextAction[]
   onDetail?: () => void
   colors: ThemeColors
   children: JSX.Element
@@ -384,8 +385,8 @@ export function GroupSection<T>(props: {
   revealStep?: number
   /** Hoisted reveal state — used instead of an internal one when provided. */
   reveal?: RevealState
-  /** Extra clickable labels in the header, e.g. a `view all` action. */
-  actions?: ReadonlyArray<{ label: string; onPick: () => void }>
+  /** Context actions in the shared right rail. */
+  actions?: readonly ContextAction[]
 }): JSX.Element {
   const reveal = props.reveal ?? useReveal(Math.max(1, props.revealStep ?? props.budget))
   return (
