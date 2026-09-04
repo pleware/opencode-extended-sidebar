@@ -172,7 +172,7 @@ Plugin registration: `id = "opencode-extended-sidebar"`, load toast,
 | `debug.ts` | `OES_DEBUG_OPENCODE` / `OES_DEBUG_PROFILE` JSON-line file loggers + a 200-line in-memory screen ring for the sidebar's debug console | `dbg()`, `profile()`, `profileAsync()`, `readProfileStats()`, `writeProfileSummary()`, `debugLogDir()`, `profileLogDir()`, `resetDebug()`, `pushScreenLine()`, `readScreenLines()`, `subscribeScreenLines()` |
 | `bus.ts` | in-process plugin event bus (`pware.oc.*` / `pware.omo.*` / `pware.oes.*`) | `createEventBus()`, `PwareEvent`, `PwareEventBus` |
 | `events.ts` | host event type/kind classification | `eventType()`, `eventKind()`, `shouldRefreshDb()` |
-| `layout.ts` | vertical row budget, overflow slicing, shared action rail | `panelRows()`, `packSections()`, `rowsForPlan()`, `sliceShown()`, `clampScrollOffset()`, `scrollByStep()`, `contextActionsLine()`, `rtChartRowSpan()`, `CONTEXT_ACTION_COL_WIDTH`, `RT_CHART_ROWS`, `RT_CHART_ROWS_FULL`, `ROW_MIN`, `ROW_RANK` |
+| `layout.ts` | vertical row budget, overflow slicing, shared action rail | `panelRows()`, `packSections()`, `rowsForPlan()`, `sliceShown()`, `clampScrollOffset()`, `scrollByStep()`, `contextActionsLine()`, `CONTEXT_ACTION_COL_WIDTH`, `RT_CHART_ROWS`, `ROW_MIN`, `ROW_RANK` |
 | `oes.ts` | `oes.json` merge + clamp | `OesOptions`, `OES_DEFAULTS`, `pick()`, `getOes()`, `oesStamp()`, `resetOesCache()` |
 | `paths.ts` | OpenCode path resolution, path folding | `getOpenCodeDbPath()`, `pluginRoot()`, `resolveProjectFile()`, `basenameOf()`, `fileStamp()`, `dbStamp()`, `str()`, `finiteNum()` |
 | `preview.ts` | text/markdown preview limits | `previewViewportRows()`, `canPreviewPath()`, `isMarkdownPath()`, `readTextPreview()` |
@@ -278,9 +278,9 @@ Plugin registration: `id = "opencode-extended-sidebar"`, load toast,
 |---|---|---|
 | `reader.ts` | wall-clock split per model/tool, dated logs | `readPerfSnapshot()`, `emptyPerf()`, `aggregate()`, `readPerfLog()`, `formatPerfLog()`, `collectPerfLogRows()`, `formatColumns()`, `toolLogCall()` |
 | `self.ts` | plugin self-cost (gated on the debug/profile loggers): event/scan/tick latency + renderer FPS | `selfTime()`, `selfDiagActive()`, `setSelfDiagForced()`, `readSelfStats()`, `resetSelfStats()`, `setSelfFps()`, `readRendererFps()`, `formatSelfLine()`, `SelfStats` |
-| `charts.ts` | pure chart/stat helpers: null-fill, smoothing, downsampling, ANSI strip, bars, trends, histograms, gauges | `interpolateSeries()`, `smoothSeries()`, `downsampleAvg()`, `stripAnsi()`, `asciiTrend()`, `shareBar()`, `perfStatLine()`, `waitHistogram()`, `shareGauge()`, `shareDonut()` |
+| `charts.ts` | pure chart/stat helpers: null-fill, smoothing, downsampling, ANSI strip, bars, trends, histograms, gauges, per-series braille lines | `interpolateSeries()`, `smoothSeries()`, `downsampleAvg()`, `stripAnsi()`, `asciiTrend()`, `shareBar()`, `perfStatLine()`, `waitHistogram()`, `shareGauge()`, `shareDonut()`, `realtimeSeriesLines()` |
 | `realtime.ts` | realtime metric samples (tokens/cache/cpu·ram/network) + pure history push/prune | `StatRealtimeSnapshot`, `StatRealtimeSnapshotHistory`, `StatRealtimeTokensSeries`, `StatRealtimeCacheSeries`, `StatRealtimeCpuRamSeries`, `StatRealtimeNetworkSeries`, `sumSeries()`, `tokenRateToKbit()`, `NETWORK_BYTES_PER_TOKEN`, `emptyStatRealtimeSnapshot()`, `pushStatRealtimeHistory()` |
-| `realtimeBlock.ts` | static definition of the OES realtime widget: tabs, selector rows, series readers | `StatRealtimeBlock`, `StatRealtimeTab`, `StatRealtimeRowTab`, `StatRealtimeTabId`, `StatRealtimeSeriesKey`, `seriesValues()`, `STAT_REALTIME_BLOCK` |
+| `realtimeBlock.ts` | static definition of the OES realtime widget: tabs, selector rows (each with a `unit`), series readers | `StatRealtimeBlock`, `StatRealtimeTab`, `StatRealtimeRowTab`, `StatRealtimeTabId`, `StatRealtimeSeriesKey`, `seriesValues()`, `STAT_REALTIME_BLOCK` |
 | `realtimeTimeline.ts` | one shared wall-clock realtime grid (tokens/cache/cpu·ram) sampled every `TICK_MS` over `REALTIME_WINDOW_MS` (no DB) | `StatRealtimeTimeline`, `StatRealtimeEventTokens`, `StatRealtimeEstKind` |
 | `realtimeSampler.ts` | subscribes to `session.updated`, extracts token totals, feeds the timeline | `EventDriverSampler`, `RealtimeEventSubscribe`, `extractSessionTokens()` |
 | `realtimeCpuRam.ts` | process-level CPU/RAM reading + pure percent math (built-ins, cross-platform) | `CpuRamReading`, `CpuRamStampedReading`, `readCpuRam()`, `cpuCores()`, `cpuPercent()`, `cpuPercentOverWindow()`, `ramMb()` |
@@ -299,7 +299,7 @@ Plugin registration: `id = "opencode-extended-sidebar"`, load toast,
 | `sidebar.tsx` | the panel: groups, tabs, live rows; consumes plugin event bus | `SidebarPanel` |
 | `live.tsx` | host event adapter (`api.event.on`) → plugin event bus (`pware.oc.*`, `pware.oes.*`) | `startHostEventBridge()` |
 | `host.tsx` | UI host RPC wrappers (session switch/new session/start-work/approve) | `selectSession()`, `openSessionSwitcher()`, `openNewSessionPrompt()`, `runStartWork()`, `approvePlan()` |
-| `menudialogs.tsx` | every popup via one `openDialog()` choke-point | `openFileDetail()`, `openToolDetail()`, `openFileListDialog()`, `openApprovalDialog()`, `openQuestionDialog()`, `openDocDetail()`, `openTextPreview()`, `openPerfLog()` |
+| `menudialogs.tsx` | every popup via one `openDialog()` choke-point | `openFileDetail()`, `openToolDetail()`, `openFileListDialog()`, `openApprovalDialog()`, `openQuestionDialog()`, `openDocDetail()`, `openTextPreview()`, `openPerfLog()`, `openRealtimeCharts()` |
 | `glyphs.tsx` | domain glyphs (My work kinds, git letters, review lanes, tab status lights) as `GlyphSpec`; re-exports core glyph primitives | `workStatusGlyph()` (re-exported from core), `myWorkGlyph()`, `tabAttentionGlyph()`, `TAB_NEUTRAL_GLYPH`, `fileLetterGlyph()`, `reviewLaneGlyph()`, `reviewStateSuffix()`, `GROUP_GLYPH`, `THINK_GLYPH` |
 
 ## Tests

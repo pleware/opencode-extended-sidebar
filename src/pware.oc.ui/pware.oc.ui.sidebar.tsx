@@ -41,9 +41,9 @@ import {
   ROW_RANK,
   clampScrollOffset,
   RT_ACTION_COL_WIDTH,
+  RT_CHART_ROWS,
   packSections,
   panelRows,
-  rtChartRowSpan,
   rowsForPlan,
   scrollByStep,
 } from "../pware.oc.core/pware.oc.core.layout.js"
@@ -135,7 +135,7 @@ import {
 } from "../pware.oc.core/pware.oc.core.status.js"
 import { createEventBus } from "../pware.oc.core/pware.oc.core.bus.js"
 import { startRuntimeSource } from "../pware.oc.runtime/pware.oc.runtime.source.js"
-import { openApprovalDialog, openDocDetail, openFileDetail, openFileListDialog, openQuestionDialog, openToolDetail } from "./pware.oc.ui.menudialogs.js"
+import { openApprovalDialog, openDocDetail, openFileDetail, openFileListDialog, openQuestionDialog, openRealtimeCharts, openToolDetail } from "./pware.oc.ui.menudialogs.js"
 import { startHostEventBridge } from "./pware.oc.ui.live.js"
 import {
   approvePlan,
@@ -196,7 +196,6 @@ const KV_FOLD_TOOLS = "oes.fold.tools"
 const KV_FOLD_FILES = "oes.fold.files"
 const KV_FOLD_DRAFTS = "oes.fold.drafts"
 const KV_FOLD_RT = "oes.fold.rt"
-const KV_RT_FULL = "oes.rt.full"
 const KV_TAB = "oes.tab"
 
 const OES_TABS = ["mywork", "current", "sessions", "perf"] as const
@@ -685,14 +684,6 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     kvWrite(props.api, KV_FOLD_RT, !next)
     requestRender()
   }
-  const [rtFull, setRtFull] = createSignal(kvRead(props.api, KV_RT_FULL, false))
-  const rtChartRows = createMemo(() => rtChartRowSpan(rtFull()))
-  const toggleRtFull = (): void => {
-    const next = !rtFull()
-    setRtFull(next)
-    kvWrite(props.api, KV_RT_FULL, next)
-    requestRender()
-  }
 
   const myWorkFold = {} as Record<MyWorkKind, ReturnType<typeof useFold>>
   for (const kind of MY_WORK_ORDER) {
@@ -877,7 +868,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
       const t = tab()
       const omo = omoPresent()
       const sections: { key: string; want: number; min: number; rank: number }[] = []
-      let fixed = 2 + (rtOpen() ? rtChartRows() + 1 : 0) // OES header + chart + padding + brand line
+      let fixed = 2 + (rtOpen() ? RT_CHART_ROWS + 1 : 0) // OES header + chart + padding + brand line
       if (selfDiagActive()) fixed += 1 // self line — only while debug/profile is on
       if (modeLine()) fixed += 1 // debug/profile flag row
       if (modeDirLine()) fixed += 1
@@ -1156,7 +1147,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   const rtLines = createMemo(() =>
     rateSparkline(rtSeries(), {
       width: Math.max(8, oes().lineMax - 12 - RT_ACTION_COL_WIDTH),
-      height: rtChartRows(),
+      height: RT_CHART_ROWS,
       charset: "braille",
     }),
   )
@@ -1270,7 +1261,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
               <For each={rtActiveTab().rows}>
                 {() => (
                   <ContextActions
-                    actions={[{ label: "F", bold: rtFull(), onPick: toggleRtFull }]}
+                    actions={[{ label: "F", bold: false, onPick: () => openRealtimeCharts(props.api, colors(), { getTimeline: () => rtTimeline, initialTabId: rtTab() }) }]}
                     colors={colors()}
                     width={RT_ACTION_COL_WIDTH}
                   />

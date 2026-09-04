@@ -1,5 +1,10 @@
 # Changelog
 
+- **0.2.80** (2026-09-04) describe the realtime fullscreen modal and prune inline-fullscreen references.
+- **0.2.79** (2026-09-04) route the realtime fullscreen F into a live modal instead of inline expansion.
+- **0.2.78** (2026-09-04) fullscreen realtime modal with category selector and multi-line series.
+- **0.2.77** (2026-09-04) add a pure multi-series realtime line renderer with per-series scale.
+- **0.2.76** (2026-09-04) give each realtime selector row its own unit label.
 - **0.2.75** (2026-09-04) Replace the project-wide open-question scan with an in-memory per-session cache invalidated by targeted question-part host events plus a 30-second reconcile bac.
 - **0.2.74** (2026-09-04) Move recent sessions into the My work Sessions group, remove spare gap rows above OES and below the tab bar, and retune direction-glyph sin-fades on the 50ms ti.
 - **0.2.73** (2026-09-04) Move the project-wide open-question scan into the snapshot worker so the ~500ms json_extract over every part no longer freezes the UI thread, expose it as snap(.

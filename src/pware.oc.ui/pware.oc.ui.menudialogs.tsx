@@ -6,7 +6,7 @@
  * nothing outside this module touches `api.ui.dialog`.
  * Read-only metadata + optional preview.
  */
-import { createEffect, createMemo, For, Show, type JSX } from "solid-js"
+import { createEffect, createMemo, createSignal, For, onCleanup, Show, type JSX } from "solid-js"
 import { SyntaxStyle } from "@opentui/core"
 import { useTerminalDimensions } from "@opentui/solid"
 import type { TuiDialogSelectOption, TuiPluginApi, TuiTheme } from "@opencode-ai/plugin/tui"
@@ -15,7 +15,10 @@ import { ClickText, textAttrs, type ThemeColors } from "./pware.oc.ui.chrome.js"
 import type { ToolView } from "../pware.oc.opencode/resolver/pware.oc.opencode.resolver.tool.js"
 import type { FileView } from "../pware.oc.opencode/pware.oc.opencode.files.js"
 import { readPerfLog, type PerfLogKind, type PerfSnapshot } from "../pware.oc.perf/pware.oc.perf.reader.js"
-import { asciiTrend, perfStatLine, waitHistogram, shareGauge, shareDonut } from "../pware.oc.perf/pware.oc.perf.charts.js"
+import { asciiTrend, perfStatLine, realtimeSeriesLines, shareDonut, shareGauge, smoothSeries, waitHistogram } from "../pware.oc.perf/pware.oc.perf.charts.js"
+import { STAT_REALTIME_BLOCK, seriesValues, type StatRealtimeTabId } from "../pware.oc.perf/pware.oc.perf.realtimeBlock.js"
+import type { StatRealtimeTimeline } from "../pware.oc.perf/pware.oc.perf.realtimeTimeline.js"
+import { TICK_MS } from "../pware.oc.core/pware.oc.core.timing.js"
 import { formatDiffStat } from "../pware.oc.opencode/pware.oc.opencode.files.js"
 import type { DocView } from "../pware.oc.omo/resolver/pware.oc.omo.resolver.doc.js"
 import { DOC_KIND_LABEL } from "../pware.oc.omo/resolver/pware.oc.omo.resolver.doc.js"
@@ -673,5 +676,115 @@ export function openPerfCharts(
         <ActionRow label="Close" colors={colors} onPick={() => closeDialog(api)} />
       </box>
     </DialogPad>
+  ))
+}
+
+/**
+ * The fullscreen realtime Perf modal. Liveness does not rely on Solid
+ * reactivity crossing the `api.ui.dialog.replace` boundary: a `TICK_MS`
+ * interval bumps a `version` signal and calls `api.renderer.requestRender()`,
+ * and the `createMemo(version)` recomputes the chart lines every tick — the
+ * `version()` read inside the memo is what re-renders the body. Category
+ * selection is dialog-local (never persisted to kv); each tab's selector rows
+ * render as braille sparklines, one colour per series, with a muted
+ * `label · unit` legend.
+ */
+function RealtimeChartsDialog(props: {
+  api: TuiPluginApi
+  colors: ThemeColors
+  getTimeline: () => StatRealtimeTimeline
+  initialTabId: StatRealtimeTabId
+}): JSX.Element {
+  const dimensions = useTerminalDimensions()
+  const [selectedTab, setSelectedTab] = createSignal<StatRealtimeTabId>(props.initialTabId)
+  const [version, setVersion] = createSignal(0)
+
+  const interval = setInterval(() => {
+    setVersion((v) => v + 1)
+    try {
+      props.api.renderer.requestRender()
+    } catch {
+      // teardown
+    }
+  }, TICK_MS)
+  onCleanup(() => clearInterval(interval))
+
+  const dialogChartWidth = () => Math.max(40, dimensions().width - 20)
+
+  const lines = createMemo(() => {
+    version()
+    const history = props.getTimeline().getTimeline()
+    const tab =
+      STAT_REALTIME_BLOCK.tabs.find((t) => t.id === selectedTab()) ??
+      STAT_REALTIME_BLOCK.tabs[0]!
+    return realtimeSeriesLines(
+      tab.rows.map((r) => ({
+        key: r.key,
+        label: r.label,
+        unit: r.unit,
+        values:
+          r.key === "avg"
+            ? smoothSeries(seriesValues(history, r.read), 5)
+            : seriesValues(history, r.read),
+      })),
+      { width: dialogChartWidth(), height: 2 },
+    )
+  })
+
+  const palette: Array<string | undefined> = [
+    props.colors.success,
+    props.colors.warning,
+    props.colors.primary,
+    props.colors.error,
+  ]
+
+  return (
+    <DialogPad>
+      <box flexDirection="row" gap={1}>
+        <For each={STAT_REALTIME_BLOCK.tabs}>
+          {(tab) => (
+            <ClickText
+              fg={tab.id === selectedTab() ? props.colors.primary || props.colors.text : props.colors.textMuted}
+              bold={tab.id === selectedTab()}
+              underline
+              onMouseUp={() => setSelectedTab(tab.id)}
+            >
+              {tab.label}
+            </ClickText>
+          )}
+        </For>
+      </box>
+      <For each={lines()}>
+        {(entry, i) => {
+          const fg = palette[i() % palette.length] ?? props.colors.text
+          return (
+            <>
+              <For each={entry.lines}>
+                {(line) => <text fg={fg}>{line || " "}</text>}
+              </For>
+              <text fg={props.colors.textMuted}>{`${entry.label} · ${entry.unit}`}</text>
+            </>
+          )
+        }}
+      </For>
+      <box flexDirection="column" gap={0} paddingTop={1}>
+        <ActionRow label="Close" colors={props.colors} onPick={() => closeDialog(props.api)} />
+      </box>
+    </DialogPad>
+  )
+}
+
+export function openRealtimeCharts(
+  api: TuiPluginApi,
+  colors: ThemeColors,
+  opts: { getTimeline: () => StatRealtimeTimeline; initialTabId: StatRealtimeTabId },
+): void {
+  openDialog(api, "xlarge", () => (
+    <RealtimeChartsDialog
+      api={api}
+      colors={colors}
+      getTimeline={opts.getTimeline}
+      initialTabId={opts.initialTabId}
+    />
   ))
 }
