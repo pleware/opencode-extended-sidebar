@@ -52,6 +52,21 @@ describe("preview helpers", () => {
     expect(out?.truncated).toBe(false)
     proj.dispose()
   })
+
+  test("readTextPreview truncates text to 200 lines", () => {
+    const lines = Array.from({ length: 205 }, (_, i) => `line${i}`)
+    const proj = createFixtureProject({ files: { "big.txt": lines.join("\n") } })
+    const out = readTextPreview(path.join(proj.root, "big.txt"))
+    expect(out?.truncated).toBe(true)
+    expect(out?.text.split("\n")).toHaveLength(200)
+    proj.dispose()
+  })
+
+  test("readTextPreview returns null for a missing file", () => {
+    const proj = createFixtureProject()
+    expect(readTextPreview(path.join(proj.root, "missing.md"))).toBeNull()
+    proj.dispose()
+  })
 })
 
 describe("previewViewportRows", () => {

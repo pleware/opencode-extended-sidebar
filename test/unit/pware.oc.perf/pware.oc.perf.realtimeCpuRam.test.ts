@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test"
 import {
+  cpuCores,
   cpuPercent,
   cpuPercentOverWindow,
   ramMb,
+  readCpuRam,
 } from "../../../src/pware.oc.perf/pware.oc.perf.realtimeCpuRam.js"
 import { StatRealtimeTimeline } from "../../../src/pware.oc.perf/pware.oc.perf.realtimeTimeline.js"
 
@@ -65,5 +67,20 @@ describe("ramMb", () => {
   test("converts resident bytes to MB", () => {
     expect(ramMb(1024 * 1024)).toBe(1)
     expect(ramMb(0)).toBe(0)
+  })
+})
+
+describe("readCpuRam", () => {
+  test("returns non-negative cpu and memory readings", () => {
+    const r = readCpuRam()
+    expect(r.user).toBeGreaterThanOrEqual(0)
+    expect(r.system).toBeGreaterThanOrEqual(0)
+    expect(r.rss).toBeGreaterThanOrEqual(0)
+  })
+})
+
+describe("cpuCores", () => {
+  test("reports at least one logical core", () => {
+    expect(cpuCores()).toBeGreaterThanOrEqual(1)
   })
 })

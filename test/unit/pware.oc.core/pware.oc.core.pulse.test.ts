@@ -1,29 +1,43 @@
 import { describe, expect, test } from "bun:test"
 import {
+  activeFlow,
   applyFlow,
   composeMark,
   deltaKindFromEvent,
   deltaTextFromEvent,
   estimateTokens,
   flowFromEvent,
+  formatAge,
   formatCompact,
   formatDuration,
+  formatPercent,
+  formatRate,
   formatSpan,
   formatTokenRate,
   formatTokens,
+  formatUsd,
   formatWhen,
-  timeSummary,
-  tokenSummary,
-  stampMs,
-  toEpochMs,
   hottestMark,
   packChips,
   packStackedRow,
+  phaseAgeMs,
   preferToolLabel,
+  pulseAgeMs,
   pushTokenTick,
+  sessionBusyFromEvent,
+  sessionIdFromEvent,
+  shortMiddle,
   shortToolLabel,
+  stampMs,
   stripSessionPrefix,
+  timeSummary,
+  toEpochMs,
   tokenRate,
+  tokenRateBars,
+  tokenSummary,
+  toolFlow,
+  toolHitFromEvent,
+  toolMark,
 } from "../../../src/pware.oc.core/pware.oc.core.pulse.js"
 
 describe("toEpochMs / stampMs", () => {
@@ -225,6 +239,20 @@ describe("deltaTextFromEvent", () => {
       deltaTextFromEvent({ type: "session.next.text.delta", properties: { text: "world" } }),
     ).toBe("world")
   })
+  test("skips an empty bag to find a later non-empty text", () => {
+    expect(
+      deltaTextFromEvent({
+        type: "session.next.text.delta",
+        part: { text: "" },
+        properties: { text: "world" },
+      }),
+    ).toBe("world")
+  })
+  test("whitespace-only delta text is null", () => {
+    expect(
+      deltaTextFromEvent({ type: "session.next.text.delta", part: { text: "  " }, properties: { text: "" } }),
+    ).toBeNull()
+  })
   test("ignores a full message/part body", () => {
     expect(deltaTextFromEvent({ type: "message.updated", properties: { info: { text: "big" } } })).toBeNull()
     expect(
@@ -299,6 +327,24 @@ describe("formatTokenRate", () => {
   })
 })
 
+describe("tokenRateBars", () => {
+  const WINDOW = 5_000
+
+  test("returns eight columns with newest activity on the right", () => {
+    const at = 10_000
+    let ticks = pushTokenTick([], at - 500, 40, WINDOW)
+    ticks = pushTokenTick(ticks, at, 80, WINDOW)
+    const bar = tokenRateBars(ticks, at, WINDOW)
+    expect(bar).toHaveLength(8)
+    expect(bar.endsWith("█") || bar.endsWith("▇")).toBe(true)
+    expect(bar.startsWith(" ")).toBe(true)
+  })
+
+  test("idle window is all spaces", () => {
+    expect(tokenRateBars([], 1_000, WINDOW)).toBe("        ")
+  })
+})
+
 describe("stripSessionPrefix", () => {
   test("strips the opencode: prefix, leaves bare ids untouched", () => {
     expect(stripSessionPrefix("opencode:ses_abc123")).toBe("ses_abc123")
@@ -308,5 +354,298 @@ describe("stripSessionPrefix", () => {
     expect(stripSessionPrefix("   ")).toBeNull()
     expect(stripSessionPrefix(null)).toBeNull()
     expect(stripSessionPrefix(undefined)).toBeNull()
+  })
+})
+
+describe("pulseAgeMs", () => {
+  test("null when every stamp is missing or invalid", () => {
+    expect(pulseAgeMs(5_000)).toBeNull()
+    expect(pulseAgeMs(5_000, null, undefined)).toBeNull()
+    expect(pulseAgeMs(1_700_000_005_000, 0, -1)).toBeNull()
+  })
+  test("now minus the newest stamp", () => {
+    expect(pulseAgeMs(1_700_000_005_000, 1_700_000_001_000)).toBe(4_000)
+    expect(pulseAgeMs(1_700_000_005_000, 1_700_000_001_000, 1_700_000_003_000)).toBe(2_000)
+  })
+  test("accepts a seconds stamp and clamps a negative age to zero", () => {
+    expect(pulseAgeMs(1_700_000_005_000, 1_700_000_001)).toBe(4_000)
+    expect(pulseAgeMs(1_000, 1_700_000_005_000)).toBe(0)
+  })
+})
+
+describe("activeFlow", () => {
+  test("null for a quiet row, wait when busy with no entry", () => {
+    expect(activeFlow(undefined, 1_000, false)).toBeNull()
+    expect(activeFlow(undefined, 1_000, true)).toBe("wait")
+  })
+  test("recv expires after the recv window", () => {
+    const entry = { dir: "recv", at: 1_000, since: 0 } as const
+    expect(activeFlow(entry, 2_000, false)).toBe("recv")
+    expect(activeFlow(entry, 5_000, false)).toBeNull()
+    expect(activeFlow(entry, 5_000, true)).toBe("wait")
+  })
+  test("wait and tool hold while busy or inside their windows", () => {
+    const wait = { dir: "wait", at: 1_000, since: 0 } as const
+    expect(activeFlow(wait, 5_000, true)).toBe("wait")
+    expect(activeFlow(wait, 5_000, false)).toBe("wait")
+    expect(activeFlow(wait, 20_000, false)).toBeNull()
+
+    const tool = { dir: "tool", at: 1_000, since: 0 } as const
+    expect(activeFlow(tool, 5_000, true)).toBe("tool")
+    expect(activeFlow(tool, 5_000, false)).toBe("tool")
+    expect(activeFlow(tool, 40_000, false)).toBeNull()
+  })
+})
+
+describe("applyFlow clear", () => {
+  test("clear drops the entry, or is a no-op when absent", () => {
+    expect(applyFlow({}, "s1", "clear", 1_000)).toEqual({})
+    const prev = applyFlow({}, "s1", "recv", 1_000)
+    expect(applyFlow(prev, "s1", "clear", 2_000)).toEqual({})
+    expect(applyFlow(prev, "s2", "clear", 2_000)).toBe(prev)
+  })
+})
+
+describe("phaseAgeMs", () => {
+  test("null unless the entry matches the active direction", () => {
+    const entry = { dir: "recv", at: 1_000, since: 500 } as const
+    expect(phaseAgeMs(undefined, 1_500, "recv")).toBeNull()
+    expect(phaseAgeMs(entry, 1_500, null)).toBeNull()
+    expect(phaseAgeMs(entry, 1_500, "wait")).toBeNull()
+    expect(phaseAgeMs(entry, 1_500, "recv")).toBe(1_000)
+  })
+  test("clamps a negative span to zero", () => {
+    expect(phaseAgeMs({ dir: "recv", at: 1_000, since: 1_500 }, 1_000, "recv")).toBe(0)
+  })
+})
+
+describe("flowFromEvent tool / part / status branches", () => {
+  test("tool success, failure, and end all mean wait", () => {
+    expect(flowFromEvent({ type: "tool.success", sessionID: "s1" }).dir).toBe("wait")
+    expect(flowFromEvent({ type: "tool.failed", sessionID: "s1" }).dir).toBe("wait")
+    expect(flowFromEvent({ type: "tool.ended", sessionID: "s1" }).dir).toBe("wait")
+  })
+  test("text.started and reasoning.started mean wait; an unknown type is quiet", () => {
+    expect(flowFromEvent({ type: "text.started", sessionID: "s1" }).dir).toBe("wait")
+    expect(flowFromEvent({ type: "reasoning.started", sessionID: "s1" }).dir).toBe("wait")
+    expect(flowFromEvent({ type: "message.updated", sessionID: "s1" }).dir).toBeNull()
+  })
+  test("message.part.updated splits tool parts from text parts", () => {
+    expect(
+      flowFromEvent({ type: "message.part.updated", properties: { part: { type: "tool" } } }).dir,
+    ).toBe("tool")
+    expect(
+      flowFromEvent({ type: "message.part.updated", properties: { part: { type: "text" } } }).dir,
+    ).toBe("recv")
+  })
+  test("session.status busy clears or waits by flag", () => {
+    expect(
+      flowFromEvent({ type: "session.status", properties: { status: { type: "busy" } } }).dir,
+    ).toBe("wait")
+    expect(
+      flowFromEvent({ type: "session.status", properties: { status: "idle" } }).dir,
+    ).toBe("clear")
+  })
+})
+
+describe("sessionBusyFromEvent", () => {
+  test("null for non-object events", () => {
+    expect(sessionBusyFromEvent(null)).toEqual({ id: null, busy: null })
+    expect(sessionBusyFromEvent("x")).toEqual({ id: null, busy: null })
+  })
+  test("idle by type", () => {
+    expect(sessionBusyFromEvent({ type: "session.idle", sessionID: "s1" })).toEqual({
+      id: "s1",
+      busy: false,
+    })
+    expect(sessionBusyFromEvent({ type: "foo.session.idle" }).busy).toBe(false)
+  })
+  test("status object resolves busy / retry / idle", () => {
+    expect(sessionBusyFromEvent({ type: "session.status", properties: { status: { type: "busy" } } }).busy).toBe(true)
+    expect(sessionBusyFromEvent({ type: "session.status", properties: { status: { type: "retry" } } }).busy).toBe(true)
+    expect(sessionBusyFromEvent({ type: "session.status", properties: { status: { type: "idle" } } }).busy).toBe(false)
+  })
+  test("raw status strings map busy/running/idle", () => {
+    expect(sessionBusyFromEvent({ type: "session.status", properties: { status: "busy" } }).busy).toBe(true)
+    expect(sessionBusyFromEvent({ type: "session.status", properties: { status: "running" } }).busy).toBe(true)
+    expect(sessionBusyFromEvent({ type: "session.status", properties: { status: "idle" } }).busy).toBe(false)
+    expect(sessionBusyFromEvent({ type: "session.status", status: "busy" }).busy).toBe(true)
+  })
+  test("unknown status stays null", () => {
+    expect(sessionBusyFromEvent({ type: "session.status", properties: { status: "whatever" } }).busy).toBeNull()
+  })
+})
+
+describe("formatAge", () => {
+  test("empty for missing/negative, buckets for the rest", () => {
+    expect(formatAge(null)).toBe("")
+    expect(formatAge(-1)).toBe("")
+    expect(formatAge(Number.NaN)).toBe("")
+    expect(formatAge(0)).toBe("0s")
+    expect(formatAge(5_000)).toBe("5s")
+  })
+  test("rolls over into days past 48 hours", () => {
+    expect(formatAge(4 * 24 * 3600 * 1000)).toBe("4d")
+  })
+})
+
+describe("formatRate", () => {
+  test("empty for zero/missing, one decimal below 100, integer above", () => {
+    expect(formatRate(null)).toBe("")
+    expect(formatRate(0)).toBe("")
+    expect(formatRate(-3)).toBe("")
+    expect(formatRate(12.34)).toBe("12.3/s")
+    expect(formatRate(100)).toBe("100/s")
+    expect(formatRate(150.6)).toBe("151/s")
+  })
+})
+
+describe("formatPercent", () => {
+  test("empty for missing/negative, under 1% is <1%", () => {
+    expect(formatPercent(null)).toBe("")
+    expect(formatPercent(-0.1)).toBe("")
+    expect(formatPercent(Number.NaN)).toBe("")
+    expect(formatPercent(0)).toBe("0%")
+    expect(formatPercent(0.005)).toBe("<1%")
+    expect(formatPercent(0.5)).toBe("50%")
+    expect(formatPercent(1)).toBe("100%")
+  })
+})
+
+describe("formatUsd", () => {
+  test("empty for zero/missing, tiers by magnitude", () => {
+    expect(formatUsd(null)).toBe("")
+    expect(formatUsd(0)).toBe("")
+    expect(formatUsd(-5)).toBe("")
+    expect(formatUsd(0.005)).toBe("$0.005")
+    expect(formatUsd(0.01)).toBe("$0.01")
+    expect(formatUsd(9.99)).toBe("$9.99")
+    expect(formatUsd(10)).toBe("$10")
+    expect(formatUsd(123.456)).toBe("$123")
+  })
+})
+
+describe("shortMiddle", () => {
+  test("fits or trims with a middle ellipsis", () => {
+    expect(shortMiddle("", 5)).toBe("")
+    expect(shortMiddle("abc", 5)).toBe("abc")
+    expect(shortMiddle("abc", 0)).toBe("")
+    expect(shortMiddle("abcdef", 2)).toBe("ab")
+    expect(shortMiddle("deepseek-v4-pro", 8)).toBe("deep…pro")
+  })
+})
+
+describe("toolMark / toolFlow", () => {
+  test("maps lifecycle to a row mark", () => {
+    expect(toolMark("running")).toBe("live")
+    expect(toolMark("in_progress")).toBe("live")
+    expect(toolMark("error")).toBe("error")
+    expect(toolMark("completed")).toBe("ready")
+    expect(toolMark("pending")).toBe("queued")
+    expect(toolMark("junk")).toBe("queued")
+  })
+  test("tool in flight only while running", () => {
+    expect(toolFlow("running")).toBe("tool")
+    expect(toolFlow("completed")).toBeNull()
+    expect(toolFlow("")).toBeNull()
+  })
+})
+
+describe("toolHitFromEvent", () => {
+  test("running bash call labelled by its command", () => {
+    const hit = toolHitFromEvent({
+      type: "session.next.tool.called",
+      sessionID: "ses_abc",
+      properties: {
+        part: { id: "prt_1", tool: "bash", state: { status: "running", input: { command: "ls src" } } },
+      },
+    })
+    expect(hit).toEqual({ sessionId: "ses_abc", id: "prt_1", name: "ls src", status: "running" })
+  })
+  test("success read labelled by its file, failure edit by call_ id", () => {
+    expect(
+      toolHitFromEvent({
+        type: "session.next.tool.success",
+        sessionID: "s1",
+        properties: {
+          part: { id: "prt_2", tool: "read", state: { status: "completed", input: { filePath: "src/db.ts" } } },
+        },
+      }),
+    ).toEqual({ sessionId: "s1", id: "prt_2", name: "read db.ts", status: "completed" })
+
+    expect(
+      toolHitFromEvent({
+        type: "session.next.tool.failed",
+        properties: { part: { id: "call_9", tool: "edit", state: { status: "failed", input: { filePath: "a/b.ts" } } } },
+      }),
+    ).toEqual({ sessionId: null, id: "call_9", name: "edit b.ts", status: "error" })
+  })
+  test("status can come from the bag state, not only the type", () => {
+    const hit = toolHitFromEvent({
+      type: "session.status",
+      sessionID: "s1",
+      properties: { part: { id: "prt_3", tool: "bash", state: { status: "running", input: { command: "git status" } } } },
+    })
+    expect(hit?.status).toBe("running")
+    expect(hit?.name).toBe("git status")
+  })
+  test("task label prefers description and exposes subagent/category", () => {
+    expect(
+      toolHitFromEvent({
+        type: "session.next.tool.called",
+        properties: {
+          part: {
+            id: "prt_4",
+            tool: "task",
+            state: { title: "Plan things", input: { description: "Refactor the module", subagent_type: "explore" } },
+          },
+        },
+      })?.name,
+    ).toBe("Refactor the module")
+
+    expect(
+      toolHitFromEvent({
+        type: "session.next.tool.called",
+        properties: { part: { id: "prt_5", tool: "task", state: { input: { category: "build" } } } },
+      })?.name,
+    ).toBe("build")
+  })
+  test("pattern labels a grep hit; top-level input is also read", () => {
+    expect(
+      toolHitFromEvent({
+        type: "session.next.tool.called",
+        properties: { part: { id: "prt_6", tool: "grep", state: { input: { pattern: "pick(" } } } },
+      })?.name,
+    ).toBe("grep pick(")
+
+    expect(
+      toolHitFromEvent({
+        type: "session.next.tool.called",
+        properties: { part: { id: "prt_7", tool: "bash", input: { command: "ls" } } },
+      })?.name,
+    ).toBe("ls")
+  })
+  test("null when status, id, or name is missing", () => {
+    expect(toolHitFromEvent({ type: "message.part.updated", properties: { part: { type: "tool" } } })).toBeNull()
+    expect(toolHitFromEvent({ type: "message.updated", sessionID: "s1" })).toBeNull()
+    expect(
+      toolHitFromEvent({ type: "session.next.tool.called", properties: { part: { tool: "bash" } } }),
+    ).toBeNull()
+    expect(
+      toolHitFromEvent({ type: "session.next.tool.called", properties: { part: { id: "prt_8" } } }),
+    ).toBeNull()
+  })
+})
+
+describe("sessionIdFromEvent", () => {
+  test("finds an id nested under info/properties/session/payload", () => {
+    expect(sessionIdFromEvent({ properties: { sessionID: "ses_nested" } })).toBe("ses_nested")
+    expect(sessionIdFromEvent({ session: { session_id: "s2" } })).toBe("s2")
+    expect(sessionIdFromEvent({ payload: { sessionId: "s3" } })).toBe("s3")
+  })
+  test("stops after three levels of nesting", () => {
+    expect(
+      sessionIdFromEvent({ info: { info: { info: { info: { sessionID: "too-deep" } } } } }),
+    ).toBeNull()
   })
 })

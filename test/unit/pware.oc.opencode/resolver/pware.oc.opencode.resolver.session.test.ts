@@ -1,14 +1,18 @@
 import { afterAll, describe, expect, test } from "bun:test"
 import {
+  getSessionsByIds,
   inferStatus,
   isRealSession,
+  listChildSessions,
   listRecentMainSessions,
+  listSiblingSessions,
   refreshSessionStatus,
   sessionActivityState,
+  sessionScanStamp,
   toSessionView,
   type SessionRow,
 } from "../../../../src/pware.oc.opencode/resolver/pware.oc.opencode.resolver.session.js"
-import { openReadonlyDb } from "../../../../src/pware.oc.core/pware.oc.core.sqlite.js"
+import { openReadonlyDb, type SqlDb } from "../../../../src/pware.oc.core/pware.oc.core.sqlite.js"
 import { createFixtureDb } from "../../../helpers/sqlite.js"
 
 function row(over: Partial<SessionRow> = {}): SessionRow {
@@ -29,6 +33,18 @@ function row(over: Partial<SessionRow> = {}): SessionRow {
     time_archived: null,
     has_content: 1,
     ...over,
+  }
+}
+
+function throwingDb(): SqlDb {
+  return {
+    all: () => {
+      throw new Error("boom")
+    },
+    get: () => {
+      throw new Error("boom")
+    },
+    close: () => {},
   }
 }
 
@@ -98,6 +114,10 @@ describe("listRecentMainSessions", () => {
     const ids = listRecentMainSessions(db, { projectId: "proj_1" }).map((r) => r.id)
     expect(ids).toEqual(["ses_real"])
   })
+
+  test("soft-fails to empty when the query throws", () => {
+    expect(listRecentMainSessions(throwingDb(), { projectId: "proj_1" })).toEqual([])
+  })
 })
 
 describe("sessionActivityState", () => {
@@ -144,5 +164,98 @@ describe("sessionActivityState", () => {
       running: false,
       state: "idle",
     })
+  })
+})
+
+describe("listChildSessions", () => {
+  const t0 = 1_700_000_000_000
+  const fix = createFixtureDb({
+    sessions: [
+      { id: "ses_parent", project_id: "proj_1", time_updated: t0 },
+      { id: "ses_child_old", project_id: "proj_1", parent_id: "ses_parent", time_updated: t0 - 2_000 },
+      { id: "ses_child_new", project_id: "proj_1", parent_id: "ses_parent", time_updated: t0 - 1_000 },
+      { id: "ses_unrelated", project_id: "proj_1", parent_id: "ses_other", time_updated: t0 + 5_000 },
+    ],
+  })
+
+  afterAll(() => fix.dispose())
+
+  test("returns only children of the parent, newest first", () => {
+    const db = openReadonlyDb(fix.dbPath)!
+    const ids = listChildSessions(db, "ses_parent").map((r) => r.id)
+    expect(ids).toEqual(["ses_child_new", "ses_child_old"])
+  })
+})
+
+describe("listSiblingSessions", () => {
+  const t0 = 1_700_000_000_000
+  const fix = createFixtureDb({
+    sessions: [
+      { id: "ses_parent", project_id: "proj_1", time_updated: t0 },
+      { id: "ses_self", project_id: "proj_1", parent_id: "ses_parent", time_updated: t0 },
+      { id: "ses_sib_old", project_id: "proj_1", parent_id: "ses_parent", time_updated: t0 - 2_000 },
+      { id: "ses_sib_new", project_id: "proj_1", parent_id: "ses_parent", time_updated: t0 - 1_000 },
+      { id: "ses_unrelated", project_id: "proj_1", parent_id: "ses_other", time_updated: t0 + 5_000 },
+    ],
+  })
+
+  afterAll(() => fix.dispose())
+
+  test("returns same-parent siblings excluding self, newest first", () => {
+    const db = openReadonlyDb(fix.dbPath)!
+    const ids = listSiblingSessions(db, "ses_parent", "ses_self").map((r) => r.id)
+    expect(ids).toEqual(["ses_sib_new", "ses_sib_old"])
+  })
+
+  test("no siblings yields empty list", () => {
+    const db = openReadonlyDb(fix.dbPath)!
+    expect(listSiblingSessions(db, "ses_none", "ses_x")).toEqual([])
+  })
+})
+
+describe("getSessionsByIds", () => {
+  const t0 = 1_700_000_000_000
+  const fix = createFixtureDb({
+    sessions: [
+      { id: "ses_a", project_id: "proj_1", time_updated: t0 },
+      { id: "ses_b", project_id: "proj_1", time_updated: t0 - 1_000 },
+    ],
+  })
+
+  afterAll(() => fix.dispose())
+
+  test("empty input short-circuits", () => {
+    const db = openReadonlyDb(fix.dbPath)!
+    expect(getSessionsByIds(db, [])).toEqual([])
+  })
+
+  test("dedups ids and filters blanks", () => {
+    const db = openReadonlyDb(fix.dbPath)!
+    const rows = getSessionsByIds(db, ["ses_a", "", "ses_a", "ses_b"])
+    expect(rows.map((r) => r.id).sort()).toEqual(["ses_a", "ses_b"])
+  })
+})
+
+describe("sessionScanStamp", () => {
+  const t0 = 1_700_000_000_000
+  const fix = createFixtureDb({
+    sessions: [{ id: "ses_stamp", project_id: "proj_1", time_updated: t0 }],
+    parts: [{ id: "prt_1", session_id: "ses_stamp", time_updated: t0 + 100, data: { type: "text" } }],
+  })
+
+  afterAll(() => fix.dispose())
+
+  test("combines session and max part stamps", () => {
+    const db = openReadonlyDb(fix.dbPath)!
+    expect(sessionScanStamp(db, "ses_stamp")).toBe(`${t0}|${t0 + 100}`)
+  })
+
+  test("missing session soft-fails to zeros", () => {
+    const db = openReadonlyDb(fix.dbPath)!
+    expect(sessionScanStamp(db, "ses_nope")).toBe("0|0")
+  })
+
+  test("a throwing db soft-fails to 'x'", () => {
+    expect(sessionScanStamp(throwingDb(), "ses_stamp")).toBe("x")
   })
 })

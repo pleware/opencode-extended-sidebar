@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test"
+import fs from "node:fs"
+import path from "node:path"
 import { ignoredByGitignore, ignoredByOesignore } from "../../../../src/pware.oc.core/git/pware.oc.core.gitignore.js"
 import { createFixtureProject } from "../../../helpers/project.js"
 
@@ -26,6 +28,23 @@ describe("ignoredByGitignore", () => {
     try {
       const abs = `${proj.root.replace(/\\/g, "/")}/dist/out.js`
       expect(ignoredByGitignore(abs, proj.root)).toBe(true)
+    } finally {
+      proj.dispose()
+    }
+  })
+  test("a non-relative path like '.' is never ignored", () => {
+    const proj = createFixtureProject({ gitignore: "dist/\n" })
+    try {
+      expect(ignoredByGitignore(".", proj.root)).toBe(false)
+    } finally {
+      proj.dispose()
+    }
+  })
+  test("a directory where .gitignore should be reads nothing", () => {
+    const proj = createFixtureProject()
+    fs.mkdirSync(path.join(proj.root, ".gitignore"))
+    try {
+      expect(ignoredByGitignore("dist/out.js", proj.root)).toBe(false)
     } finally {
       proj.dispose()
     }

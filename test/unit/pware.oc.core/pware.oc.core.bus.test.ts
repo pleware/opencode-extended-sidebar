@@ -22,4 +22,17 @@ describe("createEventBus", () => {
     bus.emit({ type: "a", ts: 2 })
     expect(calls).toBe(1)
   })
+
+  test("multiple listeners on the same type all fire", () => {
+    const bus = createEventBus()
+    let calls = 0
+    bus.on("a", () => {
+      calls += 1
+    })
+    bus.on("a", () => {
+      calls += 1
+    })
+    bus.emit({ type: "a", ts: 1 })
+    expect(calls).toBe(2)
+  })
 })

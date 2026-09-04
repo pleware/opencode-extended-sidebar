@@ -1,0 +1,8 @@
+# Constraints gate
+
+`CONSTRAINTS.md` at the repo root is the quality bar: the floor plus the
+enforced, numbered dimensions (coverage ≥ 95% project and patch via Codecov,
+zero type errors, zero failing tests). Read it before writing code. Do not
+weaken it — or `codecov.yml`, `bunfig.toml`, or this file — to make a change
+pass. A coverage number moving down, a suppression comment appearing, or a
+threshold changing in the same commit as a failing feature is a review finding.
