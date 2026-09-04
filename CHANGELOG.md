@@ -1,5 +1,6 @@
 # Changelog
 
+- **0.2.74** (2026-09-04) Move recent sessions into the My work Sessions group, remove spare gap rows above OES and below the tab bar, and retune direction-glyph sin-fades on the 50ms ti.
 - **0.2.73** (2026-09-04) Move the project-wide open-question scan into the snapshot worker so the ~500ms json_extract over every part no longer freezes the UI thread, expose it as snap(.
 - **0.2.72** (2026-09-04) Fold the whole realtime block (OES status bar, realtime category tabs and the 4-row chart) under a chevron-led OES header that starts collapsed and is remembere.
 - **0.2.71** (2026-09-03) Add an on-screen debug console to the bottom of the sidebar that shows the newest event labels from a 200-line in-memory ring fed only while a debug or profile .

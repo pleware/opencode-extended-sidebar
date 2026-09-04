@@ -7,6 +7,7 @@ import {
   engageDone,
   engageFill,
   flowBlinkOn,
+  sinPulseAlpha,
   markTone,
   spinnerFrame,
   stateGlyph,
@@ -20,8 +21,26 @@ describe("spinnerFrame", () => {
   })
 })
 
+describe("sinPulseAlpha", () => {
+  test("eases min → max → min over one period (sin)", () => {
+    expect(sinPulseAlpha(0)).toBeCloseTo(0.25)
+    expect(sinPulseAlpha(2)).toBeCloseTo(1)
+    expect(sinPulseAlpha(4)).toBeCloseTo(0.25)
+  })
+
+  test("respects custom period and bounds", () => {
+    expect(sinPulseAlpha(0, { periodFrames: 4, min: 0, max: 0.5 })).toBe(0)
+    expect(sinPulseAlpha(2, { periodFrames: 4, min: 0, max: 0.5 })).toBeCloseTo(0.5)
+    expect(sinPulseAlpha(4, { periodFrames: 4, min: 0, max: 0.5 })).toBe(0)
+  })
+
+  test("wraps negative frames like the blink helper", () => {
+    expect(sinPulseAlpha(-2, { periodFrames: 4 })).toBeCloseTo(sinPulseAlpha(2, { periodFrames: 4 }))
+  })
+})
+
 describe("flowBlinkOn", () => {
-  test("blinks every other 300ms tick", () => {
+  test("blinks every other tick pair (BLINK_TICKS)", () => {
     expect(flowBlinkOn(0)).toBe(true)
     expect(flowBlinkOn(1)).toBe(true)
     expect(flowBlinkOn(2)).toBe(false)

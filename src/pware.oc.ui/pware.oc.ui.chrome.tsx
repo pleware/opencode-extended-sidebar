@@ -283,7 +283,7 @@ export function BrandTabs(props: {
           return (
             <box flexDirection="row" gap={1} onMouseUp={() => props.onPick(tab)}>
               {glyph() ? (
-                <text fg={toneColor(glyph()!.tone, props.colors)}>{glyph()!.char}</text>
+                <text fg={toneColor(glyph()!.tone, props.colors)}>{`${glyph()!.char} `}</text>
               ) : (
                 <Show when={Boolean(props.brand) || i() > 0}>
                   <text fg={props.colors.textMuted}>|</text>

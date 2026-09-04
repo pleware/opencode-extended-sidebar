@@ -33,30 +33,25 @@ export function panelRows(termHeight: number): number {
   return Math.max(PANEL_MIN_ROWS, Math.floor(h) - PANEL_CHROME)
 }
 
-/** Rows the Sessions `… +N more` revealer adds per click. */
-export const SESSION_MORE_STEP = 4
-
 /** Rows a section keeps before it is worth folding instead. */
 export const ROW_MIN = {
   delegates: 2,
   drafts: 2,
   files: 3,
   mywork: 2,
-  sessions: 2,
   tools: 3,
 } as const
 
 /**
  * Higher gives up rows first. Live activity outranks history: on Current the
- * tool feed survives longest, on Sessions the session list does. My work is a
- * queue of things awaiting the user, so it ties with Sessions.
+ * tool feed survives longest. My work is a queue of things awaiting the user,
+ * so it ties with the live feed.
  */
 export const ROW_RANK = {
   delegates: 3,
   drafts: 3,
   files: 2,
   mywork: 1,
-  sessions: 1,
   tools: 1,
 } as const
 

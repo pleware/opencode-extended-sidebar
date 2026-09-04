@@ -18,7 +18,7 @@ import {
   MY_WORK_GROUP_FINISHED,
   MY_WORK_GROUP_READY_REVIEW,
   MY_WORK_GROUP_READY_START,
-  MY_WORK_GROUP_RUNNING,
+  MY_WORK_GROUP_SESSIONS,
   type ApprovalGroupKind,
 } from "../pware.oc.core/constants/pware.oc.core.constants.myWork.js"
 import { isDraftOf, resolveApprovalGroup } from "../pware.oc.omo/resolver/pware.oc.omo.resolver.approvalGroup.js"
@@ -28,7 +28,6 @@ import {
   QUESTION_KIND_QUESTION,
   type OpenQuestionKind,
 } from "../pware.oc.opencode/constants/pware.oc.opencode.constants.questionKind.js"
-import { SESSION_STATUS_RUNNING } from "../pware.oc.opencode/constants/pware.oc.opencode.constants.sessionStatus.js"
 import {
   START_WORK_MAKE_PR,
   START_WORK_PLAIN,
@@ -60,7 +59,7 @@ export type MyWorkItem =
       review: ReviewState | null
     }
   | {
-      kind: typeof MY_WORK_GROUP_RUNNING
+      kind: typeof MY_WORK_GROUP_SESSIONS
       sessionId: string
       title: string
       status: AgentStatus
@@ -73,7 +72,7 @@ export const MY_WORK_ORDER: readonly MyWorkKind[] = [
   QUESTION_KIND_QUESTION,
   QUESTION_KIND_INTERRUPTED,
   QUESTION_KIND_ERROR,
-  MY_WORK_GROUP_RUNNING,
+  MY_WORK_GROUP_SESSIONS,
   MY_WORK_GROUP_READY_REVIEW,
   MY_WORK_GROUP_READY_START,
   MY_WORK_GROUP_FINISHED,
@@ -85,7 +84,7 @@ const MY_WORK_LABELS: Record<MyWorkKind, string> = {
   [QUESTION_KIND_QUESTION]: "Awaiting answer",
   [QUESTION_KIND_INTERRUPTED]: "Interrupted",
   [QUESTION_KIND_ERROR]: "Errors",
-  [MY_WORK_GROUP_RUNNING]: "Running",
+  [MY_WORK_GROUP_SESSIONS]: "Sessions",
   [MY_WORK_GROUP_READY_REVIEW]: "Ready to review",
   [MY_WORK_GROUP_READY_START]: "Ready to start",
   [MY_WORK_GROUP_FINISHED]: "Finished",
@@ -161,8 +160,8 @@ export function toApprovalItems(approvals: readonly EnrichedApproval[]): MyWorkI
   return out
 }
 
-/** Build the running group from recent main sessions — only sessions still working, drops idle and the rest. */
-export function toRunningItems(
+/** Build the sessions group from recent main sessions — every session, live or idle. */
+export function toSessionItems(
   sessions: readonly {
     id: string
     title: string
@@ -170,15 +169,13 @@ export function toRunningItems(
     timeUpdated: number | null
   }[],
 ): MyWorkItem[] {
-  return sessions
-    .filter((s) => s.status === SESSION_STATUS_RUNNING)
-    .map((s) => ({
-      kind: MY_WORK_GROUP_RUNNING,
-      sessionId: s.id,
-      title: s.title,
-      status: s.status,
-      timeUpdated: s.timeUpdated,
-    }))
+  return sessions.map((s) => ({
+    kind: MY_WORK_GROUP_SESSIONS,
+    sessionId: s.id,
+    title: s.title,
+    status: s.status,
+    timeUpdated: s.timeUpdated,
+  }))
 }
 
 /** Parse the persisted dismissed-question set (a JSON array of part ids) from the kv store. */

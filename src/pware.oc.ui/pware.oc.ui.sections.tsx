@@ -24,7 +24,7 @@ import {
 import {
   defaultBodyTone,
   directionGlyph,
-  flowBlinkOn,
+  sinPulseAlpha,
   spinnerFrame,
   stateGlyph,
   type GlyphSpec,
@@ -109,7 +109,7 @@ export function OesStatusRow(props: {
       ? props.colors.error || props.colors.text
       : line().tone === "loading"
         ? props.colors.primary || props.colors.text
-        : props.colors.textMuted,
+        : props.colors.text,
   )
   const text = createMemo(() => {
     const g = glyph()
@@ -252,10 +252,14 @@ export function AgentLine(props: RowData & {
     if (props.glyph) return tone
     return props.current && tone === "textMuted" ? "primary" : tone
   }
+  const dirOpacity = () => {
+    const spec = dir()
+    if (!spec?.blink) return 1
+    return sinPulseAlpha(props.frame?.() ?? 0)
+  }
   const dirFg = () => {
     const spec = dir()
     if (!spec) return undefined
-    if (spec.blink && !flowBlinkOn(props.frame?.() ?? 0)) return toneColor("textMuted", props.colors)
     return toneColor(spec.tone, props.colors)
   }
   const bodyTone = () => props.bodyTone ?? defaultBodyTone(props.kind, props.mark, Boolean(props.current))
@@ -291,7 +295,7 @@ export function AgentLine(props: RowData & {
         </Show>
         <text fg={toneColor(primaryTone(), props.colors)}>{`${primary().char} `}</text>
         <Show when={props.dirSlot}>
-          <text fg={dirFg()}>{`${dir()?.char ?? " "} `}</text>
+          <text opacity={dirOpacity()} fg={dirFg()}>{`${dir()?.char ?? " "} `}</text>
         </Show>
         <Show when={props.glyph2}>
           <text fg={toneColor(props.glyph2!.tone, props.colors)}>{`${props.glyph2!.char} `}</text>

@@ -3,12 +3,10 @@ import { OES_DEFAULTS, pick } from "../../../src/pware.oc.core/pware.oc.core.oes
 
 describe("pick", () => {
   test("clamps numeric ranges", () => {
-    expect(OES_DEFAULTS.sessionRows).toBe(6)
-    const hi = pick({ fileRows: 99, lineMax: 9, perfTurns: 1, sessionRows: 99 }, OES_DEFAULTS)
+    const hi = pick({ fileRows: 99, lineMax: 9, perfTurns: 1 }, OES_DEFAULTS)
     expect(hi.fileRows).toBe(20)
     expect(hi.lineMax).toBe(20)
     expect(hi.perfTurns).toBe(20)
-    expect(hi.sessionRows).toBe(12)
     const lo = pick({ fileRows: 1, perfHistory: -2 }, OES_DEFAULTS)
     expect(lo.fileRows).toBe(3)
     expect(lo.perfHistory).toBe(0)
@@ -38,14 +36,12 @@ describe("pick", () => {
     expect(pick({ toolRows: 20 }, OES_DEFAULTS).toolFetch).toBe(20)
   })
 
-  test("sessionFetch is a separate fetch window, clamped to [sessionRows, 80]", () => {
+  test("sessionFetch is a fetch window, clamped to [2, 80]", () => {
     expect(OES_DEFAULTS.sessionFetch).toBe(20)
-    expect(pick({ sessionRows: 6, sessionFetch: 3 }, OES_DEFAULTS).sessionFetch).toBe(6)
-    expect(pick({ sessionRows: 6, sessionFetch: 999 }, OES_DEFAULTS).sessionFetch).toBe(80)
+    expect(pick({ sessionFetch: 1 }, OES_DEFAULTS).sessionFetch).toBe(2)
+    expect(pick({ sessionFetch: 999 }, OES_DEFAULTS).sessionFetch).toBe(80)
     expect(pick({ sessionFetch: "nope" } as Record<string, unknown>, OES_DEFAULTS).sessionFetch).toBe(
       OES_DEFAULTS.sessionFetch,
     )
-    expect(pick({ sessionRows: 12, sessionFetch: 12 }, OES_DEFAULTS).sessionFetch).toBe(12)
-    expect(pick({ sessionRows: 12 }, OES_DEFAULTS).sessionFetch).toBe(OES_DEFAULTS.sessionFetch)
   })
 })

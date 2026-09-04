@@ -27,8 +27,8 @@ describe("myWorkGlyph", () => {
     expect(myWorkGlyph("drafting")).toEqual({ char: "…", tone: "textMuted" })
   })
 
-  test("running is the primary ◔", () => {
-    expect(myWorkGlyph("running")).toEqual({ char: "◔", tone: "primary" })
+  test("sessions is the primary ◔", () => {
+    expect(myWorkGlyph("sessions")).toEqual({ char: "◔", tone: "primary" })
   })
 })
 
@@ -43,9 +43,9 @@ describe("tabAttentionGlyph", () => {
     expect(TAB_NEUTRAL_GLYPH).toEqual({ char: "•", tone: "textMuted" })
   })
 
-  test("running, drafting and finished never light the tab", () => {
+  test("sessions, drafting and finished never light the tab", () => {
     expect(
-      tabAttentionGlyph([item("running"), item("drafting"), item("finished")]),
+      tabAttentionGlyph([item("sessions"), item("drafting"), item("finished")]),
     ).toEqual(TAB_NEUTRAL_GLYPH)
   })
 
@@ -60,7 +60,7 @@ describe("tabAttentionGlyph", () => {
   })
 
   test("the most urgent live waiting item wins", () => {
-    expect(tabAttentionGlyph([item("running"), item("error"), item("ready-to-review")])).toEqual({
+    expect(tabAttentionGlyph([item("sessions"), item("error"), item("ready-to-review")])).toEqual({
       char: "×",
       tone: "error",
     })

@@ -7,7 +7,7 @@
  */
 
 /** UI heartbeat — spinner/arrow animation phase. */
-export const TICK_MS = 300
+export const TICK_MS = 50
 
 /**
  * Fast glyph cadence — spinners and direction flows step this often on a
@@ -23,10 +23,10 @@ export const GLYPH_TICK_MS = 80
  */
 export const NOW_MS = 1_000
 
-/** FPS read cadence in ticks (TICK_MS × 6 = 1800ms). */
+/** FPS read cadence in ticks (TICK_MS × 6 = 300ms). */
 export const FPS_READ_EVERY_TICKS = 6
 
-/** Blink half-period in ticks (TICK_MS × 2 ≈ 600ms). */
+/** Blink half-period in ticks (TICK_MS × 2 = 100ms). */
 export const BLINK_TICKS = 2
 
 /** Monitor: SQLite poll interval. */

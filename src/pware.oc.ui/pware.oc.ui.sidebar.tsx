@@ -21,7 +21,7 @@ import {
   myWorkLabel,
   toApprovalItems,
   toQuestionItems,
-  toRunningItems,
+  toSessionItems,
   type MyWorkItem,
   type MyWorkKind,
 } from "../pware.oc.runtime/pware.oc.runtime.mywork.js"
@@ -39,7 +39,6 @@ import { enrichApprovalSessionStates, planSessionStateLabel } from "../pware.oc.
 import {
   ROW_MIN,
   ROW_RANK,
-  SESSION_MORE_STEP,
   clampScrollOffset,
   packSections,
   panelRows,
@@ -77,7 +76,7 @@ import {
   MY_WORK_GROUP_FINISHED,
   MY_WORK_GROUP_READY_REVIEW,
   MY_WORK_GROUP_READY_START,
-  MY_WORK_GROUP_RUNNING,
+  MY_WORK_GROUP_SESSIONS,
 } from "../pware.oc.core/constants/pware.oc.core.constants.myWork.js"
 import { DOC_KIND_DRAFT } from "../pware.oc.omo/constants/pware.oc.omo.constants.docKind.js"
 import {
@@ -129,7 +128,6 @@ import { onGitMarksChange } from "../pware.oc.core/git/pware.oc.core.git.js"
 import { getOes } from "../pware.oc.core/pware.oc.core.oes.js"
 import {
   TAB_STATUS_SESSION_NOT_IN_DB,
-  sessionStatusLabel,
   statusBarLine,
   tabStatus,
 } from "../pware.oc.core/pware.oc.core.status.js"
@@ -192,7 +190,6 @@ export type SidebarProps = {
 
 const KV_FOLD_AGENTS = "oes.fold.agents"
 const KV_FOLD_DELEGATES = "oes.fold.delegates"
-const KV_FOLD_SESSIONS = "oes.fold.sessions"
 const KV_FOLD_TOOLS = "oes.fold.tools"
 const KV_FOLD_FILES = "oes.fold.files"
 const KV_FOLD_DRAFTS = "oes.fold.drafts"
@@ -675,7 +672,6 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
 
   const foldAgents = useFold(props.api, KV_FOLD_AGENTS, { after: requestRender })
   const foldDelegates = useFold(props.api, KV_FOLD_DELEGATES, { after: requestRender })
-  const foldSessions = useFold(props.api, KV_FOLD_SESSIONS, { after: requestRender })
   const foldTools = useFold(props.api, KV_FOLD_TOOLS, { after: requestRender })
   const foldFiles = useFold(props.api, KV_FOLD_FILES, { after: requestRender })
   const foldDrafts = useFold(props.api, KV_FOLD_DRAFTS, { after: requestRender })
@@ -804,10 +800,10 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     }
   })
 
-  /** Recent main sessions still running or idle — the "Running" group. */
+  /** Recent main sessions (running and idle) — the "Sessions" group. */
   const myWorkRunning = createMemo<MyWorkItem[]>(() => {
     if (tab() !== "mywork" || coldTab() === "mywork") return []
-    return toRunningItems(snap().db.recent)
+    return toSessionItems(snap().db.recent)
   })
 
   const myWorkItems = createMemo<MyWorkItem[]>(() => [
@@ -870,7 +866,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
       const t = tab()
       const omo = omoPresent()
       const sections: { key: string; want: number; min: number; rank: number }[] = []
-      let fixed = 3 + (rtOpen() ? 4 : 0) // OES header + (open) realtime 4-row chart area + brand line + top padding
+      let fixed = 2 + (rtOpen() ? 5 : 0) // OES header + (open) 4-row chart + 1 padding + brand line
       if (selfDiagActive()) fixed += 1 // self line — only while debug/profile is on
       if (modeLine()) fixed += 1 // debug/profile flag row
       if (modeDirLine()) fixed += 1
@@ -890,7 +886,6 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
       if (t === "sessions") {
         header()
         fixed += foldAgents.open() ? 1 : 0
-        section(!foldSessions.open(), "sessions", o.sessionRows, ROW_MIN.sessions, ROW_RANK.sessions)
         const feed = projectFeed()
         if (feed.tools.length > 0) section(!foldTools.open(), "tools", o.toolRows, ROW_MIN.tools, ROW_RANK.tools)
         if (feed.files.length > 0) section(!foldFiles.open(), "files", o.fileRows, ROW_MIN.files, ROW_RANK.files)
@@ -933,20 +928,19 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     }
   }
 
-  const sessionsReveal = useReveal(SESSION_MORE_STEP)
   const projectToolsReveal = useReveal(Math.max(1, oes().toolRows))
   const toolsReveal = useReveal(Math.max(1, oes().toolRows))
   const delegateReveal = useReveal(4)
   const currentDelegatesReveal = useReveal(4)
 
   const myWorkRow = (item: MyWorkItem): RowData => {
-    if (item.kind === MY_WORK_GROUP_RUNNING) {
+    if (item.kind === MY_WORK_GROUP_SESSIONS) {
       const isBusy = Boolean(item.sessionId && busy()[item.sessionId])
       return {
         kind: ROW_KIND_AGENT,
         mark: rowMark(
-          item.status,
-          false,
+          item.status === SESSION_STATUS_ARCHIVED ? STATUS_ARCHIVED : null,
+          item.status === SESSION_STATUS_ARCHIVED,
           isBusy,
           item.timeUpdated,
           item.sessionId ? seen()[item.sessionId] : null,
@@ -954,7 +948,8 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
         dirSlot: true,
         flow: rowFlow(item.sessionId, isBusy),
         name: item.title,
-        suffix: sessionStatusLabel(item.status),
+        current: item.sessionId === props.sessionId,
+        suffix: item.sessionId === props.sessionId ? "[C]" : undefined,
         onSelect: () => goSession(item.sessionId),
       }
     }
@@ -1193,7 +1188,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   const oesBarBusy = createMemo(() => statusBarLine(tabStatusFor(tab())).label !== "")
 
   return (
-    <box flexDirection="column" gap={1} paddingTop={1}>
+    <box flexDirection="column" gap={0}>
       <Show when={engaging()}>
         <box flexDirection="row" gap={1}>
           <text fg={colors().primary}>{`${spinnerFrame(engageTick())} engage`}</text>
@@ -1206,66 +1201,68 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
       <Show when={modeDirLine()}>
         <text fg={colors().textMuted}>{modeDirLine()}</text>
       </Show>
-      <box flexDirection="row" gap={1}>
-        <box flexDirection="row" gap={1} onMouseUp={toggleRt}>
-          <text fg={colors().textMuted}>{rtOpen() ? "▼" : "▶"}</text>
-          <OesStatusRow
-            status={tabStatusFor(tab())}
-            colors={colors()}
-            glyphFrame={glyphFrame}
-          />
-        </box>
-        <Show when={rtOpen() && !oesBarBusy()}>
-          <For each={STAT_REALTIME_BLOCK.tabs}>
-            {(t) => (
-              <ClickText
-                fg={rtTab() === t.id ? colors().primary || colors().text : colors().textMuted}
-                bold={rtTab() === t.id}
-                underline
-                onMouseUp={() => {
-                  setRtTab(t.id)
-                  setRtRow(t.rows[0]!.key)
-                }}
-              >
-                {`${TAB_NEUTRAL_GLYPH.char} ${t.label}`}
-              </ClickText>
-            )}
-          </For>
-        </Show>
-      </box>
-      <Show when={rtOpen()}>
+      <box flexDirection="column" gap={0} paddingBottom={rtOpen() ? 1 : 0}>
         <box flexDirection="row" gap={1}>
-          <box flexDirection="column" gap={0}>
-            <For each={rtActiveTab().rows}>
-              {(r) => (
+          <box flexDirection="row" gap={1} onMouseUp={toggleRt}>
+            <text fg={colors().textMuted}>{rtOpen() ? "▼" : "▶"}</text>
+            <OesStatusRow
+              status={tabStatusFor(tab())}
+              colors={colors()}
+              glyphFrame={glyphFrame}
+            />
+          </box>
+          <Show when={rtOpen() && !oesBarBusy()}>
+            <For each={STAT_REALTIME_BLOCK.tabs}>
+              {(t) => (
                 <ClickText
-                  fg={rtRow() === r.key ? colors().primary || colors().text : colors().textMuted}
-                  bold={rtRow() === r.key}
+                  fg={rtTab() === t.id ? colors().primary || colors().text : colors().textMuted}
+                  bold={rtTab() === t.id}
                   underline
-                  onMouseUp={() => setRtRow(r.key)}
+                  onMouseUp={() => {
+                    setRtTab(t.id)
+                    setRtRow(t.rows[0]!.key)
+                  }}
                 >
-                  {r.label}
+                  {`${TAB_NEUTRAL_GLYPH.char} ${t.label}`}
                 </ClickText>
               )}
             </For>
-          </box>
-          <box flexDirection="column">
-            <For each={rtLines()}>
-              {(line) => <text fg={colors().success}>{line || " "}</text>}
-            </For>
-          </box>
-          <box flexDirection="column" gap={0}>
-            <For each={rtAxisLines()}>
-              {(line) => <text fg={colors().textMuted}>{line}</text>}
-            </For>
-          </box>
-          <box flexDirection="column" gap={0}>
-            <For each={rtActiveTab().rows}>
-              {() => <text fg={colors().textMuted}>F</text>}
-            </For>
-          </box>
+          </Show>
         </box>
-      </Show>
+        <Show when={rtOpen()}>
+          <box flexDirection="row" gap={1}>
+            <box flexDirection="column" gap={0}>
+              <For each={rtActiveTab().rows}>
+                {(r) => (
+                  <ClickText
+                    fg={rtRow() === r.key ? colors().primary || colors().text : colors().textMuted}
+                    bold={rtRow() === r.key}
+                    underline
+                    onMouseUp={() => setRtRow(r.key)}
+                  >
+                    {r.label}
+                  </ClickText>
+                )}
+              </For>
+            </box>
+            <box flexDirection="column">
+              <For each={rtLines()}>
+                {(line) => <text fg={colors().success}>{line || " "}</text>}
+              </For>
+            </box>
+            <box flexDirection="column" gap={0}>
+              <For each={rtAxisLines()}>
+                {(line) => <text fg={colors().textMuted}>{line}</text>}
+              </For>
+            </box>
+            <box flexDirection="column" gap={0}>
+              <For each={rtActiveTab().rows}>
+                {() => <text fg={colors().textMuted}>F</text>}
+              </For>
+            </box>
+          </box>
+        </Show>
+      </box>
       <Show when={selfDiagActive()}>
         <text fg={colors().textMuted}>{selfLine()}</text>
       </Show>
@@ -1276,6 +1273,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
         active={tab()}
         colors={colors()}
         onPick={pickTab}
+        gap={0}
         glyph={(key) => (key === "mywork" ? myWorkTabGlyph() : TAB_NEUTRAL_GLYPH)}
         panels={{
           mywork: () => {
@@ -1296,6 +1294,14 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
                         items={g.items}
                         budget={rowsFor(`mywork.${g.kind}`, 2)}
                         reveal={myWorkReveal[g.kind]}
+                        actions={
+                          g.kind === MY_WORK_GROUP_SESSIONS
+                            ? [
+                                { label: "switch", onPick: () => openSessionSwitcher(props.api) },
+                                { label: "new", onPick: () => openNewSessionPrompt(props.api) },
+                              ]
+                            : undefined
+                        }
                         renderItem={(item) => <Row {...myWorkRow(item)} />}
                       />
                     )}
@@ -1329,49 +1335,6 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
                   </text>
                 )}
               </FoldSection>
-
-        <Show when={snap().db.recent.length > 0}>
-          <FoldSection
-            title="Sessions"
-            open={foldSessions.open()}
-            actions={[
-              { label: "switch", onPick: () => openSessionSwitcher(props.api) },
-              { label: "new", onPick: () => openNewSessionPrompt(props.api) },
-            ]}
-            colors={colors()}
-            onToggle={foldSessions.toggle}
-          >
-            <RowList
-              items={snap().db.recent}
-              budget={rowsFor("sessions", oes().sessionRows) + sessionsReveal.more()}
-              colors={colors()}
-              renderItem={(s) => {
-                const isBusy = Boolean(busy()[s.id])
-                const mark = rowMark(
-                  s.status === SESSION_STATUS_ARCHIVED ? STATUS_ARCHIVED : null,
-                  s.status === SESSION_STATUS_ARCHIVED,
-                  isBusy,
-                  s.timeUpdated,
-                  seen()[s.id],
-                )
-                const dir = rowFlow(s.id, isBusy)
-                return (
-                  <Row
-                    kind={ROW_KIND_AGENT}
-                    mark={mark}
-                    name={s.title}
-                    current={s.id === props.sessionId}
-                    suffix={s.id === props.sessionId ? "[C]" : undefined}
-                    flow={dir}
-                    dirSlot
-                    onSelect={() => goSession(s.id)}
-                  />
-                )
-              }}
-              more={{ onReveal: sessionsReveal.reveal }}
-            />
-          </FoldSection>
-        </Show>
 
         <Show when={projectFeed().tools.length > 0}>
           <FoldSection title="Tool Calls" open={foldTools.open()} colors={colors()} onToggle={foldTools.toggle}>

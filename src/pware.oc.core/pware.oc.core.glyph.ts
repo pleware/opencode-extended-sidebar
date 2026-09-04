@@ -67,7 +67,29 @@ export function engageDone(frame: number, ready: boolean): boolean {
   return (ready && n >= ENGAGE_MIN_FRAMES) || n >= ENGAGE_MAX_FRAMES
 }
 
-/** ↑/↓ blink half-period in ticks (TICK_MS × BLINK_TICKS ≈ 600ms). */
+/** Options for {@link sinPulseAlpha} — one full fade cycle spans `periodFrames` tick frames. */
+export type SinPulseAlphaOpts = {
+  periodFrames?: number
+  min?: number
+  max?: number
+}
+
+/**
+ * Sinusoidal fade pulse for glyph opacity: alpha eases `min → max → min` over one
+ * period. Defaults to `BLINK_TICKS * 2` frames (same wall-clock span as
+ * {@link flowBlinkOn}). Pure — inject the UI tick frame; the ui layer maps the
+ * result to OpenTUI `opacity` or a colour lerp.
+ */
+export function sinPulseAlpha(frame: number, opts: SinPulseAlphaOpts = {}): number {
+  const period = Math.max(1, Math.round(opts.periodFrames ?? BLINK_TICKS * 2))
+  const lo = Math.min(opts.min ?? 0.25, opts.max ?? 1)
+  const hi = Math.max(opts.min ?? 0.25, opts.max ?? 1)
+  const phase = (Math.abs(frame) % period) / period
+  const wave = Math.sin(phase * Math.PI)
+  return lo + wave * (hi - lo)
+}
+
+/** ↑/↓ blink half-period in ticks (TICK_MS × BLINK_TICKS = 100ms). */
 export function flowBlinkOn(frame: number): boolean {
   return Math.floor(Math.abs(frame) / BLINK_TICKS) % 2 === 0
 }

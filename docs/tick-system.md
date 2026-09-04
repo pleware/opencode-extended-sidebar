@@ -17,7 +17,7 @@ loop thread.**
 ```
 ┌────────────────────────────────────────────────────────────────┐
 │  SOURCE 1: TICK (row clock + realtime grid)  sidebar.tsx          │
-│    setInterval(..., TICK_MS = 300ms)                            │
+│    setInterval(..., TICK_MS = 50ms)                             │
 │    → setNow()  (coarse — advances at most every NOW_MS = 1s)    │
 │    → setFrame() (advances every tick — glyph blink phase)       │
 │    → timeline tick: ingestCpuRam(readCpuRam(), at); tick(at)     │
@@ -50,10 +50,10 @@ loop thread.**
                            TUI renderer (measured fps)
 ```
 
-## 2. Anatomy of one tick (300ms)
+## 2. Anatomy of one tick (50ms)
 
 ```
-setInterval(TICK_MS = 300)                       ── sidebar.tsx
+setInterval(TICK_MS = 50)                        ── sidebar.tsx
 │
 ├─ selfTime("tick", ...)                         ── measured, now ~10-30ms
 │  │
@@ -72,7 +72,7 @@ setInterval(TICK_MS = 300)                       ── sidebar.tsx
 │            │                                     REALTIME_RATE_WINDOW_MS (1s)
 │            └─ setRtVersion(n => n + 1)         ── realtime chart redraw
 │
-├─ tickCount % FPS_READ_EVERY_TICKS === 0 ?     ── every 1800ms
+├─ tickCount % FPS_READ_EVERY_TICKS === 0 ?     ── every 300ms
 │  └─ readRendererFps(api.renderer)             ── perf.self.ts
 │     ├─ getStats().fps
 │     └─ fallback getNativeStats().averageFrameTime
@@ -91,7 +91,7 @@ a tick re-renders just the glyph nodes, not the rows.
 ## 3. CASCADE A — `now()` consumers (recompute at most 1×/s)
 
 `now` advances only on a full-second boundary, so every memo below recomputes
-at most once per second instead of at every tick (3.3×/s before the fix):
+at most once per second instead of at every tick (20×/s at 50ms):
 
 ```
 setNow(prev => (Date.now() - prev >= NOW_MS ? Date.now() : prev))
@@ -112,13 +112,13 @@ Displayed ages and durations already round to whole seconds
 ## 4. CASCADE B — `frame()` consumers (blink only, rows untouched)
 
 ```
-setFrame(n + 1)                                  ── every 300ms
+setFrame(n + 1)                                  ── every 50ms
 │
 └─ Row helper (sidebar.tsx): frame={frame}       ← accessor, NOT frame()
 │
 └─ AgentLine (sections.tsx):
-    ├─ direction glyph → dirFg() → flowBlinkOn(frame())  ← static arrow/clock blinks
-    └─ glyph2 → glyphFg() → flowBlinkOn(frame())
+    ├─ direction glyph → sinPulseAlpha(frame()) → `<text opacity>` fade
+    └─ glyph2 → static tone (no pulse)
 ```
 
 ## 4b. CASCADE C — `glyphFrame()` consumers (animate every 80ms, rows untouched)
@@ -135,13 +135,13 @@ setGlyphFrame(n + 1)                             ── every GLYPH_TICK_MS = 80
 ```
 
 The direction glyph is **not** animated: it is a static arrow (or the ◷ waiting
-clock, `directionGlyph`) that blinks on the slow `frame` tick instead — same
-shape as the arrow blink below.
+clock, `directionGlyph`) whose opacity fades in and out on the slow `frame` tick
+via `sinPulseAlpha()` — a reusable core helper, not a hard ON/OFF colour swap.
 
 `frame` and `glyphFrame` are never read at row-construction scope (the
 `RowList`/`For` callbacks), so lists are **not** rebuilt per glyph tick. The
 spinner (10 frames) steps at 80ms — 0.8s per loop, close to the cli-spinners
-cadence — while the direction glyph blink stays at 600ms and row data still
+cadence — while the direction glyph sin-fades over `BLINK_TICKS × 2` tick frames and row data still
 runs on the coarse clocks. The `PerfPanel` live glyph reads `glyphFrame()` at
 the leaf, the panel body does not.
 
@@ -244,11 +244,11 @@ watch cover the rest.
 | Clock | Frequency | What updates | Cost |
 |---|---|---|---|
 | `glyphFrame` (spinner + direction flow) | every 80ms (`GLYPH_TICK_MS`) | glyph text leaves only | ~ms per frame |
-| `frame` (glyph2 blink) | every 300ms tick | glyph blink colour leaf | folded into the tick |
+| `frame` (direction fade) | every 50ms tick | direction glyph opacity leaf (`sinPulseAlpha`) | folded into the tick |
 | `now` (ages/marks) | 1×/s (`NOW_MS`) | row arrays, ages, marks | folded into the 1×/s tick |
-| realtime grid (tokens/cache/CPU/RAM) | every 300ms tick | one `StatRealtimeSnapshot` into the shared timeline | folded into the tick |
+| realtime grid (tokens/cache/CPU/RAM) | every 50ms tick | one `StatRealtimeSnapshot` into the shared timeline | folded into the tick |
 | scan (DB re-read) | on real change only + refresh hints | full snapshot (`pware.oes.snapshot`) | HIT ~5-20ms, MISS ~30-150ms+ |
-| fps read | every 6th tick — only while a debug/profile logger is on | `self` line fps | negligible |
+| fps read | every 6th tick (300ms) — only while a debug/profile logger is on | `self` line fps | negligible |
 
 The `self` line (and the `selfTime()` measurement + FPS read behind it) runs
 only while `OES_DEBUG_OPENCODE` or `OES_DEBUG_PROFILE` is active — in normal

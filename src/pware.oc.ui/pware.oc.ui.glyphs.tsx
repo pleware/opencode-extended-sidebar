@@ -23,7 +23,7 @@ import {
   MY_WORK_GROUP_FINISHED,
   MY_WORK_GROUP_READY_REVIEW,
   MY_WORK_GROUP_READY_START,
-  MY_WORK_GROUP_RUNNING,
+  MY_WORK_GROUP_SESSIONS,
 } from "../pware.oc.core/constants/pware.oc.core.constants.myWork.js"
 import {
   QUESTION_KIND_ERROR,
@@ -42,6 +42,8 @@ export {
   engageFill,
   engageDone,
   flowBlinkOn,
+  sinPulseAlpha,
+  type SinPulseAlphaOpts,
   markTone,
   stateGlyph,
   directionGlyph,
@@ -60,7 +62,7 @@ export function myWorkGlyph(kind: MyWorkKind): GlyphSpec {
   if (kind === QUESTION_KIND_QUESTION) return { char: "?", tone: "warning" }
   if (kind === QUESTION_KIND_INTERRUPTED) return { char: "⊘", tone: "textMuted" }
   if (kind === QUESTION_KIND_ERROR) return { char: "×", tone: "error" }
-  if (kind === MY_WORK_GROUP_RUNNING) return { char: "◔", tone: "primary" }
+  if (kind === MY_WORK_GROUP_SESSIONS) return { char: "◔", tone: "primary" }
   if (kind === MY_WORK_GROUP_READY_REVIEW) return { char: "!", tone: "warning" }
   if (kind === MY_WORK_GROUP_DRAFTING) return { char: "…", tone: "textMuted" }
   if (kind === MY_WORK_GROUP_READY_START) return { char: "▶", tone: "primary" }

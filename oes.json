@@ -4,7 +4,6 @@
   "perfHistory": 3,
   "perfRows": 5,
   "perfTurns": 120,
-  "sessionRows": 6,
   "sessionFetch": 20,
   "skipGitignore": false,
   "toolRows": 5,

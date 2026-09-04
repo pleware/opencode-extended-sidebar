@@ -20,8 +20,8 @@ export const MY_WORK_GROUP_READY_START = "ready-to-start"
 export const MY_WORK_GROUP_FINISHED = "finished"
 export const MY_WORK_GROUP_DISMISSED = "dismissed"
 
-/** My work group: sessions still running or idle — jump straight back into them. */
-export const MY_WORK_GROUP_RUNNING = "running"
+/** My work group: the project's recent sessions — jump straight back into any of them. */
+export const MY_WORK_GROUP_SESSIONS = "sessions"
 
 /** Every "My work" approval group. */
 export const MY_WORK_GROUPS = [
