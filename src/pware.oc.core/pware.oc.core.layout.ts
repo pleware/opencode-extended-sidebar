@@ -33,14 +33,8 @@ export const CONTEXT_ACTION_COL_WIDTH = 10
 /** Realtime's own action column — just the `F` toggle, so one column, not the rail. */
 export const RT_ACTION_COL_WIDTH = 1
 
-/** Realtime chart body rows — compact and fullscreen (column `F`). */
+/** Realtime chart body rows. */
 export const RT_CHART_ROWS = 4
-export const RT_CHART_ROWS_FULL = 8
-
-/** Chart rows for the OES realtime block at the current fullscreen flag. */
-export function rtChartRowSpan(full: boolean): number {
-  return full ? RT_CHART_ROWS_FULL : RT_CHART_ROWS
-}
 
 /**
  * One right-aligned action line padded to {@link CONTEXT_ACTION_COL_WIDTH}.
