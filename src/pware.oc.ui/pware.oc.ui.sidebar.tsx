@@ -95,7 +95,7 @@ import {
   type GlyphSpec,
   type TabAttentionItem,
 } from "./pware.oc.ui.glyphs.js"
-import { dismissQuestion, kvReadOne, kvWriteOne, readDismissedQuestions, ClickText, type ThemeColors } from "./pware.oc.ui.chrome.js"
+import { dismissQuestion, kvRead, kvWrite, kvReadOne, kvWriteOne, readDismissedQuestions, ClickText, type ThemeColors } from "./pware.oc.ui.chrome.js"
 import {
   AgentLine,
   FoldSection,
@@ -131,6 +131,7 @@ import { getOes } from "../pware.oc.core/pware.oc.core.oes.js"
 import {
   TAB_STATUS_SESSION_NOT_IN_DB,
   sessionStatusLabel,
+  statusBarLine,
   tabStatus,
 } from "../pware.oc.core/pware.oc.core.status.js"
 import { createEventBus } from "../pware.oc.core/pware.oc.core.bus.js"
@@ -196,6 +197,7 @@ const KV_FOLD_SESSIONS = "oes.fold.sessions"
 const KV_FOLD_TOOLS = "oes.fold.tools"
 const KV_FOLD_FILES = "oes.fold.files"
 const KV_FOLD_DRAFTS = "oes.fold.drafts"
+const KV_FOLD_RT = "oes.fold.rt"
 const KV_TAB = "oes.tab"
 
 const OES_TABS = ["mywork", "current", "sessions", "perf"] as const
@@ -677,6 +679,13 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   const foldTools = useFold(props.api, KV_FOLD_TOOLS, { after: requestRender })
   const foldFiles = useFold(props.api, KV_FOLD_FILES, { after: requestRender })
   const foldDrafts = useFold(props.api, KV_FOLD_DRAFTS, { after: requestRender })
+  const [rtOpen, setRtOpen] = createSignal(!kvRead(props.api, KV_FOLD_RT, true))
+  const toggleRt = (): void => {
+    const next = !rtOpen()
+    setRtOpen(next)
+    kvWrite(props.api, KV_FOLD_RT, !next)
+    requestRender()
+  }
 
   const myWorkFold = {} as Record<MyWorkKind, ReturnType<typeof useFold>>
   for (const kind of MY_WORK_ORDER) {
@@ -863,7 +872,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
       const t = tab()
       const omo = omoPresent()
       const sections: { key: string; want: number; min: number; rank: number }[] = []
-      let fixed = 7 // OES status+tabs line + realtime 4-row chart area + brand line + top padding
+      let fixed = 3 + (rtOpen() ? 4 : 0) // OES header + (open) realtime 4-row chart area + brand line + top padding
       if (selfDiagActive()) fixed += 1 // self line — only while debug/profile is on
       if (modeLine()) fixed += 1 // debug/profile flag row
       if (modeDirLine()) fixed += 1
@@ -1182,6 +1191,9 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     return `logs ${clip(uniq.join(" | "), 78)}`
   }
 
+  /** The OES bar shows a text label (loading/switching/error) — realtime tabs are hidden then. */
+  const oesBarBusy = createMemo(() => statusBarLine(tabStatusFor(tab())).label !== "")
+
   return (
     <box flexDirection="column" gap={1} paddingTop={1}>
       <Show when={engaging()}>
@@ -1197,58 +1209,65 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
         <text fg={colors().textMuted}>{modeDirLine()}</text>
       </Show>
       <box flexDirection="row" gap={1}>
-        <OesStatusRow
-          status={tabStatusFor(tab())}
-          colors={colors()}
-          glyphFrame={glyphFrame}
-        />
-        <For each={STAT_REALTIME_BLOCK.tabs}>
-          {(t) => (
-            <ClickText
-              fg={rtTab() === t.id ? colors().primary || colors().text : colors().textMuted}
-              bold={rtTab() === t.id}
-              underline
-              onMouseUp={() => {
-                setRtTab(t.id)
-                setRtRow(t.rows[0]!.key)
-              }}
-            >
-              {`${TAB_NEUTRAL_GLYPH.char} ${t.label}`}
-            </ClickText>
-          )}
-        </For>
-      </box>
-      <box flexDirection="row" gap={1}>
-        <box flexDirection="column" gap={0}>
-          <For each={rtActiveTab().rows}>
-            {(r) => (
+        <box flexDirection="row" gap={1} onMouseUp={toggleRt}>
+          <text fg={colors().textMuted}>{rtOpen() ? "▼" : "▶"}</text>
+          <OesStatusRow
+            status={tabStatusFor(tab())}
+            colors={colors()}
+            glyphFrame={glyphFrame}
+          />
+        </box>
+        <Show when={rtOpen() && !oesBarBusy()}>
+          <For each={STAT_REALTIME_BLOCK.tabs}>
+            {(t) => (
               <ClickText
-                fg={rtRow() === r.key ? colors().primary || colors().text : colors().textMuted}
-                bold={rtRow() === r.key}
+                fg={rtTab() === t.id ? colors().primary || colors().text : colors().textMuted}
+                bold={rtTab() === t.id}
                 underline
-                onMouseUp={() => setRtRow(r.key)}
+                onMouseUp={() => {
+                  setRtTab(t.id)
+                  setRtRow(t.rows[0]!.key)
+                }}
               >
-                {r.label}
+                {`${TAB_NEUTRAL_GLYPH.char} ${t.label}`}
               </ClickText>
             )}
           </For>
-        </box>
-        <box flexDirection="column">
-          <For each={rtLines()}>
-            {(line) => <text fg={colors().success}>{line || " "}</text>}
-          </For>
-        </box>
-        <box flexDirection="column" gap={0}>
-          <For each={rtAxisLines()}>
-            {(line) => <text fg={colors().textMuted}>{line}</text>}
-          </For>
-        </box>
-        <box flexDirection="column" gap={0}>
-          <For each={rtActiveTab().rows}>
-            {() => <text fg={colors().textMuted}>F</text>}
-          </For>
-        </box>
+        </Show>
       </box>
+      <Show when={rtOpen()}>
+        <box flexDirection="row" gap={1}>
+          <box flexDirection="column" gap={0}>
+            <For each={rtActiveTab().rows}>
+              {(r) => (
+                <ClickText
+                  fg={rtRow() === r.key ? colors().primary || colors().text : colors().textMuted}
+                  bold={rtRow() === r.key}
+                  underline
+                  onMouseUp={() => setRtRow(r.key)}
+                >
+                  {r.label}
+                </ClickText>
+              )}
+            </For>
+          </box>
+          <box flexDirection="column">
+            <For each={rtLines()}>
+              {(line) => <text fg={colors().success}>{line || " "}</text>}
+            </For>
+          </box>
+          <box flexDirection="column" gap={0}>
+            <For each={rtAxisLines()}>
+              {(line) => <text fg={colors().textMuted}>{line}</text>}
+            </For>
+          </box>
+          <box flexDirection="column" gap={0}>
+            <For each={rtActiveTab().rows}>
+              {() => <text fg={colors().textMuted}>F</text>}
+            </For>
+          </box>
+        </box>
+      </Show>
       <Show when={selfDiagActive()}>
         <text fg={colors().textMuted}>{selfLine()}</text>
       </Show>

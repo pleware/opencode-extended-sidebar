@@ -1,5 +1,6 @@
 # Changelog
 
+- **0.2.72** (2026-09-04) Fold the whole realtime block (OES status bar, realtime category tabs and the 4-row chart) under a chevron-led OES header that starts collapsed and is remembere.
 - **0.2.71** (2026-09-03) Add an on-screen debug console to the bottom of the sidebar that shows the newest event labels from a 200-line in-memory ring fed only while a debug or profile .
 - **0.2.70** (2026-09-03) Gate the plugin self-cost line behind the debug/profile loggers, swap the tab-header pipe separators for per-tab status-light glyphs whose My-work light scans p.
 - **0.2.69** (2026-09-03) Add Codecov coverage reporting with a 90% line gate and live README badge, excluding thin TUI wrappers and runtime I/O glue from coverage.
