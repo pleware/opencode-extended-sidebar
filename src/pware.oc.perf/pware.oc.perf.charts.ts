@@ -225,3 +225,40 @@ export function rateSparkline(
   )
   return out.split("\n").map((line) => line.slice(8))
 }
+
+/**
+ * One braille sparkline per realtime series for the fullscreen Perf modal.
+ * Each entry renders independently: empty series are skipped, and every series
+ * gets its own y-domain `[0, ownMax]` (`ownMax` is `Math.max(1, …)` so an
+ * all-zero series still draws a flat baseline rather than collapsing). Mirrors
+ * `rateSparkline` exactly: `chart({ width: opts.width + 8, … })` plus
+ * `slice(8)` drops the 8-column `@crafter/charts` y-axis gutter so each line
+ * spans the full requested width. Rendered through `renderToString` (ANSI-free);
+ * the TUI colours it via the `fg` prop.
+ */
+export function realtimeSeriesLines(
+  series: { key: string; label: string; unit: string; values: number[] }[],
+  opts: { width: number; height: number },
+): { key: string; label: string; unit: string; lines: string[] }[] {
+  const out: { key: string; label: string; unit: string; lines: string[] }[] = []
+  for (const s of series) {
+    if (s.values.length === 0) continue
+    const down = downsampleAvg(s.values, opts.width)
+    const smoothed = smoothSeries(down, 3)
+    const ownMax = Math.max(1, ...smoothed)
+    const rows = smoothed.map((v, i) => ({ x: i, v }))
+    const rendered = renderToString(
+      chart({ width: opts.width + 8, height: opts.height, charset: "braille" })
+        .data(rows, { xKey: "x" })
+        .yDomain([0, ownMax])
+        .line({ key: "v" }),
+    )
+    out.push({
+      key: s.key,
+      label: s.label,
+      unit: s.unit,
+      lines: rendered.split("\n").map((line) => line.slice(8)),
+    })
+  }
+  return out
+}

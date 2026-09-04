@@ -1,5 +1,6 @@
 # Changelog
 
+- **0.2.77** (2026-09-04) add a pure multi-series realtime line renderer with per-series scale.
 - **0.2.76** (2026-09-04) give each realtime selector row its own unit label.
 - **0.2.75** (2026-09-04) Replace the project-wide open-question scan with an in-memory per-session cache invalidated by targeted question-part host events plus a 30-second reconcile bac.
 - **0.2.74** (2026-09-04) Move recent sessions into the My work Sessions group, remove spare gap rows above OES and below the tab bar, and retune direction-glyph sin-fades on the 50ms ti.
