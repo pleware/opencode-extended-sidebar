@@ -964,10 +964,11 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   /**
    * A browsable OMO document (Draft docs / Plans archive) opens the same
    * picker the action rows get: Navigate to session first (the session that
-   * wrote the file), then the preview row. No Approve / start work — an
-   * archive row is a document, not an action.
+   * wrote the file), then the preview row. No Approve — an archive row is
+   * never a sign-off queue. Start work is offered only for the Plans
+   * archive (via the `startWork` flag); Draft docs stays browse-only.
    */
-  const openDocPicker = (item: { name: string; rel: string }, doc: DocView, docsLabel: string) => {
+  const openDocPicker = (item: { name: string; rel: string }, doc: DocView, docsLabel: string, startWork: boolean = false) => {
     const db = openReadonlyDb(snap().db.dbPath)
     const sessionId = db ? sessionForPlanFile(db, item.rel) : null
     openApprovalDialog(props.api, {
@@ -975,9 +976,10 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
       sessionId,
       continueHint: approvalContinueHint(sessionId, Boolean(db)),
       onContinue: (sid) => selectSession(props.api, sid),
+      onStartWork: (mode) => runStartWork(props.api, props.sessionId, mode, item.name),
       onDocs: () => openDocDetail(props.api, doc, projectRoots(), colors()),
       showApprove: false,
-      showStartWork: false,
+      showStartWork: startWork,
       docsLabel,
     })
   }
@@ -1033,7 +1035,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
         kind: ROW_KIND_FILE,
         glyph: myWorkGlyph(item.kind),
         name: item.name,
-        onSelect: () => openDocPicker(item, doc, "Preview plan file"),
+        onSelect: () => openDocPicker(item, doc, "Preview plan file", true),
       }
     }
     if ("sessionId" in item) {

@@ -1,5 +1,6 @@
 # Changelog
 
+- **0.2.88** (2026-09-05) Offer start work from the Plans archive picker so an archived plan can be launched directly and the archive drops Approve.
 - **0.2.87** (2026-09-05) Reconcile a plan with no parseable status against its boulder work so a completed plan lands in Finished instead of the Plans archive.
 - **0.2.86** (2026-09-05) Open the My-work Plans and Draft docs archives through the approval picker so a click offers Navigate to session before the preview instead of previewing the fi.
 - **0.2.85** (2026-09-05) Hide drafts superseded by a plan of the same name in the shared omo scan so one rule drops them from both the Session draft list and the My-work buckets.
