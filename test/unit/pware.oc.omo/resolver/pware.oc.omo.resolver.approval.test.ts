@@ -166,6 +166,30 @@ describe("listApprovals", () => {
     expect(out.readyStart).toEqual([])
   })
 
+  test("a plan with no status whose boulder work completed is bucketed as finished", () => {
+    const proj = createFixtureProject({
+      files: { ".omo/plans/nostatus.md": "# nostatus\n\n## Todos\n" },
+      boulder: {
+        active_work_id: "work_a",
+        works: {
+          work_a: { plan_name: "nostatus", status: "completed", updated_at: 1_000 },
+        },
+      },
+    })
+    held.push(proj)
+    const out = listApprovals(proj.root)
+    expect(out.finished.map((a) => a.name)).toEqual(["nostatus"])
+    expect(out.plans).toEqual([])
+    expect(out.readyStart).toEqual([])
+  })
+
+  test("a no-status plan with no boulder work still lands in plans", () => {
+    const root = project({ ".omo/plans/nostatus.md": "# nostatus\n\n## Todos\n" })
+    const out = listApprovals(root)
+    expect(out.finished).toEqual([])
+    expect(out.plans.map((a) => a.name)).toEqual(["nostatus"])
+  })
+
   test("an approved plan with no boulder work stays ready-to-start", () => {
     const root = project({ ".omo/plans/perf.md": "---\nstatus: approved\n---" })
     const out = listApprovals(root)

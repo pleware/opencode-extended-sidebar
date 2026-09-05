@@ -230,8 +230,8 @@ function planStatusOf(
     return null
   }
   const status = parsePlanStatus(text)
-  if (!status) return null
   if (workStates.get(approvalName(rel)) === WORK_STATE_COMPLETED) return PLAN_STATUS_DONE
+  if (!status) return null
   return status
 }
 

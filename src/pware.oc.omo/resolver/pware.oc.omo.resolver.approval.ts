@@ -99,10 +99,12 @@ function classify(
       const status = parsePlanStatus(text)
       const name = approvalName(rel)
       const workState = workStates.get(name) ?? "absent"
-      // A plan with no parseable status is still a plan document — it lands in
-      // the Plans archive below (decided after this status guard). A draft
-      // without a status is still a working document — Draft docs.
-      const group = status ? resolveApprovalGroup(status, isDraft, workState, false) : null
+      // A plan with no parseable status still reconciles against boulder: one
+      // whose boulder work completed lands in Finished (resolveApprovalGroup →
+      // planWorkDone returns true for a completed work state regardless of
+      // status). A no-status plan with no completed work falls through to the
+      // Plans archive below; a no-status draft is a working document — Draft docs.
+      const group = resolveApprovalGroup(status, isDraft, workState, false)
       const item: ApprovalItem = {
         rel,
         name,

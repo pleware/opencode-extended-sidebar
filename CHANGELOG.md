@@ -1,5 +1,6 @@
 # Changelog
 
+- **0.2.87** (2026-09-05) Reconcile a plan with no parseable status against its boulder work so a completed plan lands in Finished instead of the Plans archive.
 - **0.2.86** (2026-09-05) Open the My-work Plans and Draft docs archives through the approval picker so a click offers Navigate to session before the preview instead of previewing the fi.
 - **0.2.85** (2026-09-05) Hide drafts superseded by a plan of the same name in the shared omo scan so one rule drops them from both the Session draft list and the My-work buckets.
 - **0.2.84** (2026-09-05) Make the open-question reconcile backstop a configurable 15 s oes.json option and merge the approvals and docs scans into one shared per-root omo stamp cache.
