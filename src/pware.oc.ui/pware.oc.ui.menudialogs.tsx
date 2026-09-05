@@ -430,8 +430,8 @@ export function openApprovalDialog(
     /** Muted reason shown under the session-bound rows when it is disabled. */
     continueHint?: string | null
     onContinue: (sessionId: string) => void
-    onApprove: (sessionId: string) => void
-    onStartWork: (mode: StartWorkMode) => void
+    onApprove?: (sessionId: string) => void
+    onStartWork?: (mode: StartWorkMode) => void
     onDocs: () => void
     /** Hide the Approve row (a ready-to-start / finished plan is not approvable). */
     showApprove?: boolean
@@ -467,7 +467,7 @@ export function openApprovalDialog(
       description: opts.sessionId ? undefined : (opts.continueHint ?? "Approve unavailable"),
       disabled: !opts.sessionId,
       onSelect: () => {
-        if (opts.sessionId) {
+        if (opts.sessionId && opts.onApprove) {
           closeDialog(api)
           opts.onApprove(opts.sessionId)
           toast(api, "Approved — ok sent", "success")
@@ -475,7 +475,7 @@ export function openApprovalDialog(
       },
     })
   }
-  if (showStartWork) {
+  if (showStartWork && opts.onStartWork) {
     options.push(
       {
         title: startWorkCommand(START_WORK_PLAIN, opts.title),
@@ -483,7 +483,7 @@ export function openApprovalDialog(
         category: "Plan options",
         onSelect: () => {
           closeDialog(api)
-          opts.onStartWork(START_WORK_PLAIN)
+          opts.onStartWork?.(START_WORK_PLAIN)
         },
       },
       {
@@ -492,7 +492,7 @@ export function openApprovalDialog(
         category: "Plan options",
         onSelect: () => {
           closeDialog(api)
-          opts.onStartWork(START_WORK_MAKE_PR)
+          opts.onStartWork?.(START_WORK_MAKE_PR)
         },
       },
       {
@@ -501,7 +501,7 @@ export function openApprovalDialog(
         category: "Plan options",
         onSelect: () => {
           closeDialog(api)
-          opts.onStartWork(START_WORK_SHIP)
+          opts.onStartWork?.(START_WORK_SHIP)
         },
       },
     )

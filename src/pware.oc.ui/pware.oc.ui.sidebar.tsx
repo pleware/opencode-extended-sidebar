@@ -961,6 +961,27 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   const delegateReveal = useReveal(4)
   const currentDelegatesReveal = useReveal(4)
 
+  /**
+   * A browsable OMO document (Draft docs / Plans archive) opens the same
+   * picker the action rows get: Navigate to session first (the session that
+   * wrote the file), then the preview row. No Approve / start work — an
+   * archive row is a document, not an action.
+   */
+  const openDocPicker = (item: { name: string; rel: string }, doc: DocView, docsLabel: string) => {
+    const db = openReadonlyDb(snap().db.dbPath)
+    const sessionId = db ? sessionForPlanFile(db, item.rel) : null
+    openApprovalDialog(props.api, {
+      title: item.name,
+      sessionId,
+      continueHint: approvalContinueHint(sessionId, Boolean(db)),
+      onContinue: (sid) => selectSession(props.api, sid),
+      onDocs: () => openDocDetail(props.api, doc, projectRoots(), colors()),
+      showApprove: false,
+      showStartWork: false,
+      docsLabel,
+    })
+  }
+
   const myWorkRow = (item: MyWorkItem): RowData => {
     if (item.kind === MY_WORK_GROUP_SESSIONS || item.kind === MY_WORK_GROUP_PINNED) {
       const isBusy = Boolean(item.sessionId && busy()[item.sessionId])
@@ -996,7 +1017,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
         kind: ROW_KIND_FILE,
         glyph: myWorkGlyph(item.kind),
         name: item.name,
-        onSelect: () => openDocDetail(props.api, doc, projectRoots(), colors()),
+        onSelect: () => openDocPicker(item, doc, "Preview draft file"),
       }
     }
     if (item.kind === MY_WORK_GROUP_PLANS) {
@@ -1012,7 +1033,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
         kind: ROW_KIND_FILE,
         glyph: myWorkGlyph(item.kind),
         name: item.name,
-        onSelect: () => openDocDetail(props.api, doc, projectRoots(), colors()),
+        onSelect: () => openDocPicker(item, doc, "Preview plan file"),
       }
     }
     if ("sessionId" in item) {
