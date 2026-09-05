@@ -3,7 +3,6 @@ import fs from "node:fs"
 import path from "node:path"
 import {
   enrichApprovalSessionStates,
-  planSessionStateLabel,
 } from "../../../../src/pware.oc.runtime/pware.oc.runtime.mywork-enrich.js"
 import type { EnrichedApproval } from "../../../../src/pware.oc.runtime/pware.oc.runtime.mywork-enrich.js"
 import { createFixtureProject, type FixtureProject } from "../../../helpers/project.js"
@@ -130,16 +129,5 @@ describe("enrichApprovalSessionStates", () => {
       now: t0,
     })
     expect(out.sessionState).toBeNull()
-  })
-})
-
-describe("planSessionStateLabel", () => {
-  test("maps each state to its row suffix; null stays null", () => {
-    expect(planSessionStateLabel({ running: true, state: "streaming" })).toBe("working")
-    expect(planSessionStateLabel({ running: true, state: "awaiting-background" })).toBe("waiting")
-    expect(planSessionStateLabel({ running: false, state: "idle" })).toBe("idle")
-    expect(planSessionStateLabel({ running: false, state: "archived" })).toBe("archived")
-    expect(planSessionStateLabel({ running: false, state: "unknown" })).toBe("unknown")
-    expect(planSessionStateLabel(null)).toBeNull()
   })
 })

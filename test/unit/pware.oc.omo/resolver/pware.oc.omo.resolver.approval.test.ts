@@ -19,7 +19,7 @@ function project(files: Record<string, string>): string {
   return proj.root
 }
 
-const EMPTY = { drafting: [], readyReview: [], readyStart: [], finished: [], draftDocs: [] }
+const EMPTY = { drafting: [], readyReview: [], readyStart: [], finished: [], draftDocs: [], plans: [] }
 
 describe("listApprovals", () => {
   test("buckets a mixed tree by status and file type", () => {
@@ -43,6 +43,20 @@ describe("listApprovals", () => {
     expect(out.readyStart.map((a) => a.name)).not.toContain("approved")
     // a draft no action group covers is a Draft doc — approved, unknown, no status
     expect(out.draftDocs.map((a) => a.name).sort()).toEqual(["approved", "no-status", "odd"])
+  })
+
+  test("plan files no action group covers land in plans, not in the queue", () => {
+    const root = project({
+      ".omo/plans/known.md": "---\nstatus: approved\n---",
+      ".omo/plans/stale.md": "---\nstatus: unknown-thing\n---",
+      ".omo/plans/nostatus.md": "# plan with no state\n",
+      ".omo/drafts/still-draft.md": "---\nstatus: drafting\n---",
+    })
+    const out = listApprovals(root)
+    expect(out.readyStart.map((a) => a.name)).toEqual(["known"])
+    expect(out.drafting.map((a) => a.name)).toEqual(["still-draft"])
+    // an approved plan is in an action group; unknown / no-status plans are browsable docs
+    expect(out.plans.map((a) => a.name).sort()).toEqual(["nostatus", "stale"])
   })
 
   test("a draft awaiting-approval lands in readyReview with pendingAction + rel", () => {

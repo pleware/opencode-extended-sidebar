@@ -31,6 +31,7 @@ src/
 │   ├── pware.oc.core.sqlite.ts
 │   ├── pware.oc.core.status.ts
 │   ├── pware.oc.core.timing.ts
+│   ├── pware.oc.core.width.ts
 │   ├── constants/                         # host literals + the plugin's own vocabularies
 │   │   ├── index.ts
 │   │   ├── pware.oc.core.constants.partType.ts
@@ -172,7 +173,7 @@ Plugin registration: `id = "opencode-extended-sidebar"`, load toast,
 | `debug.ts` | `OES_DEBUG_OPENCODE` / `OES_DEBUG_PROFILE` JSON-line file loggers + a 200-line in-memory screen ring for the sidebar's debug console | `dbg()`, `profile()`, `profileAsync()`, `readProfileStats()`, `writeProfileSummary()`, `debugLogDir()`, `profileLogDir()`, `resetDebug()`, `pushScreenLine()`, `readScreenLines()`, `subscribeScreenLines()` |
 | `bus.ts` | in-process plugin event bus (`pware.oc.*` / `pware.omo.*` / `pware.oes.*`) | `createEventBus()`, `PwareEvent`, `PwareEventBus` |
 | `events.ts` | host event type/kind classification | `eventType()`, `eventKind()`, `shouldRefreshDb()` |
-| `layout.ts` | vertical row budget, overflow slicing, shared action rail, host dialog inner width | `panelRows()`, `packSections()`, `rowsForPlan()`, `sliceShown()`, `clampScrollOffset()`, `scrollByStep()`, `contextActionsLine()`, `dialogInnerWidth()`, `CONTEXT_ACTION_COL_WIDTH`, `HOST_DIALOG_OUTER_WIDTH`, `RT_CHART_ROWS`, `RT_DIALOG_CHART_ROWS`, `ROW_MIN`, `ROW_RANK` |
+| `layout.ts` | vertical row budget, overflow slicing, shared action rail, host dialog inner width, measured row-width fallback | `panelRows()`, `packSections()`, `rowsForPlan()`, `sliceShown()`, `clampScrollOffset()`, `scrollByStep()`, `contextActionsLine()`, `dialogInnerWidth()`, `CONTEXT_ACTION_COL_WIDTH`, `ROW_LINE_FALLBACK`, `ROW_LINE_RESERVE`, `HOST_DIALOG_OUTER_WIDTH`, `RT_CHART_ROWS`, `RT_DIALOG_CHART_ROWS`, `ROW_MIN`, `ROW_RANK` |
 | `oes.ts` | `oes.json` merge + clamp | `OesOptions`, `OES_DEFAULTS`, `pick()`, `getOes()`, `oesStamp()`, `resetOesCache()` |
 | `paths.ts` | OpenCode path resolution, path folding | `getOpenCodeDbPath()`, `pluginRoot()`, `resolveProjectFile()`, `basenameOf()`, `fileStamp()`, `dbStamp()`, `str()`, `finiteNum()` |
 | `preview.ts` | text/markdown preview limits | `previewViewportRows()`, `canPreviewPath()`, `isMarkdownPath()`, `readTextPreview()` |
@@ -181,6 +182,7 @@ Plugin registration: `id = "opencode-extended-sidebar"`, load toast,
 | `sqlite.ts` | readonly `bun:sqlite` / `node:sqlite` handle, fail-fast busy timeout (logs `sql.busy`), pings the debug console's screen ring (`db open`) on a fresh open | `openReadonlyDb()`, `withDbRead()`, `resetReadonlyDb()`, `uniqueIds()`, `isBusyError()` |
 | `status.ts` | canonical lifecycle/tool/work status + the OES bar line | `normalizeStatus()`, `toToolStatus()`, `toWorkLabel()`, `workStatusGlyph()`, `workIsTerminal()`, `taskRank()`, `tabStatus()`, `tabStatusLine()`, `statusBarLine()`, `oesBarParts()` |
 | `timing.ts` | panel clock budgets | `TICK_MS`, `NOW_MS`, `FPS_READ_EVERY_TICKS`, `BLINK_TICKS`, `MONITOR_POLL_MS`, `MONITOR_WATCH_DEBOUNCE_MS`, `EVENT_SCAN_DEBOUNCE_MS`, `QUESTION_RECONCILE_MS`, `REALTIME_WINDOW_MS`, `REALTIME_RATE_WINDOW_MS` |
+| `width.ts` | wcwidth display widths + grapheme-safe column clipping — the single place row text is measured into terminal columns | `codepointWidth()`, `strWidth()`, `takeCols()`, `takeLastCols()`, `clipWidth()`, `clipMiddleWidth()` |
 
 ### `pware.oc.core/constants` — host literals + the plugin's own vocabularies
 
@@ -194,7 +196,7 @@ Plugin registration: `id = "opencode-extended-sidebar"`, load toast,
 | `pulse.ts` | the plugin's pulse / flow / mark vocabulary | `PULSE_*`, `PULSES`, `Pulse`, `FLOW_*`, `FLOW_DIRS`, `FlowDir`, `FLOW_HINT_CLEAR`, `FlowHint`, `MARK_*`, `AGENT_MARKS`, `AgentMark` |
 | `eventKind.ts` | the plugin's host-event classification buckets | `EVENT_KIND_*`, `EVENT_KINDS`, `EventKind` |
 | `rowKind.ts` | the sidebar row taxonomy | `ROW_KIND_*`, `ROW_KINDS`, `RowKind` |
-| `myWork.ts` | the "My work" groups | `MY_WORK_GROUP_*` (incl. `MY_WORK_GROUP_DRAFT_DOCS`), `MY_WORK_GROUPS`, `ApprovalGroupKind` |
+| `myWork.ts` | the "My work" groups | `MY_WORK_GROUP_*` (incl. `MY_WORK_GROUP_PINNED`, `MY_WORK_GROUP_DRAFT_DOCS`, `MY_WORK_GROUP_PLANS`), `MY_WORK_GROUPS`, `ApprovalGroupKind` |
 | `phase.ts` | Perf wall-clock phases + self-cost phases | `PERF_PHASE_*`, `PERF_PHASES`, `PerfPhase`, `PERF_LOG_KIND_*`, `PerfLogKind`, `SELF_PHASE_*`, `SELF_PHASES`, `SelfPhase` |
 
 ### `pware.oc.core/git` — project git + ignore
@@ -238,7 +240,7 @@ Plugin registration: `id = "opencode-extended-sidebar"`, load toast,
 | `resolver/proofFile.ts` | evidence (proof) file → writer-session index (thin wrapper over `planFile.ts`) | `proofSessionIndex()`, `sessionForProofFile()`, `ProofFile.list()` |
 | `resolver/rulesFile.ts` | rule-file → writer-session index (thin wrapper over `planFile.ts`) | `rulesSessionIndex()`, `sessionForRuleFile()` |
 | `resolver/runContinuationFile.ts` | run-continuation file → writer-session index (thin wrapper over `planFile.ts`) | `runContinuationSessionIndex()`, `sessionForRunContinuationFile()` |
-| `resolver/approval.ts` | the "My work" approval buckets — four action groups (ready-to-review / ready-to-start / finished / drafting) plus the `draftDocs` archive (TTL, lazy) | `listApprovals()`, `resetApprovalsCache()` |
+| `resolver/approval.ts` | the "My work" approval buckets — four action groups (ready-to-review / ready-to-start / finished / drafting) plus the `draftDocs` and `plans` archives (TTL, lazy) | `listApprovals()`, `resetApprovalsCache()` |
 | `resolver/approvalGroup.ts` | "My work" approval grouping from OMO plan status + draft path, reconciled against boulder + writer todos | `approvalGroup()`, `isDraftOf()`, `resolveApprovalGroup()`, `planWorkDone()`, `isDrafting()`, `isReadyToReview()`, `isReadyToStart()`, `isFinished()` |
 | `resolver/approvalState.ts` | `.omo/run-continuation` background-task marker | `readRunContinuationState()`, `firstRunContinuationDir()` |
 | `resolver/doc.ts` | docs index: per-kind listing of plan/drafts/notepads/proof, with session + plan-status filters | `listOmoFiles()`, `ListOmoFilesOptions`, `resetDocsCache()`, `DOC_KIND_LABEL` |
@@ -266,8 +268,8 @@ Plugin registration: `id = "opencode-extended-sidebar"`, load toast,
 | `pware.oc.runtime.source.ts` | runtime source orchestration: monitor lifecycle + debounced refresh from `pware.oes.*`/`pware.omo.*` hints; shuts the worker down on stop | `startRuntimeSource()`, `RuntimeSourceHandle` |
 | `pware.oc.runtime.worker.ts` | Bun Worker entry running `readRuntimeSnapshot` off the TUI main thread | (worker entry) |
 | `pware.oc.runtime.snapshotClient.ts` | async snapshot client: lazy singleton worker + sync fallback | `readRuntimeSnapshotAsync()`, `shutdownSnapshotWorker()`, `SnapshotRequestOpts` |
-| `pware.oc.runtime.mywork.ts` | the "My work" queue (questions + sessions + approvals + draft docs) | `MyWorkItem`, `groupMyWork()`, `toQuestionItems()`, `toSessionItems()`, `toApprovalItems()`, `toDraftDocItems()`, `dropDismissed()`, `parseDismissed()`, `formatDismissed()`, `approvalContinueHint()`, `startWorkCommand()`, `StartWorkMode` |
-| `pware.oc.runtime.mywork-enrich.ts` | planner session state for approval rows (opencode SQLite + omo run-continuation) | `planSessionStateLabel()`, `enrichApprovalSessionStates()` |
+| `pware.oc.runtime.mywork.ts` | the "My work" queue (pinned + questions + sessions + approvals + draft docs + plans) | `MyWorkItem`, `groupMyWork()`, `toQuestionItems()`, `toSessionItems()`, `toApprovalItems()`, `toDraftDocItems()`, `toPlanItems()`, `dropDismissed()`, `parseDismissed()`, `formatDismissed()`, `approvalContinueHint()`, `startWorkCommand()`, `StartWorkMode` |
+| `pware.oc.runtime.mywork-enrich.ts` | writer-session todo reconciliation for approval rows (opencode SQLite + omo run-continuation) | `enrichApprovalSessionStates()`, `EnrichedApproval` |
 | `pware.oc.runtime.questions.ts` | in-memory per-session open-question cache (seed/reconcile/touch) | `createQuestionCache()`, `mergeQuestions()`, `QuestionCache` |
 | `resolver/index.ts` | unified runtime snapshot | `RuntimeSnapshot`, `readRuntimeSnapshot()`, `computeFingerprint()`, `resetRuntimeCache()` |
 | `resolver/delegate.ts` | delegate enrichment + grouping | `enrichDelegates()`, `reconcileDelegateStatus()`, `groupDelegates()`, `delegatesForSession()` |
@@ -295,7 +297,7 @@ Plugin registration: `id = "opencode-extended-sidebar"`, load toast,
 | Module | Responsibility | Key exports |
 |---|---|---|
 | `chrome.tsx` | shared chrome, theme colours, kv persistence | `BrandTabs`, `ClickText`, `ContextActions`, `ContextAction`, `FoldHeader`, `DiffStat`, `textAttrs()`, `toneColor()`, `kvRead()`, `kvWrite()`, `kvReadOne()`, `kvWriteOne()`, `ThemeColors` |
-| `sections.tsx` | shared sidebar primitives: kv-persisted fold state, foldable sections, the base row renderer + budget-sliced `RowList`, brand+tabs+panel columns | `useFold()`, `FoldSection`, `GroupSection`, `RowList`, `MoreReveal`, `useReveal()`, `AgentLine`, `RowData`, `TabColumn` |
+| `sections.tsx` | shared sidebar primitives: kv-persisted fold state, foldable sections, the base row renderer + budget-sliced `RowList`, brand+tabs+panel columns | `useFold()`, `FoldSection`, `GroupSection`, `RowList`, `MoreReveal`, `useReveal()`, `AgentLine`, `RowData`, `composeRow()`, `TabColumn` |
 | `sidebar.tsx` | the panel: groups, tabs, live rows; consumes plugin event bus | `SidebarPanel` |
 | `live.tsx` | host event adapter (`api.event.on`) → plugin event bus (`pware.oc.*`, `pware.oes.*`) | `startHostEventBridge()` |
 | `host.tsx` | UI host RPC wrappers (session switch/new session/start-work/approve) | `selectSession()`, `openSessionSwitcher()`, `openNewSessionPrompt()`, `runStartWork()`, `approvePlan()` |

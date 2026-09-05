@@ -18,6 +18,7 @@ import {
   type FileView,
 } from "../../../src/pware.oc.opencode/pware.oc.opencode.files.js"
 import { resetGitCache } from "../../../src/pware.oc.core/git/pware.oc.core.git.js"
+import { strWidth } from "../../../src/pware.oc.core/pware.oc.core.width.js"
 
 describe("basenameOf / shortFileName / formatDiffStat", () => {
   test("basename strips directories", () => {
@@ -29,6 +30,11 @@ describe("basenameOf / shortFileName / formatDiffStat", () => {
     expect(s).toContain("…")
     expect(s.endsWith(".ts")).toBe(true)
     expect(s.length).toBeLessThanOrEqual(16)
+  })
+  test("wide chars are clipped to the column budget, not code units", () => {
+    const s = shortFileName("这是一个非常非常长的中文文件名案例.ts", 16)
+    expect(s.endsWith(".ts")).toBe(true)
+    expect(strWidth(s)).toBeLessThanOrEqual(16)
   })
   test("diff stat", () => {
     expect(formatDiffStat(3, 1)).toBe("+3 −1")

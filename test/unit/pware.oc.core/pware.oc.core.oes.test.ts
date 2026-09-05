@@ -3,9 +3,8 @@ import { OES_DEFAULTS, pick } from "../../../src/pware.oc.core/pware.oc.core.oes
 
 describe("pick", () => {
   test("clamps numeric ranges", () => {
-    const hi = pick({ fileRows: 99, lineMax: 9, perfTurns: 1 }, OES_DEFAULTS)
+    const hi = pick({ fileRows: 99, perfTurns: 1 }, OES_DEFAULTS)
     expect(hi.fileRows).toBe(20)
-    expect(hi.lineMax).toBe(20)
     expect(hi.perfTurns).toBe(20)
     const lo = pick({ fileRows: 1, perfHistory: -2 }, OES_DEFAULTS)
     expect(lo.fileRows).toBe(3)

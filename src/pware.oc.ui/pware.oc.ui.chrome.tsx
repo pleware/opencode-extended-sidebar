@@ -33,6 +33,7 @@ export function ClickText(props: {
   bold?: boolean
   /** Clickable — the underline appears while the pointer is over the label. */
   underline?: boolean
+  opacity?: number
   onMouseUp?: () => void
   children: JSX.Element
 }): JSX.Element {
@@ -40,6 +41,7 @@ export function ClickText(props: {
   return (
     <text
       fg={props.fg}
+      opacity={props.opacity}
       attributes={textAttrs(Boolean(props.bold), Boolean(props.underline) && hovered())}
       onMouseUp={props.onMouseUp}
       onMouseOver={() => setHovered(true)}

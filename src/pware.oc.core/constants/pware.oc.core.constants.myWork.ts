@@ -7,6 +7,12 @@
  * decides the group.
  */
 
+/**
+ * My work group: sessions the user pinned to the top of the queue. Empty for
+ * now — the pin affordance is a placeholder until the backend is wired.
+ */
+export const MY_WORK_GROUP_PINNED = "pinned"
+
 /** My work group: a draft still being written — preview it, nothing to sign yet. */
 export const MY_WORK_GROUP_DRAFTING = "drafting"
 
@@ -26,6 +32,13 @@ export const MY_WORK_GROUP_DISMISSED = "dismissed"
  * browsing (preview), never for an action.
  */
 export const MY_WORK_GROUP_DRAFT_DOCS = "draft-docs"
+
+/**
+ * My work group: plan documents that no action group covers — a `.omo/plans/`
+ * file whose status is unknown or absent. Listed for browsing (preview), never
+ * for an action.
+ */
+export const MY_WORK_GROUP_PLANS = "plans"
 
 /** My work group: the project's recent sessions — jump straight back into any of them. */
 export const MY_WORK_GROUP_SESSIONS = "sessions"

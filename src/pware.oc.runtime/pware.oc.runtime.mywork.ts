@@ -17,6 +17,8 @@ import {
   MY_WORK_GROUP_DRAFT_DOCS,
   MY_WORK_GROUP_DRAFTING,
   MY_WORK_GROUP_FINISHED,
+  MY_WORK_GROUP_PINNED,
+  MY_WORK_GROUP_PLANS,
   MY_WORK_GROUP_READY_REVIEW,
   MY_WORK_GROUP_READY_START,
   MY_WORK_GROUP_SESSIONS,
@@ -67,7 +69,20 @@ export type MyWorkItem =
       timeUpdated: number | null
     }
   | {
+      kind: typeof MY_WORK_GROUP_PINNED
+      sessionId: string
+      title: string
+      status: AgentStatus
+      timeUpdated: number | null
+    }
+  | {
       kind: typeof MY_WORK_GROUP_DRAFT_DOCS
+      name: string
+      rel: string
+      updatedAt: number | null
+    }
+  | {
+      kind: typeof MY_WORK_GROUP_PLANS
       name: string
       rel: string
       updatedAt: number | null
@@ -76,6 +91,7 @@ export type MyWorkItem =
 export type MyWorkKind = MyWorkItem["kind"]
 
 export const MY_WORK_ORDER: readonly MyWorkKind[] = [
+  MY_WORK_GROUP_PINNED,
   QUESTION_KIND_QUESTION,
   QUESTION_KIND_INTERRUPTED,
   QUESTION_KIND_ERROR,
@@ -83,12 +99,14 @@ export const MY_WORK_ORDER: readonly MyWorkKind[] = [
   MY_WORK_GROUP_READY_REVIEW,
   MY_WORK_GROUP_READY_START,
   MY_WORK_GROUP_FINISHED,
-  MY_WORK_GROUP_DISMISSED,
   MY_WORK_GROUP_DRAFTING,
   MY_WORK_GROUP_DRAFT_DOCS,
+  MY_WORK_GROUP_PLANS,
+  MY_WORK_GROUP_DISMISSED,
 ]
 
 const MY_WORK_LABELS: Record<MyWorkKind, string> = {
+  [MY_WORK_GROUP_PINNED]: "Pinned",
   [QUESTION_KIND_QUESTION]: "Awaiting answer",
   [QUESTION_KIND_INTERRUPTED]: "Interrupted",
   [QUESTION_KIND_ERROR]: "Errors",
@@ -99,6 +117,7 @@ const MY_WORK_LABELS: Record<MyWorkKind, string> = {
   [MY_WORK_GROUP_DISMISSED]: "Dismissed questions",
   [MY_WORK_GROUP_DRAFTING]: "Drafting",
   [MY_WORK_GROUP_DRAFT_DOCS]: "Draft docs",
+  [MY_WORK_GROUP_PLANS]: "Plans",
 }
 
 export function myWorkLabel(kind: MyWorkKind): string {
@@ -174,6 +193,13 @@ export function toDraftDocItems(
   docs: readonly { name: string; rel: string; updatedAt: number | null }[],
 ): MyWorkItem[] {
   return docs.map((d) => ({ kind: MY_WORK_GROUP_DRAFT_DOCS, name: d.name, rel: d.rel, updatedAt: d.updatedAt }))
+}
+
+/** Build the Plans items — plan files no action group covers, browsed as files. */
+export function toPlanItems(
+  docs: readonly { name: string; rel: string; updatedAt: number | null }[],
+): MyWorkItem[] {
+  return docs.map((d) => ({ kind: MY_WORK_GROUP_PLANS, name: d.name, rel: d.rel, updatedAt: d.updatedAt }))
 }
 
 /** Build the sessions group from recent main sessions — every session, live or idle. */

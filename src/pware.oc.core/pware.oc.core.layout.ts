@@ -30,6 +30,16 @@ const PANEL_MIN_ROWS = 8
 /** Shared right rail for context actions (`switch new`, `view all`, …). */
 export const CONTEXT_ACTION_COL_WIDTH = 10
 
+/**
+ * Row width budget before the root box reports its measured layout width.
+ * `lineMax` used to be an oes.json option; it is now measured, and this is the
+ * pre-layout fallback (matches the old default).
+ */
+export const ROW_LINE_FALLBACK = 31
+
+/** Columns subtracted from the measured root width for the scrollbar reserve. */
+export const ROW_LINE_RESERVE = 1
+
 /** Realtime charts link on the OES row (`C` → fullscreen dialog). */
 export const RT_ACTION_COL_WIDTH = 1
 

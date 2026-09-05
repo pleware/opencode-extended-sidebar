@@ -22,6 +22,8 @@ import {
   MY_WORK_GROUP_DRAFT_DOCS,
   MY_WORK_GROUP_DRAFTING,
   MY_WORK_GROUP_FINISHED,
+  MY_WORK_GROUP_PINNED,
+  MY_WORK_GROUP_PLANS,
   MY_WORK_GROUP_READY_REVIEW,
   MY_WORK_GROUP_READY_START,
   MY_WORK_GROUP_SESSIONS,
@@ -64,9 +66,11 @@ export function myWorkGlyph(kind: MyWorkKind): GlyphSpec {
   if (kind === QUESTION_KIND_INTERRUPTED) return { char: "⊘", tone: "textMuted" }
   if (kind === QUESTION_KIND_ERROR) return { char: "×", tone: "error" }
   if (kind === MY_WORK_GROUP_SESSIONS) return { char: "◔", tone: "primary" }
+  if (kind === MY_WORK_GROUP_PINNED) return { char: "P", tone: "primary" }
   if (kind === MY_WORK_GROUP_READY_REVIEW) return { char: "!", tone: "warning" }
   if (kind === MY_WORK_GROUP_DRAFTING) return { char: "…", tone: "textMuted" }
   if (kind === MY_WORK_GROUP_DRAFT_DOCS) return { char: "•", tone: "textMuted" }
+  if (kind === MY_WORK_GROUP_PLANS) return { char: "▸", tone: "textMuted" }
   if (kind === MY_WORK_GROUP_READY_START) return { char: "▶", tone: "primary" }
   if (kind === MY_WORK_GROUP_FINISHED) return { char: "✓", tone: "success" }
   if (kind === MY_WORK_GROUP_DISMISSED) return { char: "⊘", tone: "textMuted" }

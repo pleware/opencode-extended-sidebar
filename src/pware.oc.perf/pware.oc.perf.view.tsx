@@ -37,10 +37,10 @@ import {
   packStackedRow,
   timeSummary,
   tokenSummary,
-  shortMiddle,
   type Chip,
   type FlowDir,
 } from "../pware.oc.core/pware.oc.core.pulse.js"
+import { clipMiddleWidth, strWidth } from "../pware.oc.core/pware.oc.core.width.js"
 import { asciiTrend, shareBar } from "./pware.oc.perf.charts.js"
 
 const KV_FOLD_MODELS = "oes.fold.perf.models"
@@ -73,8 +73,8 @@ function MetricRow(props: {
     const room = Math.max(4, props.lineMax - 2)
     const minName = props.minName ?? 6
     const chips = packChips(minName, props.chips, room)
-    const used = chips.reduce((sum, c) => sum + c.text.length + 1, 0)
-    const name = shortMiddle(props.name, Math.max(minName, room - used))
+    const used = chips.reduce((sum, c) => sum + strWidth(c.text) + 1, 0)
+    const name = clipMiddleWidth(props.name, Math.max(minName, room - used))
     return { name, chips }
   })
   return (

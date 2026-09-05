@@ -399,7 +399,7 @@ describe("My work queue", () => {
         },
       ],
     })
-    expect(listApprovals(projFix.root)).toEqual({ drafting: [], readyReview: [], readyStart: [], finished: [], draftDocs: [] })
+    expect(listApprovals(projFix.root)).toEqual({ drafting: [], readyReview: [], readyStart: [], finished: [], draftDocs: [], plans: [] })
     expect(listOpenQuestions({ dbPath: dbFix.dbPath, projectId: "proj_a" })).toHaveLength(1)
   })
 

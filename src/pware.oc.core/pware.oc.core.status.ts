@@ -16,7 +16,8 @@ import {
   type CanonicalStatus,
   type ToolStatus,
 } from "./constants/pware.oc.core.constants.status.js"
-import { formatTokenRate, shortMiddle } from "./pware.oc.core.pulse.js"
+import { formatTokenRate } from "./pware.oc.core.pulse.js"
+import { clipMiddleWidth } from "./pware.oc.core.width.js"
 
 export type { CanonicalStatus, ToolStatus }
 
@@ -104,7 +105,7 @@ export function tabStatus(opts: {
   cold: boolean
 }): TabStatus {
   if (opts.switching && opts.currentId !== opts.switching && !opts.dbError) {
-    return { label: `switching · ${shortMiddle(opts.switching, 10)}`, tone: "loading" }
+    return { label: `switching · ${clipMiddleWidth(opts.switching, 10)}`, tone: "loading" }
   }
   if (opts.dbError === TAB_STATUS_SESSION_NOT_IN_DB) {
     return { label: "waiting for session", tone: "loading" }

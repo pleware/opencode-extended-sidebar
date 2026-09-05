@@ -31,8 +31,16 @@ describe("myWorkGlyph", () => {
     expect(myWorkGlyph("draft-docs")).toEqual({ char: "•", tone: "textMuted" })
   })
 
+  test("plans are a muted ▸ — a browsable plan document", () => {
+    expect(myWorkGlyph("plans")).toEqual({ char: "▸", tone: "textMuted" })
+  })
+
   test("sessions is the primary ◔", () => {
     expect(myWorkGlyph("sessions")).toEqual({ char: "◔", tone: "primary" })
+  })
+
+  test("pinned is the primary P", () => {
+    expect(myWorkGlyph("pinned")).toEqual({ char: "P", tone: "primary" })
   })
 })
 
@@ -47,9 +55,9 @@ describe("tabAttentionGlyph", () => {
     expect(TAB_NEUTRAL_GLYPH).toEqual({ char: "•", tone: "textMuted" })
   })
 
-  test("sessions, drafting, draft docs and finished never light the tab", () => {
+  test("sessions, drafting, draft docs, pinned and finished never light the tab", () => {
     expect(
-      tabAttentionGlyph([item("sessions"), item("drafting"), item("draft-docs"), item("finished")]),
+      tabAttentionGlyph([item("sessions"), item("drafting"), item("draft-docs"), item("pinned"), item("finished")]),
     ).toEqual(TAB_NEUTRAL_GLYPH)
   })
 

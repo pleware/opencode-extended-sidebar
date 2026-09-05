@@ -1,6 +1,7 @@
 /** @jsxImportSource @opentui/solid */
 import { createEffect, createMemo, createSignal, For, on, Show, onCleanup, type JSX } from "solid-js"
 import { useTerminalDimensions } from "@opentui/solid"
+import type { BoxRenderable } from "@opentui/core"
 import type { TuiPluginApi, TuiTheme } from "@opencode-ai/plugin/tui"
 import {
   DraftFile,
@@ -21,6 +22,7 @@ import {
   myWorkLabel,
   toApprovalItems,
   toDraftDocItems,
+  toPlanItems,
   toQuestionItems,
   toSessionItems,
   type MyWorkItem,
@@ -36,8 +38,10 @@ import {
 } from "../pware.oc.opencode/resolver/index.js"
 import { type DocView } from "../pware.oc.omo/resolver/pware.oc.omo.resolver.doc.js"
 import type { DelegateView } from "../pware.oc.runtime/resolver/pware.oc.runtime.resolver.delegate.js"
-import { enrichApprovalSessionStates, planSessionStateLabel } from "../pware.oc.runtime/pware.oc.runtime.mywork-enrich.js"
+import { enrichApprovalSessionStates } from "../pware.oc.runtime/pware.oc.runtime.mywork-enrich.js"
 import {
+  ROW_LINE_FALLBACK,
+  ROW_LINE_RESERVE,
   ROW_MIN,
   ROW_RANK,
   clampScrollOffset,
@@ -77,11 +81,13 @@ import {
   MY_WORK_GROUP_DRAFT_DOCS,
   MY_WORK_GROUP_DRAFTING,
   MY_WORK_GROUP_FINISHED,
+  MY_WORK_GROUP_PINNED,
+  MY_WORK_GROUP_PLANS,
   MY_WORK_GROUP_READY_REVIEW,
   MY_WORK_GROUP_READY_START,
   MY_WORK_GROUP_SESSIONS,
 } from "../pware.oc.core/constants/pware.oc.core.constants.myWork.js"
-import { DOC_KIND_DRAFT } from "../pware.oc.omo/constants/pware.oc.omo.constants.docKind.js"
+import { DOC_KIND_DRAFT, DOC_KIND_PLAN } from "../pware.oc.omo/constants/pware.oc.omo.constants.docKind.js"
 import {
   GROUP_GLYPH,
   TAB_NEUTRAL_GLYPH,
@@ -105,12 +111,12 @@ import {
   TabColumn,
   OesStatusRow,
   agentDisplayName,
-  clip,
   useFold,
   useReveal,
   type RevealState,
   type RowData,
 } from "./pware.oc.ui.sections.js"
+import { clipWidth } from "../pware.oc.core/pware.oc.core.width.js"
 import { emptyPerf, readPerfSnapshot } from "../pware.oc.perf/pware.oc.perf.reader.js"
 import { PerfPanel } from "../pware.oc.perf/pware.oc.perf.view.js"
 import { shareBar } from "../pware.oc.perf/pware.oc.perf.charts.js"
@@ -244,6 +250,22 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   const [flow, setFlow] = createSignal<Record<string, FlowEntry>>({})
   const [tab, setTab] = createSignal<OesTab>(kvReadOne(props.api, KV_TAB, "current", OES_TABS))
   const dimensions = useTerminalDimensions()
+  /**
+   * Row width in columns, measured from the root box's computed layout width.
+   * `ref` fires before the first layout (width 0), so the oes-independent
+   * fallback holds until `onSizeChange` reports a real width. A scrollbar
+   * reserve is subtracted; the value is the same budget `lineMax` used to be.
+   */
+  const [lineWidth, setLineWidth] = createSignal(ROW_LINE_FALLBACK)
+  let rootBox: BoxRenderable | undefined
+  const rootRef = (node: BoxRenderable): void => {
+    rootBox = node
+    node.onSizeChange = () => {
+      const w = node.width
+      if (Number.isFinite(w) && w > 0) setLineWidth(Math.max(ROW_LINE_FALLBACK, w - ROW_LINE_RESERVE))
+    }
+  }
+  const lineMax = (): number => lineWidth()
   const [liveTools, setLiveTools] = createSignal<Record<string, ToolHit>>({})
   const [liveFiles, setLiveFiles] = createSignal<Record<string, FileView>>({})
   const [tokenTicks, setTokenTicks] = createSignal<readonly TokenTick[]>([])
@@ -684,7 +706,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
 
   const myWorkFold = {} as Record<MyWorkKind, ReturnType<typeof useFold>>
   for (const kind of MY_WORK_ORDER) {
-    // The Errors group is noise until you want it — start collapsed.
+    // Errors and Dismissed questions are noise until you want them — start collapsed.
     myWorkFold[kind] = useFold(props.api, `oes.fold.mywork.${kind}`, {
       after: requestRender,
       defaultOpen: kind !== QUESTION_KIND_ERROR && kind !== MY_WORK_GROUP_DISMISSED,
@@ -796,8 +818,9 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
             },
           ),
         ),
-        // Draft docs are not queue items — no session enrichment needed.
+        // Draft docs / Plans are not queue items — no session enrichment needed.
         ...toDraftDocItems(buckets.draftDocs),
+        ...toPlanItems(buckets.plans),
       ]
     } catch (e) {
       dbg("mywork.approvals", "error", String(e))
@@ -939,7 +962,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   const currentDelegatesReveal = useReveal(4)
 
   const myWorkRow = (item: MyWorkItem): RowData => {
-    if (item.kind === MY_WORK_GROUP_SESSIONS) {
+    if (item.kind === MY_WORK_GROUP_SESSIONS || item.kind === MY_WORK_GROUP_PINNED) {
       const isBusy = Boolean(item.sessionId && busy()[item.sessionId])
       return {
         kind: ROW_KIND_AGENT,
@@ -956,10 +979,11 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
         current: item.sessionId === props.sessionId,
         suffix: item.sessionId === props.sessionId ? "[C]" : undefined,
         onSelect: () => goSession(item.sessionId),
+        // Pin affordance — placeholder until the pinned backend is wired.
+        link: item.kind === MY_WORK_GROUP_SESSIONS ? { label: "P", onPick: () => {} } : undefined,
       }
     }
     if (item.kind === MY_WORK_GROUP_DRAFT_DOCS) {
-      const age = pulseAgeMs(now(), item.updatedAt)
       const doc: DocView = {
         kind: DOC_KIND_DRAFT,
         name: item.name,
@@ -972,18 +996,31 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
         kind: ROW_KIND_FILE,
         glyph: myWorkGlyph(item.kind),
         name: item.name,
-        suffix: formatAge(age),
+        onSelect: () => openDocDetail(props.api, doc, projectRoots(), colors()),
+      }
+    }
+    if (item.kind === MY_WORK_GROUP_PLANS) {
+      const doc: DocView = {
+        kind: DOC_KIND_PLAN,
+        name: item.name,
+        rel: item.rel,
+        updatedAt: item.updatedAt,
+        sizeBytes: 0,
+        previewable: true,
+      }
+      return {
+        kind: ROW_KIND_FILE,
+        glyph: myWorkGlyph(item.kind),
+        name: item.name,
         onSelect: () => openDocDetail(props.api, doc, projectRoots(), colors()),
       }
     }
     if ("sessionId" in item) {
-      const age = pulseAgeMs(now(), item.startedAt)
       const dismissible = item.kind === QUESTION_KIND_INTERRUPTED || item.kind === QUESTION_KIND_ERROR
       return {
         kind: ROW_KIND_AGENT,
         glyph: myWorkGlyph(item.kind),
         name: item.title,
-        suffix: formatAge(age),
         subline: item.reason ?? undefined,
         onSelect: dismissible
           ? () =>
@@ -999,7 +1036,6 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
           : () => goSession(item.sessionId),
       }
     }
-    const sessionLabel = planSessionStateLabel(item.sessionState)
     const reviewLabel = reviewStateSuffix(item.review)
     const drafting = item.kind === MY_WORK_GROUP_DRAFTING
     const showApprove = item.kind === MY_WORK_GROUP_READY_REVIEW
@@ -1017,7 +1053,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
       kind: ROW_KIND_FILE,
       glyph: myWorkGlyph(item.kind),
       name: item.name,
-      suffix: [sessionLabel, reviewLabel].filter(Boolean).join(" ") || undefined,
+      suffix: reviewLabel || undefined,
       onSelect: () => {
         const db = openReadonlyDb(snap().db.dbPath)
         const sessionId = db ? sessionForPlanFile(db, item.rel) : null
@@ -1082,11 +1118,11 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     phaseAgeMs(flow()[props.sessionId], now(), selfFlow()),
   )
 
-  /** The one place that binds a row to theme, frame and oes.json `lineMax`. */
+  /** The one place that binds a row to theme, frame and the measured row width. */
   const Row = (row: RowData): JSX.Element => (
     <AgentLine
       {...row}
-      lineMax={oes().lineMax}
+      lineMax={lineMax()}
       frame={frame}
       glyphFrame={glyphFrame}
       colors={colors()}
@@ -1172,7 +1208,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     const dirs = [debugActiveDir(), profileActiveDir()].filter((p): p is string => Boolean(p))
     if (dirs.length === 0) return ""
     const uniq = Array.from(new Set(dirs))
-    return `logs ${clip(uniq.join(" | "), 78)}`
+    return `logs ${clipWidth(uniq.join(" | "), 78)}`
   }
 
   const openRealtimeModal = (): void =>
@@ -1183,7 +1219,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     })
 
   return (
-    <box flexDirection="column" gap={0}>
+    <box ref={rootRef} flexDirection="column" gap={0}>
       <Show when={engaging()}>
         <box flexDirection="row" gap={1}>
           <text fg={colors().primary}>{`${spinnerFrame(engageTick())} engage`}</text>
@@ -1539,7 +1575,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
                 api={props.api}
                 perf={perf()}
                 colors={colors()}
-                lineMax={oes().lineMax}
+      lineMax={lineMax()}
                 rows={oes().perfRows}
                 glyphFrame={glyphFrame}
                 livePhase={selfFlow()}
@@ -1561,7 +1597,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
         <box flexDirection="column" gap={0} onMouseScroll={onConsoleScroll}>
           <text fg={colors().textMuted}>{`dbg · ${consoleLines().length}`}</text>
           <For each={consoleWindow()}>
-            {(line) => <text fg={colors().textMuted}>{clip(line.text, oes().lineMax)}</text>}
+            {(line) => <text fg={colors().textMuted}>{clipWidth(line.text, lineMax())}</text>}
           </For>
         </box>
       </Show>

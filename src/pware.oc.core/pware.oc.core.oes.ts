@@ -8,7 +8,6 @@ import { createStampCache } from "./pware.oc.core.cache.js"
 
 export type OesOptions = {
   fileRows: number
-  lineMax: number
   /** Sessions compared under Perf → History. 0 hides the section. */
   perfHistory: number
   /** Rows per Perf section (models, tools, history). */
@@ -26,7 +25,6 @@ export type OesOptions = {
 
 export const OES_DEFAULTS: OesOptions = {
   fileRows: 8,
-  lineMax: 31,
   perfHistory: 3,
   perfRows: 5,
   perfTurns: 120,
@@ -51,7 +49,6 @@ export function pick(raw: Record<string, unknown> | null, base: OesOptions): Oes
   const toolRows = clamp(raw.toolRows, 3, 20, base.toolRows)
   return {
     fileRows: clamp(raw.fileRows, 3, 20, base.fileRows),
-    lineMax: clamp(raw.lineMax, 20, 64, base.lineMax),
     perfHistory: clamp(raw.perfHistory, 0, 10, base.perfHistory),
     perfRows: clamp(raw.perfRows, 3, 20, base.perfRows),
     perfTurns: clamp(raw.perfTurns, 20, 500, base.perfTurns),

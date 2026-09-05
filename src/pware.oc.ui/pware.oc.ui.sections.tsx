@@ -33,6 +33,7 @@ import {
 } from "./pware.oc.ui.glyphs.js"
 import { profile } from "../pware.oc.core/pware.oc.core.debug.js"
 import { moreRevealVisible, sliceShown } from "../pware.oc.core/pware.oc.core.layout.js"
+import { clipWidth, strWidth } from "../pware.oc.core/pware.oc.core.width.js"
 import { oesBarParts, statusBarLine, type TabStatus } from "../pware.oc.core/pware.oc.core.status.js"
 import {
   formatTokens,
@@ -211,6 +212,7 @@ export type RowData = {
   tokens?: number | null
   cost?: number | null
   title?: string
+  /** Right-side trailing text — status, age, review; rendered faded. */
   suffix?: string
   /** Muted second line drawn under the row — e.g. a question's dismissal/error reason. */
   subline?: string
@@ -223,15 +225,9 @@ export type RowData = {
   indent?: boolean
   /** Override the body text tone (defaults from `defaultBodyTone`). */
   bodyTone?: ToneKey | null
+  /** A clickable trailing link (e.g. a pin affordance) at the far right. */
+  link?: { label: string; onPick: () => void }
   onSelect?: () => void
-}
-
-export function clip(s: string, max: number): string {
-  const t = s.replace(/\s+/g, " ").trim()
-  if (max <= 0) return ""
-  if (t.length <= max) return t
-  if (max === 1) return "…"
-  return `${t.slice(0, max - 1)}…`
 }
 
 export function agentDisplayName(name: string): string {
@@ -240,8 +236,60 @@ export function agentDisplayName(name: string): string {
 
 function shortName(name: string, kind: RowKind, max: number): string {
   if (kind === ROW_KIND_FILE) return shortFileName(name, max)
-  if (kind === ROW_KIND_AGENT || kind === ROW_KIND_GROUP) return clip(agentDisplayName(name), max)
-  return clip((name || "agent").replace(/\s+/g, " ").trim(), max)
+  if (kind === ROW_KIND_AGENT || kind === ROW_KIND_GROUP) return clipWidth(agentDisplayName(name), max)
+  return clipWidth(name || "agent", max)
+}
+
+export type ComposedRow = {
+  /** Identity + meta (+ optional title), clipped once to the available room. */
+  body: string
+  /** Trailing text (status/age/review), clipped to its own right budget. */
+  suffix: string
+  /** True when the body was clipped — the caller renders it faded. */
+  truncated: boolean
+}
+
+/** Fraction of the line reserved for the right-side suffix; the name never outruns it. */
+const SUFFIX_BUDGET_FRACTION = 0.4
+
+/**
+ * Compose one row line from its parts against a column budget. The trailing
+ * suffix wins a capped share of the line (`SUFFIX_BUDGET_FRACTION`) so a long
+ * status can't starve the name; the name and suffix are each clipped to their
+ * own room with a terminal `…`. Pure — unit-tested directly.
+ */
+export function composeRow(
+  opts: Pick<
+    RowData,
+    "name" | "kind" | "tokens" | "cost" | "title" | "suffix" | "diff"
+  >,
+  lineMax: number,
+): ComposedRow {
+  const max = Math.max(0, lineMax - 2)
+  const suffixMax = Math.max(0, Math.floor(max * SUFFIX_BUDGET_FRACTION))
+  const suffix = clipWidth(opts.suffix?.trim() ?? "", suffixMax)
+  const diffW = opts.diff
+    ? strWidth(formatDiffStat(opts.diff.additions, opts.diff.deletions))
+    : 0
+  const extra = (suffix ? strWidth(suffix) + 1 : 0) + (diffW ? diffW + 1 : 0)
+  const room = Math.max(0, max - extra)
+  const tok = opts.tokens === undefined ? "" : formatTokens(opts.tokens)
+  const usd = formatUsd(opts.cost)
+  const meta = [tok, usd].filter(Boolean).join(" ")
+  const metaW = meta ? strWidth(meta) + 1 : 0
+  const title = opts.title?.replace(/\s+/g, " ").trim()
+  const nameBudget = title
+    ? Math.max(4, Math.floor((room - metaW) / 2))
+    : Math.max(1, room - metaW)
+  const agent = shortName(opts.name, opts.kind, nameBudget)
+  const head = [agent, tok, usd].filter(Boolean).join(" ")
+  const titleDropped = Boolean(title) && room - strWidth(head) < 9
+  const full = !title || titleDropped ? head : `${head} ${title}`
+  const body = clipWidth(full, room)
+  // The name is clipped inside `shortName` (middle/end `…`); a dropped title is
+  // the other truncation path. Either way the caller fades the row.
+  const truncated = agent.includes("…") || titleDropped
+  return { body, suffix, truncated }
 }
 
 /** Single renderer for every sidebar row: glyph(s), name, tokens, title, suffix, diff. */
@@ -277,30 +325,7 @@ export function AgentLine(props: RowData & {
     return toneColor(spec.tone, props.colors)
   }
   const bodyTone = () => props.bodyTone ?? defaultBodyTone(props.kind, props.mark, Boolean(props.current))
-  const rest = () => {
-    const max = Math.max(0, props.lineMax - 2)
-    const suffix = props.suffix?.trim() ?? ""
-    const diffW = props.diff ? formatDiffStat(props.diff.additions, props.diff.deletions).length : 0
-    const extra = (suffix ? suffix.length + 1 : 0) + (diffW ? diffW + 1 : 0)
-    const room = Math.max(0, max - extra)
-    const tok = props.tokens === undefined ? "" : formatTokens(props.tokens)
-    const usd = formatUsd(props.cost)
-    const meta = [tok, usd].filter(Boolean).join(" ")
-    const metaW = meta ? meta.length + 1 : 0
-    const title = props.title?.replace(/\s+/g, " ").trim()
-    // One budget (`lineMax`): identity + meta (+ optional title) clipped once to `room`.
-    const nameBudget = title
-      ? Math.max(4, Math.floor((room - metaW) / 2))
-      : Math.max(1, room - metaW)
-    const agent = shortName(props.name, props.kind, nameBudget)
-    const head = [agent, tok, usd].filter(Boolean).join(" ")
-    const body = !title
-      ? clip(head, room)
-      : room - head.length < 9
-        ? clip(head, room)
-        : clip(`${head} ${title}`, room)
-    return suffix ? `${body} ${suffix}` : body
-  }
+  const row = () => composeRow(props, props.lineMax)
   return profile("row", () => (
     <box flexDirection="column" gap={0}>
       <box flexDirection="row" onMouseUp={props.onSelect}>
@@ -318,9 +343,15 @@ export function AgentLine(props: RowData & {
           fg={toneColor(bodyTone(), props.colors)}
           bold={Boolean(props.current)}
           underline={Boolean(props.onSelect)}
+          opacity={row().truncated ? 0.5 : undefined}
         >
-          {rest()}
+          {row().body}
         </ClickText>
+        <Show when={row().suffix}>
+          <text fg={props.colors.textMuted} opacity={0.5}>
+            {` ${row().suffix}`}
+          </text>
+        </Show>
         <Show when={Boolean(props.diff && (props.diff.additions > 0 || props.diff.deletions > 0))}>
           <text> </text>
           <DiffStat
@@ -329,9 +360,15 @@ export function AgentLine(props: RowData & {
             colors={props.colors}
           />
         </Show>
+        <Show when={props.link}>
+          <box flexGrow={1} />
+          <ClickText fg={props.colors.primary || props.colors.text} underline onMouseUp={props.link!.onPick}>
+            {props.link!.label}
+          </ClickText>
+        </Show>
       </box>
       <Show when={props.subline}>
-        <text fg={props.colors.textMuted}>{`  ${clip(props.subline ?? "", Math.max(0, props.lineMax - 2))}`}</text>
+        <text fg={props.colors.textMuted}>{`  ${clipWidth(props.subline ?? "", Math.max(0, props.lineMax - 2))}`}</text>
       </Show>
     </box>
   ))

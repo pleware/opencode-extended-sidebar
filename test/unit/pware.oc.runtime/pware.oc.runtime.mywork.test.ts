@@ -10,6 +10,7 @@ import {
   startWorkCommand,
   toApprovalItems,
   toDraftDocItems,
+  toPlanItems,
   toQuestionItems,
   toSessionItems,
   type MyWorkItem,
@@ -36,6 +37,7 @@ const approval: MyWorkItem = {
 
 describe("myWorkLabel", () => {
   test("labels map to the My work groups", () => {
+    expect(myWorkLabel("pinned")).toBe("Pinned")
     expect(myWorkLabel("question")).toBe("Awaiting answer")
     expect(myWorkLabel("interrupted")).toBe("Interrupted")
     expect(myWorkLabel("error")).toBe("Errors")
@@ -46,6 +48,7 @@ describe("myWorkLabel", () => {
     expect(myWorkLabel("dismissed")).toBe("Dismissed questions")
     expect(myWorkLabel("drafting")).toBe("Drafting")
     expect(myWorkLabel("draft-docs")).toBe("Draft docs")
+    expect(myWorkLabel("plans")).toBe("Plans")
   })
 })
 
@@ -186,6 +189,23 @@ describe("toDraftDocItems", () => {
   })
 })
 
+describe("toPlanItems", () => {
+  test("maps each leftover plan to the plans variant with name, rel and updatedAt", () => {
+    const items = toPlanItems([
+      { name: "stale", rel: "plans/stale.md", updatedAt: 2_000 },
+      { name: "orphan", rel: "plans/orphan.md", updatedAt: null },
+    ])
+    expect(items).toEqual([
+      { kind: "plans", name: "stale", rel: "plans/stale.md", updatedAt: 2_000 },
+      { kind: "plans", name: "orphan", rel: "plans/orphan.md", updatedAt: null },
+    ])
+  })
+
+  test("an empty bucket stays empty", () => {
+    expect(toPlanItems([])).toEqual([])
+  })
+})
+
 describe("toApprovalItems", () => {
   test("maps status + draftness to the group kind and keeps sessionState", () => {
     const items = toApprovalItems([
@@ -305,11 +325,14 @@ describe("groupMyWork", () => {
     const dismissed: MyWorkItem = { ...question, kind: "dismissed", reason: "The user dismissed this question" }
     const drafting: MyWorkItem = { ...approval, kind: "drafting" }
     const draftDoc: MyWorkItem = { kind: "draft-docs", name: "old", rel: "drafts/old.md", updatedAt: null }
+    const planDoc: MyWorkItem = { kind: "plans", name: "plan-x", rel: "plans/plan-x.md", updatedAt: null }
+    const pinned: MyWorkItem = { kind: "pinned", sessionId: "ses_p", title: "Pinned", status: "idle", timeUpdated: 1_000 }
     expect(
-      groupMyWork([finished, draftDoc, dismissed, approval, readyStart, drafting, question, interrupted, errored, sessions]).map(
+      groupMyWork([finished, dismissed, draftDoc, planDoc, pinned, approval, readyStart, drafting, question, interrupted, errored, sessions]).map(
         (g) => g.kind,
       ),
     ).toEqual([
+      "pinned",
       "question",
       "interrupted",
       "error",
@@ -317,9 +340,10 @@ describe("groupMyWork", () => {
       "ready-to-review",
       "ready-to-start",
       "finished",
-      "dismissed",
       "drafting",
       "draft-docs",
+      "plans",
+      "dismissed",
     ])
     expect(groupMyWork([question]).map((g) => g.kind)).toEqual(["question"])
     expect(groupMyWork([])).toEqual([])
@@ -327,6 +351,7 @@ describe("groupMyWork", () => {
 
   test("order constant matches the grouped order", () => {
     expect(MY_WORK_ORDER).toEqual([
+      "pinned",
       "question",
       "interrupted",
       "error",
@@ -334,9 +359,10 @@ describe("groupMyWork", () => {
       "ready-to-review",
       "ready-to-start",
       "finished",
-      "dismissed",
       "drafting",
       "draft-docs",
+      "plans",
+      "dismissed",
     ])
   })
 })

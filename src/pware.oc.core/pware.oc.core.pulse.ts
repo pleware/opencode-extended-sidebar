@@ -2,6 +2,7 @@
 import { eventType } from "./pware.oc.core.events.js"
 import { basenameOf } from "./pware.oc.core.paths.js"
 import { normalizeStatus, toToolStatus } from "./pware.oc.core.status.js"
+import { clipMiddleWidth, clipWidth, strWidth } from "./pware.oc.core.width.js"
 import {
   EVENT_MESSAGE_PART_UPDATED,
   EVENT_PART_DELTA,
@@ -492,10 +493,10 @@ export function formatPercent(share: number | null | undefined): string {
 /** A metric chip on a row. Higher `rank` is dropped first when the line is tight. */
 export type Chip = { text: string; rank: number }
 
-/** Keep as many chips as `max` allows, worst rank first, name budget reserved. */
+/** Keep as many chips as `max` columns allows, worst rank first, name budget reserved. */
 export function packChips(nameWidth: number, chips: Chip[], max: number): Chip[] {
   const keep = chips.filter((c) => c.text)
-  const width = () => keep.reduce((sum, c) => sum + c.text.length + 1, nameWidth)
+  const width = () => keep.reduce((sum, c) => sum + strWidth(c.text) + 1, nameWidth)
   while (keep.length > 0 && width() > max) {
     let worst = 0
     for (let i = 1; i < keep.length; i += 1) {
@@ -513,18 +514,7 @@ export function packStackedRow(
   lineMax: number,
 ): { name: string; chips: Chip[] } {
   const room = Math.max(4, lineMax - 2)
-  return { name: shortMiddle(name, room), chips: packChips(0, chips, room) }
-}
-
-/** Middle ellipsis — `deepseek-v4-pro` keeps both the family and the tier. */
-export function shortMiddle(name: string, max: number): string {
-  const t = name.replace(/\s+/g, " ").trim()
-  if (max <= 0) return ""
-  if (t.length <= max) return t
-  if (max <= 2) return t.slice(0, max)
-  const tail = Math.max(3, Math.floor((max - 1) / 2))
-  const head = max - 1 - tail
-  return `${t.slice(0, head)}…${t.slice(t.length - tail)}`
+  return { name: clipMiddleWidth(name, room), chips: packChips(0, chips, room) }
 }
 
 export function toolMark(status: string): AgentMark {
@@ -544,12 +534,6 @@ export type ToolHit = {
   id: string
   name: string
   status: ToolStatus
-}
-
-function clipHint(s: string, max: number): string {
-  const t = s.replace(/\s+/g, " ").trim()
-  if (!t) return ""
-  return t.length > max ? `${t.slice(0, max - 1)}…` : t
 }
 
 function firstHint(
@@ -586,8 +570,8 @@ export function shortToolLabel(opts: {
   const max = opts.maxHint ?? 22
   const fileMax = max > 22 ? 32 : 14
   const patMax = max > 22 ? 40 : 12
-  if (opts.filePath) return `${tool} ${clipHint(basenameOf(opts.filePath), fileMax)}`.trim()
-  if (opts.pattern) return `${tool} ${clipHint(opts.pattern, patMax)}`.trim()
+  if (opts.filePath) return `${tool} ${clipWidth(basenameOf(opts.filePath), fileMax)}`.trim()
+  if (opts.pattern) return `${tool} ${clipWidth(opts.pattern, patMax)}`.trim()
   const raw =
     firstHint(tool, [opts.description, opts.title], 80) ||
     firstHint(tool, [opts.command]) ||
@@ -595,14 +579,14 @@ export function shortToolLabel(opts: {
   const stripped = raw.replace(/^cd\s+\S+\s*(?:&&|;)\s*/i, "")
   if (max <= 22) {
     const fileish = stripped.match(/(?:^|[\s/\\])((?:[\w.-]+[/\\])*[\w.-]+\.[a-z0-9]{1,8})\b/i)
-    if (fileish?.[1]) return clipHint(basenameOf(fileish[1]), 20)
+    if (fileish?.[1]) return clipWidth(basenameOf(fileish[1]), 20)
     const bin = stripped.match(/\b(phpstan|rector|git|composer|npm|bun|uvx|graphify)\b/i)
     if (bin?.[1]) {
       const i = stripped.toLowerCase().indexOf(bin[1].toLowerCase())
-      return clipHint(stripped.slice(i), max)
+      return clipWidth(stripped.slice(i), max)
     }
   }
-  if (stripped) return clipHint(stripped, max)
+  if (stripped) return clipWidth(stripped, max)
   return tool
 }
 

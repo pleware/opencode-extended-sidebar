@@ -5,7 +5,9 @@
 import { readGitMarksFor, relToGitRoot, type GitLetter } from "../pware.oc.core/git/pware.oc.core.git.js"
 import { profile } from "../pware.oc.core/pware.oc.core.debug.js"
 import { ignoredByGitignore, ignoredByOesignore } from "../pware.oc.core/git/pware.oc.core.gitignore.js"
-import { getOes, OES_DEFAULTS } from "../pware.oc.core/pware.oc.core.oes.js"
+import { getOes } from "../pware.oc.core/pware.oc.core.oes.js"
+import { ROW_LINE_FALLBACK } from "../pware.oc.core/pware.oc.core.layout.js"
+import { strWidth, takeCols, takeLastCols } from "../pware.oc.core/pware.oc.core.width.js"
 import { eventKind, eventType } from "../pware.oc.core/pware.oc.core.events.js"
 import {
   EVENT_KIND_DB_REFRESH,
@@ -24,7 +26,7 @@ import {
 
 export { basenameOf, FILE_TOUCH_READ, FILE_TOUCH_WRITE, type FileTouch }
 
-export const FILE_ROWS = OES_DEFAULTS.fileRows
+export const FILE_ROWS = 8
 
 export type FileFilter = {
   skipGitignore?: boolean
@@ -51,20 +53,20 @@ export type FileView = {
   letter: FileLetter | null
 }
 
-/** Long names: start…end.ext — no directories. */
-export function shortFileName(raw: string, max = OES_DEFAULTS.lineMax): string {
+/** Long names: start…end.ext — no directories. Column budget, not code units. */
+export function shortFileName(raw: string, max = ROW_LINE_FALLBACK): string {
   const base = basenameOf(raw)
-  if (base.length <= max) return base
+  if (strWidth(base) <= max) return base
   const dot = base.lastIndexOf(".")
   const ext = dot > 0 && dot >= base.length - 8 ? base.slice(dot) : ""
   const stem = ext ? base.slice(0, -ext.length) : base
   const ellip = "…"
-  const room = max - ext.length - ellip.length
-  if (room < 2) return `${base.slice(0, Math.max(1, max - 1))}${ellip}`
-  const tail = Math.min(stem.length, Math.max(3, Math.ceil(room * 0.55)))
+  const room = max - strWidth(ext) - strWidth(ellip)
+  if (room < 2) return `${takeCols(base, Math.max(1, max - 1))}${ellip}`
+  const tail = Math.min(strWidth(stem), Math.max(3, Math.ceil(room * 0.55)))
   const head = Math.max(1, room - tail)
-  if (head + tail >= stem.length) return base.slice(0, max)
-  return `${stem.slice(0, head)}${ellip}${stem.slice(-tail)}${ext}`
+  if (head + tail >= strWidth(stem)) return takeCols(base, max)
+  return `${takeCols(stem, head)}${ellip}${takeLastCols(stem, tail)}${ext}`
 }
 
 export function formatDiffStat(add: number, del: number): string {

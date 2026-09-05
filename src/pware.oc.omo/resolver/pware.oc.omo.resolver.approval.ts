@@ -65,10 +65,19 @@ export type ScanResult = {
   finished: ApprovalItem[]
   /** Draft documents no action group covers — approved/done, unknown or no status. */
   draftDocs: ApprovalItem[]
+  /** Plan documents no action group covers — unknown or no status. */
+  plans: ApprovalItem[]
 }
 
 function emptyScan(): ScanResult {
-  return { drafting: [], readyReview: [], readyStart: [], finished: [], draftDocs: [] }
+  return {
+    drafting: [],
+    readyReview: [],
+    readyStart: [],
+    finished: [],
+    draftDocs: [],
+    plans: [],
+  }
 }
 
 function sortApprovals(items: ApprovalItem[]): ApprovalItem[] {
@@ -82,6 +91,7 @@ function scan(root: string): ScanResult {
   const readyStart: ApprovalItem[] = []
   const finished: ApprovalItem[] = []
   const draftDocs: ApprovalItem[] = []
+  const plans: ApprovalItem[] = []
   const seen = new Set<string>()
   const workStates = planWorkStateByPlanName(root)
   for (const omoDir of findOmoWatchDirs(root)) {
@@ -99,10 +109,9 @@ function scan(root: string): ScanResult {
         const status = parsePlanStatus(text)
         const name = approvalName(rel)
         const workState = workStates.get(name) ?? "absent"
-        // A plan with no parseable status is not a plan at all — skip. A draft
-        // without a status is still a working document, so it is kept as a
-        // Draft doc below (isDraft is decided before this status guard).
-        if (!isDraft && !status) continue
+        // A plan with no parseable status is still a plan document — it lands in
+        // the Plans archive below (decided after this status guard). A draft
+        // without a status is still a working document — Draft docs.
         const group = status ? resolveApprovalGroup(status, isDraft, workState, false) : null
         const item: ApprovalItem = {
           rel,
@@ -114,11 +123,12 @@ function scan(root: string): ScanResult {
           workState,
         }
         if (!group) {
-          // A draft no action group covers (superseded approved/done, unknown
-          // or no status) is a document, not a queue item — Draft docs.
-          if (!isDraft) continue
+          // A document no action group covers (superseded approved/done, unknown
+          // or no status) is browsable, not a queue item: drafts → Draft docs,
+          // plans → Plans.
           seen.add(rel)
-          draftDocs.push(item)
+          if (isDraft) draftDocs.push(item)
+          else plans.push(item)
           continue
         }
         seen.add(rel)
@@ -145,6 +155,7 @@ function scan(root: string): ScanResult {
     readyStart: sortApprovals(readyStart),
     finished: sortApprovals(finished),
     draftDocs: sortApprovals(draftDocs),
+    plans: sortApprovals(plans),
   }
 }
 

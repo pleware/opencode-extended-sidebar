@@ -26,7 +26,6 @@ import {
   pushTokenTick,
   sessionBusyFromEvent,
   sessionIdFromEvent,
-  shortMiddle,
   shortToolLabel,
   stampMs,
   stripSessionPrefix,
@@ -39,6 +38,7 @@ import {
   toolHitFromEvent,
   toolMark,
 } from "../../../src/pware.oc.core/pware.oc.core.pulse.js"
+import { strWidth } from "../../../src/pware.oc.core/pware.oc.core.width.js"
 
 describe("toEpochMs / stampMs", () => {
   test("seconds, ms, ISO, and junk", () => {
@@ -145,6 +145,11 @@ describe("packChips", () => {
     expect(kept.map((c) => c.text)).not.toContain("bbbb")
     expect(kept.length).toBeGreaterThan(0)
   })
+  test("wide chips are measured in columns, not code units", () => {
+    // "中中" is 2 code units but 4 columns; a 3-column budget fits only ASCII.
+    expect(packChips(0, [{ text: "中中", rank: 1 }], 3)).toEqual([])
+    expect(packChips(0, [{ text: "ab", rank: 1 }], 3)).toHaveLength(1)
+  })
 })
 
 describe("packStackedRow", () => {
@@ -157,6 +162,11 @@ describe("packStackedRow", () => {
     const stacked = packStackedRow("deepseek-chat-pro", chips, 24)
     expect(stacked.name).toBe("deepseek-chat-pro")
     expect(stacked.chips.map((c) => c.text)).toEqual(["38×", "↑3.2s", "∴14s"])
+  })
+  test("name is clipped by columns, keeping head and tail", () => {
+    const stacked = packStackedRow("这是一个很长的模型名称需要截断", [], 12)
+    expect(strWidth(stacked.name)).toBeLessThanOrEqual(Math.max(4, 12 - 2))
+    expect(stacked.name).toContain("…")
   })
 })
 
@@ -522,16 +532,6 @@ describe("formatUsd", () => {
     expect(formatUsd(9.99)).toBe("$9.99")
     expect(formatUsd(10)).toBe("$10")
     expect(formatUsd(123.456)).toBe("$123")
-  })
-})
-
-describe("shortMiddle", () => {
-  test("fits or trims with a middle ellipsis", () => {
-    expect(shortMiddle("", 5)).toBe("")
-    expect(shortMiddle("abc", 5)).toBe("abc")
-    expect(shortMiddle("abc", 0)).toBe("")
-    expect(shortMiddle("abcdef", 2)).toBe("ab")
-    expect(shortMiddle("deepseek-v4-pro", 8)).toBe("deep…pro")
   })
 })
 
