@@ -71,6 +71,36 @@ describe("listApprovals", () => {
     expect(a?.rel).toBe(".omo/drafts/a.md")
   })
 
+  test("a draft superseded by its plan is dropped from every bucket (R1)", () => {
+    const root = project({
+      ".omo/drafts/foo.md": "---\nstatus: awaiting-approval\npending-action: write .omo/plans/foo.md\n---",
+      ".omo/plans/foo.md": "---\nstatus: approved\n---",
+    })
+    const out = listApprovals(root)
+    expect(out.readyReview.map((a) => a.name)).toEqual([])
+    expect(out.draftDocs.map((a) => a.name)).toEqual([])
+    expect(out.readyStart.map((a) => a.name)).toEqual(["foo"])
+  })
+
+  test("an approved draft with no plan file stays a Draft doc (B.a)", () => {
+    const root = project({
+      ".omo/drafts/bar.md": "---\nstatus: approved\n---",
+    })
+    const out = listApprovals(root)
+    expect(out.readyStart.map((a) => a.name)).toEqual([])
+    expect(out.draftDocs.map((a) => a.name)).toEqual(["bar"])
+  })
+
+  test("a legacy .sisyphus draft superseded by a .omo plan is dropped too", () => {
+    const root = project({
+      ".sisyphus/drafts/foo.md": "---\nstatus: approved\n---",
+      ".omo/plans/foo.md": "---\nstatus: approved\n---",
+    })
+    const out = listApprovals(root)
+    expect(out.draftDocs.map((a) => a.name)).toEqual([])
+    expect(out.readyStart.map((a) => a.name)).toEqual(["foo"])
+  })
+
   test("no project and no .omo are both empty, not a throw", () => {
     expect(listApprovals(null)).toEqual(EMPTY)
     expect(listApprovals(project({ "README.md": "hi" }))).toEqual(EMPTY)

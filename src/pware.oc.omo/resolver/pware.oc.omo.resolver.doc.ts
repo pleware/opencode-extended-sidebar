@@ -163,7 +163,10 @@ export function omoScanRecord(projectRoot: string | null | undefined): OmoDocSca
  * Stat-only rows of one doc kind from the shared per-root omo scan — the single
  * stamp cache behind both `listOmoFiles` and the approval classifier
  * (`approval.ts`). Each kind is scanned lazily on first request and cached with
- * the root record until the TTL expires.
+ * the root record until the TTL expires. Draft rows are the one place where a
+ * draft superseded by its plan is dropped: a draft whose slug already exists as
+ * a plan file is hidden everywhere (Session-tab draft list, My-work action
+ * groups, the Draft docs archive), because the plan is the live artifact.
  */
 export function omoKindRows(kind: DocKind, projectRoot: string | null | undefined): DocView[] {
   if (!projectRoot) return []
@@ -178,8 +181,30 @@ export function omoKindRows(kind: DocKind, projectRoot: string | null | undefine
       return []
     }
   })
-  scan.rows[kind] = rows
-  return rows
+  scan.rows[kind] = kind === DOC_KIND_DRAFT ? dropSupersededDrafts(rows, projectRoot) : rows
+  return scan.rows[kind]
+}
+
+/**
+ * The slugs that already have a plan file. A draft sharing one of these is
+ * superseded — the plan is the live artifact, so the draft must not surface in
+ * any list (Session drafts, My-work action groups or the Draft docs archive).
+ */
+function plannedSlugs(projectRoot: string): ReadonlySet<string> {
+  const slugs = new Set<string>()
+  for (const row of omoKindRows(DOC_KIND_PLAN, projectRoot)) {
+    if (!row.rel.toLowerCase().endsWith(".md")) continue
+    const slug = approvalName(row.rel)
+    if (slug) slugs.add(slug)
+  }
+  return slugs
+}
+
+/** Drafts whose basename already exists as a plan (same slug) are superseded. */
+function dropSupersededDrafts(rows: readonly DocView[], projectRoot: string): DocView[] {
+  const planned = plannedSlugs(projectRoot)
+  if (planned.size === 0) return rows as DocView[]
+  return rows.filter((d) => !planned.has(approvalName(d.rel)))
 }
 
 /** Drop the shared omo scan cache so the next read hits the filesystem. */

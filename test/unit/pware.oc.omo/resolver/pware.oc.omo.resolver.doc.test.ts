@@ -99,6 +99,32 @@ describe("listOmoFiles", () => {
     const root = project({ ".sisyphus/notepads/learnings.md": "notes" })
     expect(names(listOmoFiles("notepad", root))).toEqual(["learnings.md"])
   })
+
+  test("a draft whose slug exists as a plan is superseded and hidden from the draft list", () => {
+    const root = project({
+      ".omo/plans/foo.md": "plan",
+      ".omo/drafts/foo.md": "draft",
+      ".omo/drafts/bar.md": "draft",
+    })
+    expect(names(listOmoFiles("plan", root))).toEqual(["foo.md"])
+    expect(names(listOmoFiles("draft", root))).toEqual(["bar.md"])
+  })
+
+  test("a legacy .sisyphus draft is superseded by a plan with the same slug under .omo", () => {
+    const root = project({
+      ".omo/plans/foo.md": "plan",
+      ".sisyphus/drafts/foo.md": "draft",
+    })
+    expect(listOmoFiles("draft", root)).toEqual([])
+  })
+
+  test("a draft with no matching plan stays visible", () => {
+    const root = project({
+      ".omo/plans/foo.md": "plan",
+      ".omo/drafts/bar.md": "draft",
+    })
+    expect(names(listOmoFiles("draft", root))).toEqual(["bar.md"])
+  })
 })
 
 describe("per-kind list wrappers", () => {
