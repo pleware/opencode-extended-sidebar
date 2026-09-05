@@ -43,4 +43,14 @@ describe("pick", () => {
       OES_DEFAULTS.sessionFetch,
     )
   })
+
+  test("questionReconcileSec defaults to 15 and is clamped to [5, 300]", () => {
+    expect(OES_DEFAULTS.questionReconcileSec).toBe(15)
+    expect(pick({ questionReconcileSec: 1 }, OES_DEFAULTS).questionReconcileSec).toBe(5)
+    expect(pick({ questionReconcileSec: 999 }, OES_DEFAULTS).questionReconcileSec).toBe(300)
+    expect(
+      pick({ questionReconcileSec: "nope" } as Record<string, unknown>, OES_DEFAULTS).questionReconcileSec,
+    ).toBe(OES_DEFAULTS.questionReconcileSec)
+    expect(pick({ questionReconcileSec: 15.6 }, OES_DEFAULTS).questionReconcileSec).toBe(16)
+  })
 })

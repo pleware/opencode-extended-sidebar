@@ -14,6 +14,8 @@ export type OesOptions = {
   perfRows: number
   /** How many recent turns Perf scans. Higher = longer history, slower read. */
   perfTurns: number
+  /** Seconds between full open-question rescans when no event-driven hint arrives. */
+  questionReconcileSec: number
   /** Sessions fetched for the recent-sessions window. */
   sessionFetch: number
   /** Hide Files that match the project's root .gitignore. Off by default. */
@@ -28,6 +30,7 @@ export const OES_DEFAULTS: OesOptions = {
   perfHistory: 3,
   perfRows: 5,
   perfTurns: 120,
+  questionReconcileSec: 15,
   sessionFetch: 20,
   skipGitignore: false,
   toolRows: 5,
@@ -52,6 +55,7 @@ export function pick(raw: Record<string, unknown> | null, base: OesOptions): Oes
     perfHistory: clamp(raw.perfHistory, 0, 10, base.perfHistory),
     perfRows: clamp(raw.perfRows, 3, 20, base.perfRows),
     perfTurns: clamp(raw.perfTurns, 20, 500, base.perfTurns),
+    questionReconcileSec: clamp(raw.questionReconcileSec, 5, 300, base.questionReconcileSec),
     sessionFetch: clamp(raw.sessionFetch, 2, 80, base.sessionFetch),
     skipGitignore: typeof raw.skipGitignore === "boolean" ? raw.skipGitignore : base.skipGitignore,
     toolRows,

@@ -2,13 +2,16 @@
  * pware.oc.core.omo.resolver.approval
  *
  * OMO plan approval queue — drafts/plans under `.omo/` (or legacy `.sisyphus/`)
- * whose `status` says they are waiting for the user's sign-off. Scanned lazily
- * behind a short TTL, never on the poll path; a missing `.omo/` is an empty
+ * whose `status` says they are waiting for the user's sign-off. File discovery
+ * and stat are shared with the docs index: both this module and `doc.ts` read
+ * one per-root omo scan cache, so `.omo/` is walked once per TTL no matter how
+ * many consumers ask. Classification then reads each plan/draft file's
+ * frontmatter; the result is memoized against the same scan record and is
+ * recomputed only when that record turns over. A missing `.omo/` is an empty
  * list, not an error.
  */
 import fs from "node:fs"
 import path from "node:path"
-import { createStampCache } from "../../pware.oc.core/pware.oc.core.cache.js"
 import { profile } from "../../pware.oc.core/pware.oc.core.debug.js"
 import { canonicalizePath } from "../../pware.oc.core/pware.oc.core.paths.js"
 import {
@@ -18,7 +21,7 @@ import {
   MY_WORK_GROUP_READY_START,
 } from "../../pware.oc.core/constants/pware.oc.core.constants.myWork.js"
 import { resolveApprovalGroup } from "./pware.oc.omo.resolver.approvalGroup.js"
-import { findOmoWatchDirs, planWorkStateByPlanName } from "./pware.oc.omo.resolver.boulder.js"
+import { planWorkStateByPlanName } from "./pware.oc.omo.resolver.boulder.js"
 import {
   approvalName,
   parsePlanPendingAction,
@@ -26,36 +29,16 @@ import {
   parseReviewBlock,
   type ApprovalItem,
 } from "./pware.oc.omo.resolver.plan.js"
+import { DOC_KIND_DRAFT, DOC_KIND_PLAN } from "../constants/pware.oc.omo.constants.docKind.js"
+import {
+  omoKindRows,
+  omoScanRecord,
+  resetDocsCache,
+  type OmoDocScan,
+} from "./pware.oc.omo.resolver.doc.js"
+import type { DocView } from "./pware.oc.omo.resolver.doc.js"
 
 const MAX_ITEMS = 40
-const TTL_MS = 2_000
-
-function statOf(abs: string): number | null {
-  try {
-    const st = fs.statSync(abs)
-    return st.isFile() ? Math.round(st.mtimeMs) : null
-  } catch {
-    return null
-  }
-}
-
-/** Markdown files directly under a drafts/ or plans/ directory, depth 1. */
-function listMdFiles(base: string): string[] {
-  let entries: fs.Dirent[] = []
-  try {
-    entries = fs.readdirSync(base, { withFileTypes: true })
-  } catch {
-    return []
-  }
-  const out: string[] = []
-  for (const e of entries) {
-    if (e.name.startsWith(".")) continue
-    if (!e.isFile()) continue
-    if (!e.name.toLowerCase().endsWith(".md")) continue
-    out.push(path.join(base, e.name))
-  }
-  return out
-}
 
 /** The "My work" approval buckets, keyed by group, in scan order. */
 export type ScanResult = {
@@ -85,7 +68,16 @@ function sortApprovals(items: ApprovalItem[]): ApprovalItem[] {
   return items.slice(0, MAX_ITEMS)
 }
 
-function scan(root: string): ScanResult {
+function isMarkdown(rel: string): boolean {
+  return rel.toLowerCase().endsWith(".md")
+}
+
+/** Drafts/plans split into the four "My work" buckets by status + file type. */
+function classify(
+  root: string,
+  draftRows: readonly DocView[],
+  planRows: readonly DocView[],
+): ScanResult {
   const drafting: ApprovalItem[] = []
   const readyReview: ApprovalItem[] = []
   const readyStart: ApprovalItem[] = []
@@ -94,61 +86,59 @@ function scan(root: string): ScanResult {
   const plans: ApprovalItem[] = []
   const seen = new Set<string>()
   const workStates = planWorkStateByPlanName(root)
-  for (const omoDir of findOmoWatchDirs(root)) {
-    for (const sub of ["drafts", "plans"]) {
-      const isDraft = sub === "drafts"
-      for (const abs of listMdFiles(path.join(omoDir, sub))) {
-        const rel = path.relative(root, abs).replace(/\\/g, "/")
-        if (!rel || rel.startsWith("..") || seen.has(rel)) continue
-        let text = ""
-        try {
-          text = fs.readFileSync(abs, "utf8")
-        } catch {
-          continue
-        }
-        const status = parsePlanStatus(text)
-        const name = approvalName(rel)
-        const workState = workStates.get(name) ?? "absent"
-        // A plan with no parseable status is still a plan document — it lands in
-        // the Plans archive below (decided after this status guard). A draft
-        // without a status is still a working document — Draft docs.
-        const group = status ? resolveApprovalGroup(status, isDraft, workState, false) : null
-        const item: ApprovalItem = {
-          rel,
-          name,
-          status,
-          pendingAction: parsePlanPendingAction(text),
-          updatedAt: statOf(abs),
-          review: parseReviewBlock(text),
-          workState,
-        }
-        if (!group) {
-          // A document no action group covers (superseded approved/done, unknown
-          // or no status) is browsable, not a queue item: drafts → Draft docs,
-          // plans → Plans.
-          seen.add(rel)
-          if (isDraft) draftDocs.push(item)
-          else plans.push(item)
-          continue
-        }
-        seen.add(rel)
-        switch (group) {
-          case MY_WORK_GROUP_DRAFTING:
-            drafting.push(item)
-            break
-          case MY_WORK_GROUP_READY_REVIEW:
-            readyReview.push(item)
-            break
-          case MY_WORK_GROUP_READY_START:
-            readyStart.push(item)
-            break
-          case MY_WORK_GROUP_FINISHED:
-            finished.push(item)
-            break
-        }
+  const visit = (rows: readonly DocView[], isDraft: boolean) => {
+    for (const row of rows) {
+      const rel = row.rel
+      if (!isMarkdown(rel) || seen.has(rel)) continue
+      let text = ""
+      try {
+        text = fs.readFileSync(path.join(root, rel), "utf8")
+      } catch {
+        continue
+      }
+      const status = parsePlanStatus(text)
+      const name = approvalName(rel)
+      const workState = workStates.get(name) ?? "absent"
+      // A plan with no parseable status is still a plan document — it lands in
+      // the Plans archive below (decided after this status guard). A draft
+      // without a status is still a working document — Draft docs.
+      const group = status ? resolveApprovalGroup(status, isDraft, workState, false) : null
+      const item: ApprovalItem = {
+        rel,
+        name,
+        status,
+        pendingAction: parsePlanPendingAction(text),
+        updatedAt: row.updatedAt,
+        review: parseReviewBlock(text),
+        workState,
+      }
+      seen.add(rel)
+      if (!group) {
+        // A document no action group covers (superseded approved/done, unknown
+        // or no status) is browsable, not a queue item: drafts → Draft docs,
+        // plans → Plans.
+        if (isDraft) draftDocs.push(item)
+        else plans.push(item)
+        continue
+      }
+      switch (group) {
+        case MY_WORK_GROUP_DRAFTING:
+          drafting.push(item)
+          break
+        case MY_WORK_GROUP_READY_REVIEW:
+          readyReview.push(item)
+          break
+        case MY_WORK_GROUP_READY_START:
+          readyStart.push(item)
+          break
+        case MY_WORK_GROUP_FINISHED:
+          finished.push(item)
+          break
       }
     }
   }
+  visit(draftRows, true)
+  visit(planRows, false)
   return {
     drafting: sortApprovals(drafting),
     readyReview: sortApprovals(readyReview),
@@ -159,16 +149,29 @@ function scan(root: string): ScanResult {
   }
 }
 
-const approvalsCache = createStampCache<ScanResult>({ ttlMs: TTL_MS })
+/** Approval buckets memoized against the shared per-root omo scan record. */
+const approvalMemo = new WeakMap<OmoDocScan, ScanResult>()
 
-/** Drop the approval cache so the next read hits the filesystem. */
+/** Drop the shared omo scan cache — approvals and docs both re-read next call. */
 export function resetApprovalsCache(): void {
-  approvalsCache.reset()
+  resetDocsCache()
 }
 
 /** Drafts/plans split into the four "My work" buckets by status + file type. */
 export function listApprovals(projectRoot: string | null | undefined): ScanResult {
   if (!projectRoot) return emptyScan()
   const root = canonicalizePath(projectRoot)
-  return profile("omo.approvals", () => approvalsCache.get(root, () => scan(root)))
+  const scan = omoScanRecord(root)
+  if (!scan) return emptyScan()
+  const memoized = approvalMemo.get(scan)
+  if (memoized) return memoized
+  const result = profile("omo.approvals", () =>
+    classify(
+      root,
+      omoKindRows(DOC_KIND_DRAFT, root),
+      omoKindRows(DOC_KIND_PLAN, root),
+    ),
+  )
+  approvalMemo.set(scan, result)
+  return result
 }

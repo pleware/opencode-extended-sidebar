@@ -151,6 +151,7 @@ Later files win:
   "perfHistory": 3,
   "perfRows": 5,
   "perfTurns": 120,
+  "questionReconcileSec": 15,
   "sessionFetch": 20,
   "skipGitignore": false,
   "toolRows": 5,
@@ -164,6 +165,7 @@ Later files win:
 | `perfHistory`            | `3`                              | sessions under Perf → History; `0` hides it          |
 | `perfRows`               | `5`                              | rows per Perf section                                  |
 | `perfTurns`              | `120`                            | recent turns Perf measures                            |
+| `questionReconcileSec`   | `15`                             | seconds between full open-question rescans when no live hint arrives |
 | `sessionFetch`           | `20`                             | recent sessions fetched for the My work `Sessions` group |
 | `skipGitignore`          | `false`                          | also honour the project's root `.gitignore` (`.oesignore` is always honoured) |
 | `toolRows`               | `5`                              | most tool-call rows shown; the `… +N more` control reveals another `toolRows` per click |

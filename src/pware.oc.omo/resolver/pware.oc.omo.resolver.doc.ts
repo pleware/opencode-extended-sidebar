@@ -3,9 +3,13 @@
  *
  * OMO document index: the plan, drafts, notepads and evidence under `.omo/`.
  * Names, ages and sizes only — a document is read on click, by preview.ts.
- * Scanned lazily behind a short TTL, never on the poll path. One listing per
- * kind (`listOmoFiles`); the per-kind `*File` resolvers wrap it with a `list`
- * method so each document kind can be listed and session-filtered on its own.
+ * Scanned lazily behind a short TTL, never on the poll path. Hosts the single
+ * per-root omo scan cache shared with the approval classifier (`approval.ts`):
+ * each root keeps one record whose per-kind stat rows are filled on first
+ * request, so `.omo/` is walked once per TTL no matter how many consumers ask.
+ * One listing per kind (`listOmoFiles`); the per-kind `*File` resolvers wrap it
+ * with a `list` method so each document kind can be listed and
+ * session-filtered on its own.
  */
 import fs from "node:fs"
 import path from "node:path"
@@ -141,11 +145,46 @@ function scanKind(kind: DocKind, projectRoot: string): DocView[] {
   return out
 }
 
-const docsCache = createStampCache<DocView[]>({ ttlMs: TTL_MS })
+/** One cached per-root omo scan: stat-only rows per doc kind, filled on request. */
+export type OmoDocScan = {
+  rows: Partial<Record<DocKind, DocView[]>>
+}
 
-/** Drop the document cache so the next read hits the filesystem. */
+const omoScanCache = createStampCache<OmoDocScan>({ ttlMs: TTL_MS })
+
+/** The shared per-root omo scan record, or null without a project root. */
+export function omoScanRecord(projectRoot: string | null | undefined): OmoDocScan | null {
+  if (!projectRoot) return null
+  const root = canonicalizePath(projectRoot)
+  return omoScanCache.get(root, () => ({ rows: {} }))
+}
+
+/**
+ * Stat-only rows of one doc kind from the shared per-root omo scan — the single
+ * stamp cache behind both `listOmoFiles` and the approval classifier
+ * (`approval.ts`). Each kind is scanned lazily on first request and cached with
+ * the root record until the TTL expires.
+ */
+export function omoKindRows(kind: DocKind, projectRoot: string | null | undefined): DocView[] {
+  if (!projectRoot) return []
+  const scan = omoScanRecord(projectRoot)
+  if (!scan) return []
+  const cached = scan.rows[kind]
+  if (cached) return cached
+  const rows = profile("omo.docs", () => {
+    try {
+      return scanKind(kind, projectRoot)
+    } catch {
+      return []
+    }
+  })
+  scan.rows[kind] = rows
+  return rows
+}
+
+/** Drop the shared omo scan cache so the next read hits the filesystem. */
 export function resetDocsCache(): void {
-  docsCache.reset()
+  omoScanCache.reset()
 }
 
 /**
@@ -184,16 +223,8 @@ export function listOmoFiles(
   opts: ListOmoFilesOptions = {},
 ): DocView[] {
   if (!projectRoot) return []
-  const key = `${projectRoot}::${kind}`
-  const all = profile("omo.docs", () =>
-    docsCache.get(key, () => {
-      try {
-        return scanKind(kind, projectRoot)
-      } catch {
-        return []
-      }
-    }),
-  )
+  const root = canonicalizePath(projectRoot)
+  const all = omoKindRows(kind, root)
   let docs = all
   const sessionId = opts.sessionId
   const db = opts.db
@@ -204,10 +235,8 @@ export function listOmoFiles(
   }
   if (opts.status && (kind === DOC_KIND_PLAN || kind === DOC_KIND_DRAFT)) {
     const want = opts.status.toLowerCase()
-    const workStates = planWorkStateByPlanName(projectRoot)
-    docs = docs.filter(
-      (d) => (planStatusOf(projectRoot, d.rel, workStates) ?? "").toLowerCase() === want,
-    )
+    const workStates = planWorkStateByPlanName(root)
+    docs = docs.filter((d) => (planStatusOf(root, d.rel, workStates) ?? "").toLowerCase() === want)
   }
   if (opts.sort === "name") docs = [...docs].sort((a, b) => a.name.localeCompare(b.name))
   const limit = opts.limit ?? MAX_PER_KIND

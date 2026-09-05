@@ -1,5 +1,6 @@
 # Changelog
 
+- **0.2.84** (2026-09-05) Make the open-question reconcile backstop a configurable 15 s oes.json option and merge the approvals and docs scans into one shared per-root omo stamp cache.
 - **0.2.83** (2026-09-05) Measure every sidebar row budget in wcwidth columns so wide CJK/emoji text clips cleanly instead of wrapping, surface plan files that no action group covers in .
 - **0.2.82** (2026-09-04) Scope the Session-tab drafts list to drafts the current session wrote and add a My-work Draft docs archive for drafts no action group covers.
 - **0.2.81** (2026-09-04) Add a token-rate bar and realtime fullscreen modal to the OES bar, widen the shared chart plot, and shrink the preview dialog chrome.

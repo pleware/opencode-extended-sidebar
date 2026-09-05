@@ -181,7 +181,7 @@ Plugin registration: `id = "opencode-extended-sidebar"`, load toast,
 | `glyph.ts` | every glyph as one char+tone spec; tone keys | `ToneKey`, `GlyphSpec`, `SPINNER_FRAMES`, `spinnerFrame()`, `sinPulseAlpha()`, `flowBlinkOn()`, `markTone()`, `stateGlyph()`, `directionGlyph()`, `defaultBodyTone()`, `QUEUED_GLYPH`, `ENGAGE_MIN_FRAMES`, `ENGAGE_MAX_FRAMES`, `engageFill()`, `engageDone()` |
 | `sqlite.ts` | readonly `bun:sqlite` / `node:sqlite` handle, fail-fast busy timeout (logs `sql.busy`), pings the debug console's screen ring (`db open`) on a fresh open | `openReadonlyDb()`, `withDbRead()`, `resetReadonlyDb()`, `uniqueIds()`, `isBusyError()` |
 | `status.ts` | canonical lifecycle/tool/work status + the OES bar line | `normalizeStatus()`, `toToolStatus()`, `toWorkLabel()`, `workStatusGlyph()`, `workIsTerminal()`, `taskRank()`, `tabStatus()`, `tabStatusLine()`, `statusBarLine()`, `oesBarParts()` |
-| `timing.ts` | panel clock budgets | `TICK_MS`, `NOW_MS`, `FPS_READ_EVERY_TICKS`, `BLINK_TICKS`, `MONITOR_POLL_MS`, `MONITOR_WATCH_DEBOUNCE_MS`, `EVENT_SCAN_DEBOUNCE_MS`, `QUESTION_RECONCILE_MS`, `REALTIME_WINDOW_MS`, `REALTIME_RATE_WINDOW_MS` |
+| `timing.ts` | panel clock budgets | `TICK_MS`, `NOW_MS`, `FPS_READ_EVERY_TICKS`, `BLINK_TICKS`, `MONITOR_POLL_MS`, `MONITOR_WATCH_DEBOUNCE_MS`, `EVENT_SCAN_DEBOUNCE_MS`, `REALTIME_WINDOW_MS`, `REALTIME_RATE_WINDOW_MS` |
 | `width.ts` | wcwidth display widths + grapheme-safe column clipping — the single place row text is measured into terminal columns | `codepointWidth()`, `strWidth()`, `takeCols()`, `takeLastCols()`, `clipWidth()`, `clipMiddleWidth()` |
 
 ### `pware.oc.core/constants` — host literals + the plugin's own vocabularies
@@ -240,10 +240,10 @@ Plugin registration: `id = "opencode-extended-sidebar"`, load toast,
 | `resolver/proofFile.ts` | evidence (proof) file → writer-session index (thin wrapper over `planFile.ts`) | `proofSessionIndex()`, `sessionForProofFile()`, `ProofFile.list()` |
 | `resolver/rulesFile.ts` | rule-file → writer-session index (thin wrapper over `planFile.ts`) | `rulesSessionIndex()`, `sessionForRuleFile()` |
 | `resolver/runContinuationFile.ts` | run-continuation file → writer-session index (thin wrapper over `planFile.ts`) | `runContinuationSessionIndex()`, `sessionForRunContinuationFile()` |
-| `resolver/approval.ts` | the "My work" approval buckets — four action groups (ready-to-review / ready-to-start / finished / drafting) plus the `draftDocs` and `plans` archives (TTL, lazy) | `listApprovals()`, `resetApprovalsCache()` |
+| `resolver/approval.ts` | the "My work" approval buckets — four action groups (ready-to-review / ready-to-start / finished / drafting) plus the `draftDocs` and `plans` archives. File discovery + stat come from the shared per-root omo scan cache in `doc.ts`; this module only classifies draft/plan file content into buckets, memoized against that scan record (TTL, lazy) | `listApprovals()`, `resetApprovalsCache()` |
 | `resolver/approvalGroup.ts` | "My work" approval grouping from OMO plan status + draft path, reconciled against boulder + writer todos | `approvalGroup()`, `isDraftOf()`, `resolveApprovalGroup()`, `planWorkDone()`, `isDrafting()`, `isReadyToReview()`, `isReadyToStart()`, `isFinished()` |
 | `resolver/approvalState.ts` | `.omo/run-continuation` background-task marker | `readRunContinuationState()`, `firstRunContinuationDir()` |
-| `resolver/doc.ts` | docs index: per-kind listing of plan/drafts/notepads/proof, with session + plan-status filters | `listOmoFiles()`, `ListOmoFilesOptions`, `resetDocsCache()`, `DOC_KIND_LABEL` |
+| `resolver/doc.ts` | docs index + the single shared per-root omo scan cache: stat-only rows per doc kind (plan/drafts/notepads/proof), with session + plan-status filters. `approval.ts` classifies from the same cached rows | `listOmoFiles()`, `ListOmoFilesOptions`, `omoScanRecord()`, `omoKindRows()`, `OmoDocScan`, `resetDocsCache()`, `DOC_KIND_LABEL` |
 | `resolver/config.ts` | `oh-my-openagent.json` team mode | `readOmoConfig()` |
 | `resolver/index.ts` | aggregate | barrel |
 

@@ -6,7 +6,7 @@
  */
 import { createStampCache } from "../../pware.oc.core/pware.oc.core.cache.js"
 import { gitignoreStamp } from "../../pware.oc.core/git/pware.oc.core.gitignore.js"
-import { oesStamp } from "../../pware.oc.core/pware.oc.core.oes.js"
+import { oesStamp, getOes } from "../../pware.oc.core/pware.oc.core.oes.js"
 import { dbStamp, getOpenCodeDbPath } from "../../pware.oc.core/pware.oc.core.paths.js"
 import { openReadonlyDb, withDbRead, type SqlDb } from "../../pware.oc.core/pware.oc.core.sqlite.js"
 import { profile } from "../../pware.oc.core/pware.oc.core.debug.js"
@@ -19,7 +19,6 @@ import {
   type OpenQuestion,
   type SessionView,
 } from "../../pware.oc.opencode/resolver/index.js"
-import { QUESTION_RECONCILE_MS } from "../../pware.oc.core/pware.oc.core.timing.js"
 import { createQuestionCache } from "../pware.oc.runtime.questions.js"
 import {
   emptyOmo,
@@ -162,7 +161,7 @@ export function readRuntimeSnapshot(opts: {
     }
     if (questionHint) {
       profile("db.questions", () => questionCache.touch(dbPath, projectId, questionHint))
-    } else if (Date.now() - questionLastReconcile >= QUESTION_RECONCILE_MS) {
+    } else if (Date.now() - questionLastReconcile >= getOes(opts.projectRoot).questionReconcileSec * 1000) {
       profile("db.questions", () => questionCache.reconcile(dbPath, projectId))
       questionLastReconcile = Date.now()
     }

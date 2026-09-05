@@ -3,6 +3,7 @@
   "perfHistory": 3,
   "perfRows": 5,
   "perfTurns": 120,
+  "questionReconcileSec": 15,
   "sessionFetch": 20,
   "skipGitignore": false,
   "toolRows": 5,
