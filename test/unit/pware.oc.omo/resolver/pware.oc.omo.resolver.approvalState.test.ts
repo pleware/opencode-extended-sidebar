@@ -81,9 +81,9 @@ function fixture(opts: {
 }
 
 describe("enrichApprovalSessionStates", () => {
-  test("an active run-continuation marker beats a stale session into awaiting-background", () => {
+  test("an active run-continuation marker beats a stale session into awaiting-background", async () => {
     const { proj, db, approval } = fixture({ timeUpdated: t0 - 10 * 60_000, runContinuation: "active" })
-    const [out] = enrichApprovalSessionStates([approval], {
+    const [out] = await enrichApprovalSessionStates([approval], {
       dbPath: db.dbPath,
       projectRoot: proj.root,
       now: t0,
@@ -91,9 +91,9 @@ describe("enrichApprovalSessionStates", () => {
     expect(out.sessionState).toEqual({ running: true, state: "awaiting-background" })
   })
 
-  test("a stale session with no run-continuation dir is idle", () => {
+  test("a stale session with no run-continuation dir is idle", async () => {
     const { proj, db, approval } = fixture({ timeUpdated: t0 - 10 * 60_000 })
-    const [out] = enrichApprovalSessionStates([approval], {
+    const [out] = await enrichApprovalSessionStates([approval], {
       dbPath: db.dbPath,
       projectRoot: proj.root,
       now: t0,
@@ -101,9 +101,9 @@ describe("enrichApprovalSessionStates", () => {
     expect(out.sessionState).toEqual({ running: false, state: "idle" })
   })
 
-  test("a fresh session is streaming", () => {
+  test("a fresh session is streaming", async () => {
     const { proj, db, approval } = fixture({ timeUpdated: t0 - 1_000 })
-    const [out] = enrichApprovalSessionStates([approval], {
+    const [out] = await enrichApprovalSessionStates([approval], {
       dbPath: db.dbPath,
       projectRoot: proj.root,
       now: t0,
@@ -111,9 +111,9 @@ describe("enrichApprovalSessionStates", () => {
     expect(out.sessionState).toEqual({ running: true, state: "streaming" })
   })
 
-  test("an idle run-continuation marker still counts as idle", () => {
+  test("an idle run-continuation marker still counts as idle", async () => {
     const { proj, db, approval } = fixture({ timeUpdated: t0 - 10 * 60_000, runContinuation: "idle" })
-    const [out] = enrichApprovalSessionStates([approval], {
+    const [out] = await enrichApprovalSessionStates([approval], {
       dbPath: db.dbPath,
       projectRoot: proj.root,
       now: t0,
@@ -121,9 +121,9 @@ describe("enrichApprovalSessionStates", () => {
     expect(out.sessionState).toEqual({ running: false, state: "idle" })
   })
 
-  test("missing db soft-fails to a null sessionState", () => {
+  test("missing db soft-fails to a null sessionState", async () => {
     const { proj, approval } = fixture()
-    const [out] = enrichApprovalSessionStates([approval], {
+    const [out] = await enrichApprovalSessionStates([approval], {
       dbPath: null,
       projectRoot: proj.root,
       now: t0,

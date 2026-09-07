@@ -6,11 +6,15 @@
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
-import { dbg, profile } from "../pware.oc.core/pware.oc.core.debug.js"
+import { dbg, profile, profileAsync } from "../pware.oc.core/pware.oc.core.debug.js"
 import { createStampCache } from "../pware.oc.core/pware.oc.core.cache.js"
+import {
+  ReadonlyDbUnavailableError,
+  readonlyReadGateway,
+} from "../pware.oc.core/pware.oc.core.sqliteGateway.js"
 import { finiteNum } from "../pware.oc.core/pware.oc.core.paths.js"
 import { formatDuration, formatWhen, shortToolLabel, toEpochMs } from "../pware.oc.core/pware.oc.core.pulse.js"
-import { openReadonlyDb, withDbRead, type SqlDb } from "../pware.oc.core/pware.oc.core.sqlite.js"
+import type { SqlDb } from "../pware.oc.core/pware.oc.core.sqlite.js"
 import { PART_TYPE_REASONING, PART_TYPE_TEXT, PART_TYPE_TOOL } from "../pware.oc.core/constants/pware.oc.core.constants.partType.js"
 import { TOOL_QUESTION } from "../pware.oc.core/constants/pware.oc.core.constants.toolName.js"
 import { STATUS_ERROR } from "../pware.oc.core/constants/pware.oc.core.constants.status.js"
@@ -581,7 +585,7 @@ export function writePerfLog(text: string, fileName: string, dir?: string): stri
   }
 }
 
-export function readPerfLog(opts: {
+export async function readPerfLog(opts: {
   dbPath: string
   sessionId: string
   turns: number
@@ -590,25 +594,31 @@ export function readPerfLog(opts: {
   logDir?: string
   /** When set, filter tool-phase rows to this bare tool name (e.g. "bash"). */
   toolFilter?: string
-}): PerfLogDoc | null {
+}): Promise<PerfLogDoc | null> {
   if (!opts.dbPath || !fs.existsSync(opts.dbPath)) return null
-  const load = (): PerfLogDoc | null => {
-    const db = openReadonlyDb(opts.dbPath)
-    if (!db) return null
-    const { msgs, parts } = readRows(db, opts.sessionId, opts.turns, true)
-    const allRows = collectPerfLogRows(opts.kind, msgs, parts)
-    const rows = opts.toolFilter
-      ? allRows.filter((r) => r.tool === opts.toolFilter)
-      : allRows
-    const kindLabel = opts.toolFilter
-      ? `${perfLogKindLabel(opts.kind)} · ${opts.toolFilter}`
-      : perfLogKindLabel(opts.kind)
-    const text = formatPerfLog(opts.kind, opts.sessionId, opts.now, rows, kindLabel)
-    const fileName = perfLogFileName(opts.kind, opts.now, opts.toolFilter)
-    const written = writePerfLog(text, fileName, opts.logDir)
-    return { title: `${kindLabel} log`, fileName, text, written }
-  }
-  return withDbRead(load, () => null)
+  const partLimit = Math.min(6000, Math.max(200, opts.turns * 12))
+  const data = await readonlyReadGateway.run<{ readonly msgs: MsgRow[]; readonly parts: PartRow[] } | null>({
+    dbPath: opts.dbPath,
+    initial: () => ({ msgs: [], parts: [] }),
+    stages: [
+      (db, state) => state && { ...state, msgs: db.all<MsgRow>(MSG_SQL, opts.sessionId, opts.turns) },
+      (db, state) => state && {
+        ...state,
+        parts: db.all<LogPartSql>(LOG_PART_SQL, opts.sessionId, partLimit).map(foldLogPart),
+      },
+    ],
+    fallback: () => null,
+  })
+  if (!data) return null
+  const allRows = collectPerfLogRows(opts.kind, data.msgs, data.parts)
+  const rows = opts.toolFilter ? allRows.filter((row) => row.tool === opts.toolFilter) : allRows
+  const kindLabel = opts.toolFilter
+    ? `${perfLogKindLabel(opts.kind)} · ${opts.toolFilter}`
+    : perfLogKindLabel(opts.kind)
+  const text = formatPerfLog(opts.kind, opts.sessionId, opts.now, rows, kindLabel)
+  const fileName = perfLogFileName(opts.kind, opts.now, opts.toolFilter)
+  const written = writePerfLog(text, fileName, opts.logDir)
+  return { title: `${kindLabel} log`, fileName, text, written }
 }
 
 function collectParts(rows: PartRow[]): {
@@ -876,52 +886,77 @@ export function resetPerfCache(): void {
   histCached = []
 }
 
-export function readPerfSnapshot(opts: PerfOptions): PerfSnapshot {
+type PerfReadState = {
+  readonly ok: boolean
+  readonly msgs: MsgRow[]
+  readonly parts: PartRow[]
+  readonly snapshot: PerfSnapshot
+}
+
+export async function readPerfSnapshot(opts: PerfOptions): Promise<PerfSnapshot> {
   const key = opts.cacheKey
     ? `${opts.cacheKey}::${opts.turns}::${(opts.history ?? []).map((h) => h.id).join(",")}`
     : ""
-
-  const load = (): PerfSnapshot => {
-    if (!opts.dbPath || !fs.existsSync(opts.dbPath)) {
-      dbg("perf", "db missing", { dbPath: opts.dbPath, sessionId: opts.sessionId })
-      return emptyPerf(opts.sessionId, "db missing")
-    }
-    const db = openReadonlyDb(opts.dbPath)
-    if (!db) {
-      dbg("perf", "sqlite unavailable", { dbPath: opts.dbPath })
-      return emptyPerf(opts.sessionId, "sqlite unavailable")
-    }
-    const { msgs, parts } = readRows(db, opts.sessionId, opts.turns)
-    dbg("perf", "loaded", { dbPath: opts.dbPath, sessionId: opts.sessionId, msgs: msgs.length, parts: parts.length })
-    const snap = aggregate(opts.sessionId, msgs, parts)
-    const hKey = (opts.history ?? []).map((h) => h.id).join(",")
-    const now = Date.now()
-    if (hKey === histKey && now - histAt < HIST_TTL_MS) {
-      snap.history = histCached
-      return snap
-    }
-    const histTurns = Math.max(20, Math.min(opts.historyTurns ?? 60, opts.turns))
-    for (const h of opts.history ?? []) {
-      if (h.id === opts.sessionId) continue
-      try {
-        const row = sessionPerf(db, h.id, h.title, histTurns)
-        if (row) snap.history.push(row)
-      } catch {
-        // one unreadable session must not sink the tab
-      }
-    }
-    histKey = hKey
-    histAt = now
-    histCached = snap.history
-    return snap
+  const hit = key ? perfCache.peek(key) : undefined
+  if (hit) return hit
+  if (!opts.dbPath || !fs.existsSync(opts.dbPath)) {
+    dbg("perf", "db missing", { dbPath: opts.dbPath, sessionId: opts.sessionId })
+    return emptyPerf(opts.sessionId, "db missing")
   }
 
-  const run = () =>
-    profile("perf.read", () =>
-      withDbRead(load, (e) =>
-        emptyPerf(opts.sessionId, e instanceof Error ? e.message : "perf read failed"),
-      ),
-    )
-  if (!key) return run()
-  return perfCache.get(key, run)
+  const partLimit = Math.min(6000, Math.max(200, opts.turns * 12))
+  const hKey = (opts.history ?? []).map((history) => history.id).join(",")
+  const historyHit = hKey === histKey && Date.now() - histAt < HIST_TTL_MS
+  const histTurns = Math.max(20, Math.min(opts.historyTurns ?? 60, opts.turns))
+  const historyStages = historyHit
+    ? []
+    : (opts.history ?? [])
+        .filter((history) => history.id !== opts.sessionId)
+        .map((history) => (db: SqlDb, state: PerfReadState): PerfReadState => {
+          const row = sessionPerf(db, history.id, history.title, histTurns)
+          if (!row) return state
+          return {
+            ...state,
+            snapshot: { ...state.snapshot, history: [...state.snapshot.history, row] },
+          }
+        })
+  const result = await profileAsync("perf.read", () =>
+    readonlyReadGateway.run<PerfReadState>({
+      dbPath: opts.dbPath,
+      initial: () => ({ ok: true, msgs: [], parts: [], snapshot: emptyPerf(opts.sessionId) }),
+      stages: [
+        (db, state) => ({ ...state, msgs: db.all<MsgRow>(MSG_SQL, opts.sessionId, opts.turns) }),
+        (db, state) => ({ ...state, parts: db.all<PartRow>(PART_SQL, opts.sessionId, partLimit) }),
+        (_db, state) => ({ ...state, snapshot: aggregate(opts.sessionId, state.msgs, state.parts) }),
+        ...historyStages,
+      ],
+      fallback: (error) => ({
+        ok: false,
+        msgs: [],
+        parts: [],
+        snapshot: emptyPerf(
+          opts.sessionId,
+          error instanceof ReadonlyDbUnavailableError
+            ? "sqlite unavailable"
+            : error instanceof Error
+              ? error.message
+              : "perf read failed",
+        ),
+      }),
+    }),
+  )
+  if (result.ok && historyHit) result.snapshot.history = histCached
+  else if (result.ok) {
+    histKey = hKey
+    histAt = Date.now()
+    histCached = result.snapshot.history
+  }
+  dbg("perf", "loaded", {
+    dbPath: opts.dbPath,
+    sessionId: opts.sessionId,
+    msgs: result.msgs.length,
+    parts: result.parts.length,
+  })
+  if (key && result.ok) perfCache.set(key, result.snapshot)
+  return result.snapshot
 }

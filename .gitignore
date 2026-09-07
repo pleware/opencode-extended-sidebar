@@ -58,9 +58,18 @@ myworkspace/
 .hidden/
 skills-lock.json
 
-# agentize workspace (MassTrade)
-.agentize/
+# Generated agent host config
 opencode.json
 .omo/
-
 .agentize_worktrees/
+
+
+# MassTrade developer tooling, copied in from a different remote. Ignored so a
+# stray `git add -A` cannot commit another product's agent setup into this repo.
+# Removing it from disk is tracked separately.
+.agents-mt/
+.devtools.yaml
+.devtools.*.yaml
+/scripts/development/
+graphify-out/
+.cursor/rules/auto.mt.*

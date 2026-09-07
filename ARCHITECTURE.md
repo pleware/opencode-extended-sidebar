@@ -1,14 +1,23 @@
 # Architecture
 
-OpenCode Extended Sidebar is a read-only OpenCode TUI plugin. It renders a live
-mission-control panel in the sidebar from data OpenCode already stores: the
-`opencode.db` SQLite database, host events, the optional `.omo/` directory, and
-`oes.json` options. Four runtime dependencies (`ignore`, `asciichart`, `simple-statistics`, `@crafter/charts`); everything else is an
-OpenCode / OpenTUI peer.
+OpenCode Extended Sidebar (OES) is a read-only OpenCode TUI plugin. OpenCode is
+the required host and primary data source: OES does not run as a standalone
+application. It renders a live mission-control panel from `opencode.db`, host
+events, and `oes.json` options.
+
+Oh My OpenCode / oh-my-openagent (OMO) is an optional OpenCode plugin. When OMO
+is present, OES adds OMO-aware features backed by its `.omo/` / `.sisyphus/`
+artifacts and may correlate those artifacts with OpenCode sessions and parts.
+Without OMO, the core OpenCode sidebar remains fully functional and OMO-only
+features stay hidden. Four runtime dependencies (`ignore`, `asciichart`,
+`simple-statistics`, `@crafter/charts`); everything else is an OpenCode /
+OpenTUI peer.
 
 This file is the canonical index of the project structure: what lives where,
 which layer may import which, and how tests mirror the modules. Code follows
 this map — a file that does not fit one of the modules below is misplaced.
+The SQLite scheduling and retry design is detailed in
+[`docs/db-pooling.md`](docs/db-pooling.md).
 
 ## Module map
 
@@ -28,7 +37,9 @@ src/
 │   ├── pware.oc.core.paths.ts
 │   ├── pware.oc.core.preview.ts
 │   ├── pware.oc.core.pulse.ts
+│   ├── pware.oc.core.runtimeConfig.ts
 │   ├── pware.oc.core.sqlite.ts
+│   ├── pware.oc.core.sqliteGateway.ts
 │   ├── pware.oc.core.status.ts
 │   ├── pware.oc.core.timing.ts
 │   ├── pware.oc.core.width.ts
@@ -65,7 +76,7 @@ src/
 │       ├── pware.oc.opencode.resolver.file.ts
 │       ├── pware.oc.opencode.resolver.question.ts
 │       └── pware.oc.opencode.resolver.todo.ts
-├── pware.oc.omo/                          # oh-my-openagent domain: .omo/.sisyphus files
+├── pware.oc.omo/                          # optional OMO integration: artifacts + OpenCode correlation
 │   ├── index.ts
 │   ├── constants/                         # OMO string literals
 │   │   ├── index.ts
@@ -92,7 +103,7 @@ src/
 │       ├── pware.oc.omo.resolver.approvalState.ts
 │       ├── pware.oc.omo.resolver.doc.ts
 │       └── pware.oc.omo.resolver.config.ts
-├── pware.oc.runtime/                      # runtime composition: opencode + omo
+├── pware.oc.runtime/                      # runtime composition: OpenCode + optional OMO features
 │   ├── index.ts
 │   ├── pware.oc.runtime.monitor.ts
 │   ├── pware.oc.runtime.source.ts
@@ -100,6 +111,7 @@ src/
 │   ├── pware.oc.runtime.snapshotClient.ts
 │   ├── pware.oc.runtime.mywork.ts
 │   ├── pware.oc.runtime.mywork-enrich.ts
+│   ├── pware.oc.runtime.omoRead.ts
 │   ├── pware.oc.runtime.questions.ts
 │   └── resolver/
 │       ├── index.ts
@@ -134,23 +146,26 @@ src/
 | `pware.oc.ui` | TUI components, dialogs, glyphs | anything below |
 | `pware.oc.perf` | timing reader + view | core + ui (view) |
 | `pware.oc.runtime` | snapshot composition, monitor, my-work queue | opencode, omo, core |
-| `pware.oc.opencode` | OpenCode data source | core |
-| `pware.oc.omo` | OMO data source | opencode, core |
+| `pware.oc.opencode` | required OpenCode host data and events | core |
+| `pware.oc.omo` | optional OMO artifacts and OpenCode correlation | opencode, core |
 | `pware.oc.core` | shared infra, pure helpers, git | **nothing** |
 
 Rules:
 
 - A module imports only from its own layer or below. **`core` never imports a
   domain or the UI.**
-- A domain = one data source. `opencode` reads SQLite + host events; `omo`
-  reads `.omo/` / `.sisyphus/` files.
-- The dependency lock is **one-way**: `omo` may read `opencode` data — OMO is a
-  plugin that runs on top of OpenCode, and this sidebar is omo-optional (it
-  works without omo and shows the OMO group only when `.omo/` is present). The
-  reverse is forbidden: `opencode` never reads `omo` data.
-- `runtime` is where the panel snapshot is composed from both domains. `omo`
-  may reach into `opencode` data for its own resolutions (e.g. the plan → session
-  index reads the OpenCode DB); `opencode` stays blind to `.omo/`.
+- `opencode` owns the required host integration: generic OpenCode SQLite reads
+  and host-event translation. OES always depends on this layer.
+- `omo` is an optional capability layer on top of OpenCode, not an independent
+  peer host. It owns OMO-specific files and semantics and may read `opencode`
+  data when an OMO feature needs to correlate an artifact with a host session,
+  part, todo, or event.
+- The dependency is **one-way**: `omo` may import and query `opencode`; the
+  generic `opencode` layer never imports OMO or interprets `.omo/` /
+  `.sisyphus/` artifacts. This keeps OES fully usable when OMO is absent.
+- `runtime` composes the always-present OpenCode snapshot with optional
+  OMO-aware capabilities for the panel. Cross-source composition that is not
+  itself OMO-specific remains in `runtime`.
 - The panel renders; it does not re-decide. View rules (glyphs, labels, row
   budgets, folds) live in `core` or `ui` as exported helpers the JSX calls.
 - No `core` module imports a `pware.oc.ui.*` module. Formatter data lives in
@@ -175,11 +190,13 @@ Plugin registration: `id = "opencode-extended-sidebar"`, load toast,
 | `events.ts` | host event type/kind classification | `eventType()`, `eventKind()`, `shouldRefreshDb()` |
 | `layout.ts` | vertical row budget, overflow slicing, shared action rail, host dialog inner width, measured row-width fallback | `panelRows()`, `packSections()`, `rowsForPlan()`, `sliceShown()`, `clampScrollOffset()`, `scrollByStep()`, `contextActionsLine()`, `dialogInnerWidth()`, `CONTEXT_ACTION_COL_WIDTH`, `ROW_LINE_FALLBACK`, `ROW_LINE_RESERVE`, `HOST_DIALOG_OUTER_WIDTH`, `RT_CHART_ROWS`, `RT_DIALOG_CHART_ROWS`, `ROW_MIN`, `ROW_RANK` |
 | `oes.ts` | `oes.json` merge + clamp | `OesOptions`, `OES_DEFAULTS`, `pick()`, `getOes()`, `oesStamp()`, `resetOesCache()` |
+| `runtimeConfig.ts` | kv-persisted runtime config DTO (`oes.config`): pinned sessions | `RuntimeConfigDto`, `emptyRuntimeConfig()`, `parseRuntimeConfig()`, `pinSession()`, `unpinSession()` |
 | `paths.ts` | OpenCode path resolution, path folding | `getOpenCodeDbPath()`, `pluginRoot()`, `resolveProjectFile()`, `basenameOf()`, `fileStamp()`, `dbStamp()`, `str()`, `finiteNum()` |
 | `preview.ts` | text/markdown preview limits | `previewViewportRows()`, `canPreviewPath()`, `isMarkdownPath()`, `readTextPreview()` |
 | `pulse.ts` | agent marks, flow, time/token formatting | `toEpochMs()`, `pulseAgeMs()`, `composeMark()`, `hottestMark()`, `activeFlow()`, `applyFlow()`, `flowFromEvent()`, `sessionBusyFromEvent()`, `sessionIdFromEvent()`, `stripSessionPrefix()`, `shortToolLabel()`, `toolHitFromEvent()`, `formatAge()`, `formatDuration()`, `formatTokens()`, `formatUsd()`, `formatTokenRate()`, `estimateTokens()`, `pushTokenTick()`, `tokenRate()`, `tokenRateBars()`, `packChips()` |
 | `glyph.ts` | every glyph as one char+tone spec; tone keys | `ToneKey`, `GlyphSpec`, `SPINNER_FRAMES`, `spinnerFrame()`, `sinPulseAlpha()`, `flowBlinkOn()`, `markTone()`, `stateGlyph()`, `directionGlyph()`, `defaultBodyTone()`, `QUEUED_GLYPH`, `ENGAGE_MIN_FRAMES`, `ENGAGE_MAX_FRAMES`, `engageFill()`, `engageDone()` |
-| `sqlite.ts` | readonly `bun:sqlite` / `node:sqlite` handle, fail-fast busy timeout (logs `sql.busy`), pings the debug console's screen ring (`db open`) on a fresh open | `openReadonlyDb()`, `withDbRead()`, `resetReadonlyDb()`, `uniqueIds()`, `isBusyError()` |
+| `sqlite.ts` | readonly `bun:sqlite` / `node:sqlite` handle, fail-fast busy timeout (logs `sql.busy`), pings the debug console's screen ring (`db open`) on a fresh open | `openReadonlyDb()`, `resetReadonlyDb()`, `uniqueIds()`, `isBusyError()` |
+| `sqliteGateway.ts` | the single application-level SQLite read policy: one serialized queue per process/worker, event-loop yield between stages, whole-request retry, atomic final result/fallback | `createReadGateway()`, `readonlyReadGateway`, `ReadRequest`, `ReadStage`, `ReadonlyDbUnavailableError` |
 | `status.ts` | canonical lifecycle/tool/work status + the OES bar line | `normalizeStatus()`, `toToolStatus()`, `toWorkLabel()`, `workStatusGlyph()`, `workIsTerminal()`, `taskRank()`, `tabStatus()`, `tabStatusLine()`, `statusBarLine()`, `oesBarParts()` |
 | `timing.ts` | panel clock budgets | `TICK_MS`, `NOW_MS`, `FPS_READ_EVERY_TICKS`, `BLINK_TICKS`, `MONITOR_POLL_MS`, `MONITOR_WATCH_DEBOUNCE_MS`, `EVENT_SCAN_DEBOUNCE_MS`, `REALTIME_WINDOW_MS`, `REALTIME_RATE_WINDOW_MS` |
 | `width.ts` | wcwidth display widths + grapheme-safe column clipping — the single place row text is measured into terminal columns | `codepointWidth()`, `strWidth()`, `takeCols()`, `takeLastCols()`, `clipWidth()`, `clipMiddleWidth()` |
@@ -190,7 +207,7 @@ Plugin registration: `id = "opencode-extended-sidebar"`, load toast,
 |---|---|---|
 | `partType.ts` | `part.data.type` values (SDK `Part` union) | `PART_TYPE_TEXT`, `PART_TYPE_REASONING`, `PART_TYPE_TOOL`, `PART_TYPE_STEP_START`, `PART_TYPE_STEP_FINISH`, `PART_TYPE_SNAPSHOT`, `PART_TYPE_PATCH`, `PART_TYPE_AGENT`, `PART_TYPE_SUBTASK`, `PART_TYPE_RETRY`, `PART_TYPE_COMPACTION`, `PART_TYPE_FILE`, `PART_TYPES`, `PartType` |
 | `eventType.ts` | host event `type` strings (SDK `Event` + stream) + sidebar subscription set | per-value `EVENT_*` consts, `EVENT_TYPES`, `EventType`, `PANEL_HOST_TYPES` |
-| `eventName.ts` | plugin-owned event names (`pware.oes.*`) | `EV_OES_QUESTION_HINT`, `EV_OES_REFRESH_HINT`, `EV_OES_SNAPSHOT`, `EV_OES_SESSION_SELECT` |
+| `eventName.ts` | plugin-owned event names (`pware.oes.*`) | `EV_OES_QUESTION_HINT`, `EV_OES_REFRESH_HINT`, `EV_OES_SNAPSHOT`, `EV_OES_SESSION_SELECT`, `EV_OES_REFRESH_MY_WORK` |
 | `toolName.ts` | tool names by file-touch + special non-file tools | per-value `TOOL_*` consts, `WRITE_TOOLS`, `READ_TOOLS`, `NON_FILE_TOOLS`, `ToolName` |
 | `status.ts` | the plugin's canonical lifecycle/tool statuses | `STATUS_*`, `CANONICAL_STATUSES`, `CanonicalStatus`, `TOOL_STATUS_*`, `TOOL_STATUSES`, `ToolStatus` |
 | `pulse.ts` | the plugin's pulse / flow / mark vocabulary | `PULSE_*`, `PULSES`, `Pulse`, `FLOW_*`, `FLOW_DIRS`, `FlowDir`, `FLOW_HINT_CLEAR`, `FlowHint`, `MARK_*`, `AGENT_MARKS`, `AgentMark` |
@@ -217,7 +234,7 @@ Plugin registration: `id = "opencode-extended-sidebar"`, load toast,
 | `resolver/file.ts` | file-touch parts → `FileView` | `listSessionFiles()`, `listRecentSessionFiles()` |
 | `resolver/question.ts` | open `question` queue | `listOpenQuestions()`, `listSessionQuestions()`, `classifyQuestionRow()`, `OpenQuestionRow` |
 | `resolver/todo.ts` | todo rows | `listTodos()` |
-| `resolver/index.ts` | aggregate | `readDbSnapshot()`, `emptyDb()`, `readProjectFeed()`, `DbSnapshot`, `ProjectFeed` |
+| `resolver/index.ts` | strict staged read plans and synchronous test adapters; production plans run through `sqliteGateway` | `createDbSnapshotRead()`, `readDbSnapshot()`, `createProjectFeedRead()`, `readProjectFeed()`, `readProjectFeedAsync()`, `emptyDb()`, `DbSnapshot`, `ProjectFeed` |
 
 ### `pware.oc.opencode/constants` — OpenCode-domain string literals
 
@@ -267,18 +284,19 @@ Plugin registration: `id = "opencode-extended-sidebar"`, load toast,
 | `pware.oc.runtime.monitor.ts` | watch boulder + poll SQLite stamps, fingerprint-driven; emits snapshot + boulder-change events (snapshot read is off-thread via `snapshotClient`) | `startMonitor()`, `MonitorHandle` |
 | `pware.oc.runtime.source.ts` | runtime source orchestration: monitor lifecycle + debounced refresh from `pware.oes.*`/`pware.omo.*` hints; shuts the worker down on stop | `startRuntimeSource()`, `RuntimeSourceHandle` |
 | `pware.oc.runtime.worker.ts` | Bun Worker entry running `readRuntimeSnapshot` off the TUI main thread | (worker entry) |
-| `pware.oc.runtime.snapshotClient.ts` | async snapshot client: lazy singleton worker + sync fallback | `readRuntimeSnapshotAsync()`, `shutdownSnapshotWorker()`, `SnapshotRequestOpts` |
-| `pware.oc.runtime.mywork.ts` | the "My work" queue (pinned + questions + sessions + approvals + draft docs + plans) | `MyWorkItem`, `groupMyWork()`, `toQuestionItems()`, `toSessionItems()`, `toApprovalItems()`, `toDraftDocItems()`, `toPlanItems()`, `dropDismissed()`, `parseDismissed()`, `formatDismissed()`, `approvalContinueHint()`, `startWorkCommand()`, `StartWorkMode` |
-| `pware.oc.runtime.mywork-enrich.ts` | writer-session todo reconciliation for approval rows (opencode SQLite + omo run-continuation) | `enrichApprovalSessionStates()`, `EnrichedApproval` |
-| `pware.oc.runtime.questions.ts` | in-memory per-session open-question cache (seed/reconcile/touch) | `createQuestionCache()`, `mergeQuestions()`, `QuestionCache` |
-| `resolver/index.ts` | unified runtime snapshot | `RuntimeSnapshot`, `readRuntimeSnapshot()`, `computeFingerprint()`, `resetRuntimeCache()` |
+| `pware.oc.runtime.snapshotClient.ts` | async snapshot client: lazy singleton worker + paced host-process gateway fallback | `readRuntimeSnapshotAsync()`, `shutdownSnapshotWorker()`, `SnapshotRequestOpts` |
+| `pware.oc.runtime.mywork.ts` | the "My work" queue (pinned + questions + sessions + approvals + draft docs + plans) | `MyWorkItem`, `groupMyWork()`, `toQuestionItems()`, `toSessionItems()`, `toPinnedItems()`, `toApprovalItems()`, `toDraftDocItems()`, `toPlanItems()`, `dropDismissed()`, `parseDismissed()`, `formatDismissed()`, `approvalContinueHint()`, `startWorkCommand()`, `StartWorkMode` |
+| `pware.oc.runtime.mywork-enrich.ts` | paced writer-session todo reconciliation for approval rows (opencode SQLite + omo run-continuation) | `enrichApprovalSessionStates()`, `EnrichedApproval` |
+| `pware.oc.runtime.omoRead.ts` | paced OMO-to-OpenCode lookups used by draft lists and plan dialogs | `readSessionDrafts()`, `readPlanSession()`, `PlanSessionRead` |
+| `pware.oc.runtime.questions.ts` | in-memory per-session open-question cache; SQLite access stays in the runtime gateway request | `createQuestionCache()`, `mergeQuestions()`, `QuestionCache` |
+| `resolver/index.ts` | atomic, staged unified runtime snapshot; unchanged cheap fingerprints return before any SQL | `RuntimeSnapshot`, `readRuntimeSnapshot()`, `computeFingerprint()`, `resetRuntimeCache()` |
 | `resolver/delegate.ts` | delegate enrichment + grouping | `enrichDelegates()`, `reconcileDelegateStatus()`, `groupDelegates()`, `delegatesForSession()` |
 
 ### `pware.oc.perf` — timing analysis + plugin self-cost
 
 | Module | Responsibility | Key exports |
 |---|---|---|
-| `reader.ts` | wall-clock split per model/tool, dated logs | `readPerfSnapshot()`, `emptyPerf()`, `aggregate()`, `readPerfLog()`, `formatPerfLog()`, `collectPerfLogRows()`, `formatColumns()`, `toolLogCall()` |
+| `reader.ts` | paced wall-clock split per model/tool and dated logs; message/part/history layers run through `sqliteGateway` | `readPerfSnapshot()`, `emptyPerf()`, `aggregate()`, `readPerfLog()`, `formatPerfLog()`, `collectPerfLogRows()`, `formatColumns()`, `toolLogCall()` |
 | `self.ts` | plugin self-cost (gated on the debug/profile loggers): event/scan/tick latency + renderer FPS | `selfTime()`, `selfDiagActive()`, `setSelfDiagForced()`, `readSelfStats()`, `resetSelfStats()`, `setSelfFps()`, `readRendererFps()`, `formatSelfLine()`, `SelfStats` |
 | `charts.ts` | pure chart/stat helpers: null-fill, smoothing, downsampling, ANSI strip, bars, trends, histograms, gauges, per-series ASCII dialog lines | `interpolateSeries()`, `smoothSeries()`, `downsampleAvg()`, `stripAnsi()`, `asciiTrend()`, `asciiTrendPlotWidth()`, `shareBar()`, `perfStatLine()`, `waitHistogram()`, `shareGauge()`, `shareDonut()`, `realtimeSeriesLines()` |
 | `realtime.ts` | realtime metric samples (tokens/cache/cpu·ram/network) + pure history push/prune | `StatRealtimeSnapshot`, `StatRealtimeSnapshotHistory`, `StatRealtimeTokensSeries`, `StatRealtimeCacheSeries`, `StatRealtimeCpuRamSeries`, `StatRealtimeNetworkSeries`, `sumSeries()`, `tokenRateToKbit()`, `NETWORK_BYTES_PER_TOKEN`, `emptyStatRealtimeSnapshot()`, `pushStatRealtimeHistory()` |
@@ -296,7 +314,7 @@ Plugin registration: `id = "opencode-extended-sidebar"`, load toast,
 
 | Module | Responsibility | Key exports |
 |---|---|---|
-| `chrome.tsx` | shared chrome, theme colours, kv persistence | `BrandTabs`, `ClickText`, `ContextActions`, `ContextAction`, `FoldHeader`, `DiffStat`, `textAttrs()`, `toneColor()`, `kvRead()`, `kvWrite()`, `kvReadOne()`, `kvWriteOne()`, `ThemeColors` |
+| `chrome.tsx` | shared chrome, theme colours, kv persistence | `BrandTabs`, `ClickText`, `ContextActions`, `ContextAction`, `FoldHeader`, `DiffStat`, `textAttrs()`, `toneColor()`, `kvRead()`, `kvWrite()`, `kvReadOne()`, `kvWriteOne()`, `createPinnedSessions()`, `ThemeColors` |
 | `sections.tsx` | shared sidebar primitives: kv-persisted fold state, foldable sections, the base row renderer + budget-sliced `RowList`, brand+tabs+panel columns | `useFold()`, `FoldSection`, `GroupSection`, `RowList`, `MoreReveal`, `useReveal()`, `AgentLine`, `RowData`, `composeRow()`, `TabColumn` |
 | `sidebar.tsx` | the panel: groups, tabs, live rows; consumes plugin event bus | `SidebarPanel` |
 | `live.tsx` | host event adapter (`api.event.on`) → plugin event bus (`pware.oc.*`, `pware.oes.*`) | `startHostEventBridge()` |

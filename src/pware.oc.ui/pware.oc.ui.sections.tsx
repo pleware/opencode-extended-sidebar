@@ -225,7 +225,9 @@ export type RowData = {
   indent?: boolean
   /** Override the body text tone (defaults from `defaultBodyTone`). */
   bodyTone?: ToneKey | null
-  /** A clickable trailing link (e.g. a pin affordance) at the far right. */
+  /** Whole-row dim applied to the glyph and body text (e.g. an idle session's 0.5). */
+  opacity?: number
+  /** A clickable trailing link (e.g. a pin affordance) at the far right, one space from the text. */
   link?: { label: string; onPick: () => void }
   onSelect?: () => void
 }
@@ -253,10 +255,13 @@ export type ComposedRow = {
 const SUFFIX_BUDGET_FRACTION = 0.4
 
 /**
- * Compose one row line from its parts against a column budget. The trailing
- * suffix wins a capped share of the line (`SUFFIX_BUDGET_FRACTION`) so a long
- * status can't starve the name; the name and suffix are each clipped to their
- * own room with a terminal `…`. Pure — unit-tested directly.
+ * Compose one row line from its parts against a column budget. `lineMax` is the
+ * text budget only — the columns left after the caller subtracts the fixed glyph
+ * slots (`rowChrome`: state glyph, direction slot, second glyph, indent, pin
+ * link). The trailing suffix wins a capped share of the line
+ * (`SUFFIX_BUDGET_FRACTION`) so a long status can't starve the name; the name
+ * and suffix are each clipped to their own room with a terminal `…`. Pure —
+ * unit-tested directly.
  */
 export function composeRow(
   opts: Pick<
@@ -265,7 +270,7 @@ export function composeRow(
   >,
   lineMax: number,
 ): ComposedRow {
-  const max = Math.max(0, lineMax - 2)
+  const max = Math.max(0, lineMax)
   const suffixMax = Math.max(0, Math.floor(max * SUFFIX_BUDGET_FRACTION))
   const suffix = clipWidth(opts.suffix?.trim() ?? "", suffixMax)
   const diffW = opts.diff
@@ -290,6 +295,25 @@ export function composeRow(
   // the other truncation path. Either way the caller fades the row.
   const truncated = agent.includes("…") || titleDropped
   return { body, suffix, truncated }
+}
+
+/**
+ * Columns a row spends on fixed slots outside the text (`body` + `suffix`):
+ * the leading state glyph + space is always there (2), then the direction slot,
+ * the second glyph, the indent, and the trailing pin link (one separating space
+ * plus its label) each add their own columns only when rendered. `AgentLine`
+ * subtracts this from `lineMax` before handing the remainder to `composeRow`, so
+ * a wide glyph can't push the line past the box and wrap it. Pure — unit-tested
+ * directly.
+ */
+export function rowChrome(opts: Pick<RowData, "dirSlot" | "indent" | "glyph2" | "link">): number {
+  return (
+    2
+    + (opts.dirSlot ? 2 : 0)
+    + (opts.glyph2 ? 2 : 0)
+    + (opts.indent ? 2 : 0)
+    + (opts.link ? strWidth(opts.link.label) + 1 : 0)
+  )
 }
 
 /** Single renderer for every sidebar row: glyph(s), name, tokens, title, suffix, diff. */
@@ -325,14 +349,15 @@ export function AgentLine(props: RowData & {
     return toneColor(spec.tone, props.colors)
   }
   const bodyTone = () => props.bodyTone ?? defaultBodyTone(props.kind, props.mark, Boolean(props.current))
-  const row = () => composeRow(props, props.lineMax)
+  const chrome = () => rowChrome(props)
+  const row = () => composeRow(props, Math.max(0, props.lineMax - chrome()))
   return profile("row", () => (
     <box flexDirection="column" gap={0}>
       <box flexDirection="row" onMouseUp={props.onSelect}>
         <Show when={props.indent}>
           <text>{`  `}</text>
         </Show>
-        <text fg={toneColor(primaryTone(), props.colors)}>{`${primary().char} `}</text>
+        <text fg={toneColor(primaryTone(), props.colors)} opacity={props.opacity}>{`${primary().char} `}</text>
         <Show when={props.dirSlot}>
           <text opacity={dirOpacity()} fg={dirFg()}>{`${dir()?.char ?? " "} `}</text>
         </Show>
@@ -343,7 +368,7 @@ export function AgentLine(props: RowData & {
           fg={toneColor(bodyTone(), props.colors)}
           bold={Boolean(props.current)}
           underline={Boolean(props.onSelect)}
-          opacity={row().truncated ? 0.5 : undefined}
+          opacity={props.opacity ?? (row().truncated ? 0.5 : undefined)}
         >
           {row().body}
         </ClickText>
@@ -362,6 +387,7 @@ export function AgentLine(props: RowData & {
         </Show>
         <Show when={props.link}>
           <box flexGrow={1} />
+          <text> </text>
           <ClickText fg={props.colors.primary || props.colors.text} underline onMouseUp={props.link!.onPick}>
             {props.link!.label}
           </ClickText>

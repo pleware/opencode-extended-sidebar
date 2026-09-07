@@ -7,7 +7,6 @@ import {
   isBusyError,
   uniqueIds,
   resetReadonlyDb,
-  withDbRead,
   openReadonlyDb,
 } from "../../../src/pware.oc.core/pware.oc.core.sqlite.js"
 import { resetDebug } from "../../../src/pware.oc.core/pware.oc.core.debug.js"
@@ -155,40 +154,6 @@ describe("resetReadonlyDb", () => {
       resetReadonlyDb()
       rm(dir)
     }
-  })
-})
-
-describe("withDbRead", () => {
-  test("returns the run result on success", () => {
-    expect(withDbRead(() => 42, () => 0)).toBe(42)
-  })
-
-  test("retries once after a first failure, then succeeds", () => {
-    let n = 0
-    const out = withDbRead(
-      () => {
-        n += 1
-        if (n === 1) throw new Error("transient")
-        return "ok"
-      },
-      () => "fallback",
-    )
-    expect(out).toBe("ok")
-    expect(n).toBe(2)
-  })
-
-  test("falls back after two failures", () => {
-    let n = 0
-    const out = withDbRead(
-      () => {
-        n += 1
-        throw new Error(`fail ${n}`)
-      },
-      (e) => `fallback:${(e as Error).message}`,
-    )
-    // fallback receives the first error; run is attempted twice.
-    expect(out).toBe("fallback:fail 1")
-    expect(n).toBe(2)
   })
 })
 

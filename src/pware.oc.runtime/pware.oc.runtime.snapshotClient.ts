@@ -3,9 +3,8 @@
  *
  * Async facade over the snapshot worker. `readRuntimeSnapshotAsync` posts a
  * snapshot request and resolves with the composed snapshot; when the worker
- * cannot be spawned, errors, or fails to answer within the timeout it falls
- * back to the synchronous `readRuntimeSnapshot` — so the panel never hard
- * depends on worker availability.
+ * cannot be spawned, errors, or fails to answer within the timeout it runs the
+ * same paced request gateway in the host process.
  */
 import { dbg } from "../pware.oc.core/pware.oc.core.debug.js"
 import { readRuntimeSnapshot, type RuntimeSnapshot } from "./resolver/index.js"
@@ -39,7 +38,7 @@ let workerFailed = false
 let nextId = 0
 const pending = new Map<number, PendingEntry>()
 
-function syncFallback(opts: SnapshotRequestOpts): RuntimeSnapshot {
+function fallbackRead(opts: SnapshotRequestOpts): Promise<RuntimeSnapshot> {
   return readRuntimeSnapshot(opts)
 }
 
@@ -56,7 +55,7 @@ function failAll(reason: string): void {
   workerFailed = true
   for (const id of [...pending.keys()]) {
     const entry = pending.get(id)
-    if (entry) settle(id, syncFallback(entry.opts))
+    if (entry) void fallbackRead(entry.opts).then((snap) => settle(id, snap))
   }
 }
 
@@ -70,7 +69,8 @@ function ensureWorker(): Worker | null {
       if (!msg || msg.type !== "snapshot:done") return
       const entry = pending.get(msg.id)
       if (!entry) return
-      settle(msg.id, msg.ok && msg.snap ? msg.snap : syncFallback(entry.opts))
+      if (msg.ok && msg.snap) settle(msg.id, msg.snap)
+      else void fallbackRead(entry.opts).then((snap) => settle(msg.id, snap))
     }
     w.onerror = (event) => {
       const message =
@@ -95,19 +95,20 @@ function ensureWorker(): Worker | null {
   }
 }
 
-/** Off-main-thread snapshot read, falling back to the sync path on any failure. */
 export function readRuntimeSnapshotAsync(opts: SnapshotRequestOpts): Promise<RuntimeSnapshot> {
   const w = ensureWorker()
-  if (!w) return Promise.resolve(syncFallback(opts))
+  if (!w) return fallbackRead(opts)
   const id = ++nextId
   return new Promise<RuntimeSnapshot>((resolve) => {
-    const timer = setTimeout(() => settle(id, syncFallback(opts)), WORKER_TIMEOUT_MS)
+    const timer = setTimeout(() => {
+      void fallbackRead(opts).then((snap) => settle(id, snap))
+    }, WORKER_TIMEOUT_MS)
     pending.set(id, { opts, resolve, timer })
     try {
       w.postMessage({ type: "snapshot", id, opts })
     } catch (err) {
       dbg("snapshot.worker", "post failed", { error: err instanceof Error ? err.message : String(err) })
-      settle(id, syncFallback(opts))
+      void fallbackRead(opts).then((snap) => settle(id, snap))
     }
   })
 }

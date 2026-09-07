@@ -4,10 +4,8 @@ import { useTerminalDimensions } from "@opentui/solid"
 import type { BoxRenderable } from "@opentui/core"
 import type { TuiPluginApi, TuiTheme } from "@opencode-ai/plugin/tui"
 import {
-  DraftFile,
   emptyOmo,
   listApprovals,
-  sessionForPlanFile,
 } from "../pware.oc.omo/resolver/index.js"
 import {
   delegatesForSession,
@@ -23,6 +21,7 @@ import {
   toApprovalItems,
   toDraftDocItems,
   toPlanItems,
+  toPinnedItems,
   toQuestionItems,
   toSessionItems,
   type MyWorkItem,
@@ -33,12 +32,13 @@ import {
   emptyProjectFeed,
   isRealSession,
   mergeTools,
-  readProjectFeed,
+  readProjectFeedAsync,
   type ProjectFeed,
 } from "../pware.oc.opencode/resolver/index.js"
 import { type DocView } from "../pware.oc.omo/resolver/pware.oc.omo.resolver.doc.js"
 import type { DelegateView } from "../pware.oc.runtime/resolver/pware.oc.runtime.resolver.delegate.js"
 import { enrichApprovalSessionStates } from "../pware.oc.runtime/pware.oc.runtime.mywork-enrich.js"
+import { readPlanSession, readSessionDrafts } from "../pware.oc.runtime/pware.oc.runtime.omoRead.js"
 import {
   ROW_LINE_FALLBACK,
   ROW_LINE_RESERVE,
@@ -51,7 +51,6 @@ import {
   rowsForPlan,
   scrollByStep,
 } from "../pware.oc.core/pware.oc.core.layout.js"
-import { openReadonlyDb } from "../pware.oc.core/pware.oc.core.sqlite.js"
 import {
   MARK_QUEUED,
   PULSE_LIVE,
@@ -63,7 +62,12 @@ import {
 } from "../pware.oc.core/constants/pware.oc.core.constants.status.js"
 import {
   SESSION_STATUS_ARCHIVED,
+  SESSION_STATUS_RUNNING,
 } from "../pware.oc.opencode/constants/pware.oc.opencode.constants.sessionStatus.js"
+import {
+  HOUR_MS,
+  sessionRowOpacity,
+} from "../pware.oc.opencode/resolver/pware.oc.opencode.resolver.session.js"
 import {
   ROW_KIND_AGENT,
   ROW_KIND_DELEGATE,
@@ -102,7 +106,7 @@ import {
   type GlyphSpec,
   type TabAttentionItem,
 } from "./pware.oc.ui.glyphs.js"
-import { dismissQuestion, kvRead, kvWrite, kvReadOne, kvWriteOne, readDismissedQuestions, ClickText, ContextActions, type ThemeColors } from "./pware.oc.ui.chrome.js"
+import { createPinnedSessions, dismissQuestion, kvRead, kvWrite, kvReadOne, kvWriteOne, readDismissedQuestions, ClickText, ContextActions, type ThemeColors } from "./pware.oc.ui.chrome.js"
 import {
   AgentLine,
   FoldSection,
@@ -182,6 +186,7 @@ import {
   type ToolHit,
 } from "../pware.oc.core/pware.oc.core.pulse.js"
 import {
+  EV_OES_REFRESH_MY_WORK,
   EV_OES_SESSION_SELECT,
   EV_OES_SNAPSHOT,
 } from "../pware.oc.core/constants/pware.oc.core.constants.eventName.js"
@@ -338,6 +343,21 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   }
 
   const bus = createEventBus()
+
+  // Pinned-sessions kv manager + the refresh tick that invalidates the My work
+  // memos whenever a pin/unpin fires the `refresh_my_work` event.
+  const pinnedSessions = createPinnedSessions(props.api)
+  const [pinnedTick, setPinnedTick] = createSignal(0)
+  const refreshMyWork = (): void => bus.emit({ type: EV_OES_REFRESH_MY_WORK, ts: Date.now() })
+  const onPinSession = (sessionId: string): void => {
+    pinnedSessions.pin(sessionId)
+    refreshMyWork()
+  }
+  const onUnpinSession = (sessionId: string): void => {
+    pinnedSessions.unpin(sessionId)
+    refreshMyWork()
+  }
+
   let watchedId = props.sessionId
   let source = startRuntimeSource({
     bus,
@@ -488,6 +508,11 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
 
   const offSessionSelect = bus.on(EV_OES_SESSION_SELECT, () => remount())
 
+  const offRefreshMyWork = bus.on(EV_OES_REFRESH_MY_WORK, () => {
+    setPinnedTick((n) => n + 1)
+    requestRender()
+  })
+
   const bridge = startHostEventBridge({
     api: props.api,
     bus,
@@ -615,6 +640,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
     offFilesTouched()
     offTokensDelta()
     offSessionSelect()
+    offRefreshMyWork()
     source.stop()
     offGit()
     writeProfileSummary()
@@ -729,14 +755,23 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
    * Project-wide feed — tools/files from every main session. The DB queries run
    * only while the Sessions tab is open; elsewhere the memo stays empty.
    */
-  const projectFeed = createMemo<ProjectFeed>(() => {
-    if (tab() !== "sessions" || coldTab() === "sessions") return emptyProjectFeed()
+  const [projectFeed, setProjectFeed] = createSignal<ProjectFeed>(emptyProjectFeed())
+  let projectFeedGeneration = 0
+  createEffect(() => {
+    if (tab() !== "sessions" || coldTab() === "sessions") {
+      projectFeedGeneration += 1
+      setProjectFeed(emptyProjectFeed())
+      return
+    }
     const db = snap().db
-    return readProjectFeed({
+    const generation = ++projectFeedGeneration
+    void readProjectFeedAsync({
       dbPath: db.dbPath,
       sessionIds: db.recent.map((s) => s.id),
       toolLimit: oes().toolFetch,
       filter: fileFilter(projectDir()),
+    }).then((feed) => {
+      if (generation === projectFeedGeneration) setProjectFeed(feed)
     })
   })
   const projectFilesStat = createMemo(() => sumDiff(projectFeed().files))
@@ -768,17 +803,23 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   const omoPresent = createMemo(() => snap().omo.present)
 
   /** Drafts under `.omo/drafts/` that this session wrote — last five inline, the full list behind "view all". */
-  const draftsAll = createMemo<DocView[]>(() => {
-    if (tab() !== "current" || !omoPresent() || !props.sessionId) return []
-    now() // re-scan while open; the docs cache TTL gates the filesystem read
-    const db = openReadonlyDb(snap().db.dbPath)
-    if (!db) return [] // no writer attribution without the DB
-    try {
-      return DraftFile.list(projectDir(), props.sessionId, { db })
-    } catch (e) {
-      dbg("drafts", "error", String(e))
-      return []
+  const [draftsAll, setDraftsAll] = createSignal<DocView[]>([])
+  let draftsGeneration = 0
+  createEffect(() => {
+    if (tab() !== "current" || !omoPresent() || !props.sessionId) {
+      draftsGeneration += 1
+      setDraftsAll([])
+      return
     }
+    now() // re-scan while open; the docs cache TTL gates the filesystem read
+    const generation = ++draftsGeneration
+    void readSessionDrafts({
+      dbPath: snap().db.dbPath,
+      projectRoot: projectDir(),
+      sessionId: props.sessionId,
+    }).then((drafts) => {
+      if (generation === draftsGeneration) setDraftsAll(drafts)
+    })
   })
   const drafts = createMemo(() => draftsAll().slice(0, 5))
 
@@ -797,44 +838,65 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   })
 
   /** OMO plans/drafts in the action groups, enriched with planner-session state, plus the Draft docs archive. */
-  const myWorkApprovals = createMemo<MyWorkItem[]>(() => {
-    if (tab() !== "mywork" || coldTab() === "mywork" || !omoPresent()) return []
+  const [myWorkApprovals, setMyWorkApprovals] = createSignal<MyWorkItem[]>([])
+  let approvalGeneration = 0
+  createEffect(() => {
+    if (tab() !== "mywork" || coldTab() === "mywork" || !omoPresent()) {
+      approvalGeneration += 1
+      setMyWorkApprovals([])
+      return
+    }
     now() // re-scan while open; the plans cache TTL gates the filesystem read
     const dir = projectDir()
     try {
       const buckets = listApprovals(dir)
-      return [
-        ...toApprovalItems(
-          enrichApprovalSessionStates(
-            [
-              ...buckets.readyReview,
-              ...buckets.readyStart,
-              ...buckets.finished,
-              ...buckets.drafting,
-            ],
-            {
-              dbPath: snap().db.dbPath,
-              projectRoot: dir,
-            },
-          ),
-        ),
-        // Draft docs / Plans are not queue items — no session enrichment needed.
-        ...toDraftDocItems(buckets.draftDocs),
-        ...toPlanItems(buckets.plans),
-      ]
+      const generation = ++approvalGeneration
+      void enrichApprovalSessionStates(
+        [
+          ...buckets.readyReview,
+          ...buckets.readyStart,
+          ...buckets.finished,
+          ...buckets.drafting,
+        ],
+        {
+          dbPath: snap().db.dbPath,
+          projectRoot: dir,
+        },
+      ).then((approvals) => {
+        if (generation !== approvalGeneration) return
+        setMyWorkApprovals([
+          ...toApprovalItems(approvals),
+          ...toDraftDocItems(buckets.draftDocs),
+          ...toPlanItems(buckets.plans),
+        ])
+      })
     } catch (e) {
       dbg("mywork.approvals", "error", String(e))
-      return []
+      setMyWorkApprovals([])
     }
   })
 
-  /** Recent main sessions (running and idle) — the "Sessions" group. */
+  /** Pinned session ids, re-read from kv whenever a pin/unpin fires the refresh event. */
+  const pinnedIds = createMemo<string[]>(() => {
+    pinnedTick()
+    return pinnedSessions.list()
+  })
+
+  /** Pinned sessions (full rows), resolved from the pinned ids against the recent-session list. */
+  const myWorkPinned = createMemo<MyWorkItem[]>(() => {
+    if (tab() !== "mywork" || coldTab() === "mywork") return []
+    return toPinnedItems(pinnedIds(), snap().db.recent)
+  })
+
+  /** Recent main sessions (running and idle), minus the pinned ones — the "Sessions" group. */
   const myWorkRunning = createMemo<MyWorkItem[]>(() => {
     if (tab() !== "mywork" || coldTab() === "mywork") return []
-    return toSessionItems(snap().db.recent)
+    const pinned = new Set(pinnedIds())
+    return toSessionItems(snap().db.recent.filter((s) => !pinned.has(s.id)))
   })
 
   const myWorkItems = createMemo<MyWorkItem[]>(() => [
+    ...myWorkPinned(),
     ...myWorkQuestions(),
     ...myWorkRunning(),
     ...myWorkApprovals(),
@@ -932,7 +994,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
         for (const g of myWorkGroups()) {
           const fold = myWorkFold[g.kind]
           if (!fold) continue
-          section(!fold.open(), `mywork.${g.kind}`, g.items.length, ROW_MIN.mywork, ROW_RANK.mywork)
+          section(!fold.open(), `mywork.${g.kind}`, g.items.length, g.items.length > 0 ? ROW_MIN.mywork : 0, ROW_RANK.mywork)
         }
       } else {
         // Perf lays out its own sections and caps itself with `perfRows` in
@@ -968,13 +1030,13 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
    * never a sign-off queue. Start work is offered only for the Plans
    * archive (via the `startWork` flag); Draft docs stays browse-only.
    */
-  const openDocPicker = (item: { name: string; rel: string }, doc: DocView, docsLabel: string, startWork: boolean = false) => {
-    const db = openReadonlyDb(snap().db.dbPath)
-    const sessionId = db ? sessionForPlanFile(db, item.rel) : null
+  const openDocPicker = async (item: { name: string; rel: string }, doc: DocView, docsLabel: string, startWork: boolean = false) => {
+    const planSession = await readPlanSession({ dbPath: snap().db.dbPath, rel: item.rel })
+    const sessionId = planSession.sessionId
     openApprovalDialog(props.api, {
       title: item.name,
       sessionId,
-      continueHint: approvalContinueHint(sessionId, Boolean(db)),
+      continueHint: approvalContinueHint(sessionId, planSession.dbAvailable),
       onContinue: (sid) => selectSession(props.api, sid),
       onStartWork: (mode) => runStartWork(props.api, props.sessionId, mode, item.name),
       onDocs: () => openDocDetail(props.api, doc, projectRoots(), colors()),
@@ -987,6 +1049,20 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
   const myWorkRow = (item: MyWorkItem): RowData => {
     if (item.kind === MY_WORK_GROUP_SESSIONS || item.kind === MY_WORK_GROUP_PINNED) {
       const isBusy = Boolean(item.sessionId && busy()[item.sessionId])
+      const keep =
+        item.sessionId === props.sessionId ||
+        item.sessionId === snap().db.main?.id ||
+        item.status === SESSION_STATUS_RUNNING
+      const ageMs = item.timeUpdated == null ? null : now() - item.timeUpdated
+      const opacity =
+        item.kind === MY_WORK_GROUP_SESSIONS
+          ? sessionRowOpacity(
+              ageMs,
+              oes().sessionDimHours * HOUR_MS,
+              oes().sessionVisibleHours * HOUR_MS,
+              keep,
+            )
+          : undefined
       return {
         kind: ROW_KIND_AGENT,
         mark: rowMark(
@@ -1001,9 +1077,12 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
         name: item.title,
         current: item.sessionId === props.sessionId,
         suffix: item.sessionId === props.sessionId ? "[C]" : undefined,
+        opacity,
         onSelect: () => goSession(item.sessionId),
-        // Pin affordance — placeholder until the pinned backend is wired.
-        link: item.kind === MY_WORK_GROUP_SESSIONS ? { label: "P", onPick: () => {} } : undefined,
+        link:
+          item.kind === MY_WORK_GROUP_SESSIONS
+            ? { label: "P", onPick: () => onPinSession(item.sessionId) }
+            : { label: "U", onPick: () => onUnpinSession(item.sessionId) },
       }
     }
     if (item.kind === MY_WORK_GROUP_DRAFT_DOCS) {
@@ -1019,7 +1098,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
         kind: ROW_KIND_FILE,
         glyph: myWorkGlyph(item.kind),
         name: item.name,
-        onSelect: () => openDocPicker(item, doc, "Preview draft file"),
+        onSelect: () => void openDocPicker(item, doc, "Preview draft file"),
       }
     }
     if (item.kind === MY_WORK_GROUP_PLANS) {
@@ -1035,7 +1114,7 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
         kind: ROW_KIND_FILE,
         glyph: myWorkGlyph(item.kind),
         name: item.name,
-        onSelect: () => openDocPicker(item, doc, "Preview plan file", true),
+        onSelect: () => void openDocPicker(item, doc, "Preview plan file", true),
       }
     }
     if ("sessionId" in item) {
@@ -1078,34 +1157,41 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
       name: item.name,
       suffix: reviewLabel || undefined,
       onSelect: () => {
-        const db = openReadonlyDb(snap().db.dbPath)
-        const sessionId = db ? sessionForPlanFile(db, item.rel) : null
-        const base: Parameters<typeof openApprovalDialog>[1] = {
-          title: item.name,
-          sessionId,
-          continueHint: approvalContinueHint(sessionId, Boolean(db)),
-          onContinue: (sid) => selectSession(props.api, sid),
-          onApprove: (sid) => approvePlan(props.api, sid),
-          onStartWork: (mode) => runStartWork(props.api, props.sessionId, mode, item.name),
-          onDocs: () => openDocDetail(props.api, doc, projectRoots(), colors()),
-        }
-        if (drafting) {
-          openApprovalDialog(props.api, {
-            ...base,
-            showApprove: false,
-            showStartWork: false,
-            docsLabel: "Preview plan file",
-          })
-          return
-        }
-        openApprovalDialog(props.api, { ...base, showApprove, showStartWork })
+        void readPlanSession({ dbPath: snap().db.dbPath, rel: item.rel }).then((planSession) => {
+          const sessionId = planSession.sessionId
+          const base: Parameters<typeof openApprovalDialog>[1] = {
+            title: item.name,
+            sessionId,
+            continueHint: approvalContinueHint(sessionId, planSession.dbAvailable),
+            onContinue: (sid) => selectSession(props.api, sid),
+            onApprove: (sid) => approvePlan(props.api, sid),
+            onStartWork: (mode) => runStartWork(props.api, props.sessionId, mode, item.name),
+            onDocs: () => openDocDetail(props.api, doc, projectRoots(), colors()),
+          }
+          if (drafting) {
+            openApprovalDialog(props.api, {
+              ...base,
+              showApprove: false,
+              showStartWork: false,
+              docsLabel: "Preview plan file",
+            })
+            return
+          }
+          openApprovalDialog(props.api, { ...base, showApprove, showStartWork })
+        })
       },
     }
   }
 
   /** Perf SQLite scan runs only while this tab is open. */
-  const perf = createMemo(() => {
-    if (tab() !== "perf" || coldTab() === "perf") return emptyPerf(props.sessionId)
+  const [perf, setPerf] = createSignal(emptyPerf(props.sessionId))
+  let perfGeneration = 0
+  createEffect(() => {
+    if (tab() !== "perf" || coldTab() === "perf") {
+      perfGeneration += 1
+      setPerf(emptyPerf(props.sessionId))
+      return
+    }
     const o = oes()
     const history = o.perfHistory > 0
       ? snap()
@@ -1113,12 +1199,15 @@ export function SidebarPanel(props: SidebarProps): JSX.Element {
           .slice(0, o.perfHistory)
           .map((s) => ({ id: s.id, title: s.title }))
       : []
-    return readPerfSnapshot({
+    const generation = ++perfGeneration
+    void readPerfSnapshot({
       dbPath: snap().db.dbPath,
       sessionId: props.sessionId,
       turns: o.perfTurns,
       history,
       cacheKey: `${props.sessionId}::${snap().scanStamp}::${o.perfTurns}`,
+    }).then((snapshot) => {
+      if (generation === perfGeneration) setPerf(snapshot)
     })
   })
 

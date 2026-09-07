@@ -5,22 +5,24 @@
  * session graph + tools + files for the panel; readProjectFeed rolls the
  * Sessions-tab feed across a set of sessions. Re-exports the entity resolvers.
  */
-import fs from "node:fs"
 import type { FileFilter, FileView } from "../pware.oc.opencode.files.js"
-import { profile } from "../../pware.oc.core/pware.oc.core.debug.js"
 import { getOes } from "../../pware.oc.core/pware.oc.core.oes.js"
-import { openReadonlyDb, withDbRead } from "../../pware.oc.core/pware.oc.core.sqlite.js"
+import { profileAsync } from "../../pware.oc.core/pware.oc.core.debug.js"
+import { readonlyReadGateway } from "../../pware.oc.core/pware.oc.core.sqliteGateway.js"
+import type { SqlDb } from "../../pware.oc.core/pware.oc.core.sqlite.js"
 import {
   getSessionById,
   getSessionsByIds,
   listChildSessions,
   listRecentMainSessions,
+  HOUR_MS,
+  sessionAgeTier,
   toSessionView,
   type SessionView,
 } from "./pware.oc.opencode.resolver.session.js"
+import { SESSION_STATUS_RUNNING } from "../constants/pware.oc.opencode.constants.sessionStatus.js"
 import { listRecentToolEvents, listToolEvents, type ToolView } from "./pware.oc.opencode.resolver.tool.js"
 import { listSessionFiles, listRecentSessionFiles } from "./pware.oc.opencode.resolver.file.js"
-import type { TodoRow } from "./pware.oc.opencode.resolver.todo.js"
 
 export * from "./pware.oc.opencode.resolver.session.js"
 export * from "./pware.oc.opencode.resolver.todo.js"
@@ -38,12 +40,10 @@ export type DbSnapshot = {
   main: SessionView | null
   parent: SessionView | null
   children: SessionView[]
-  siblings: SessionView[]
   /** Sessions keyed by id — current, main, and any looked-up delegates. */
   byId: Record<string, SessionView>
   /** Recent main (parent_id null) sessions in this project — the `sessionFetch` window. */
   recent: SessionView[]
-  todos: TodoRow[]
   /** Current session tool parts — name + status only, no args/outputs. */
   tools: ToolView[]
   /** Basenames + optional +/- from edit/write parts. No paths, no bodies. */
@@ -60,83 +60,114 @@ export function emptyDb(dbPath: string, error: string | null = null): DbSnapshot
     main: null,
     parent: null,
     children: [],
-    siblings: [],
     byId: {},
     recent: [],
-    todos: [],
     tools: [],
     files: [],
     error,
   }
 }
 
-export function readDbSnapshot(opts: {
-  dbPath: string
-  sessionId: string
-  extraIds?: string[]
-  projectRoot?: string | null
-}): DbSnapshot {
-  if (!opts.dbPath || !fs.existsSync(opts.dbPath)) {
-    return emptyDb(opts.dbPath, "db missing")
-  }
+export type DbSnapshotReadOptions = {
+  readonly dbPath: string
+  readonly sessionId: string
+  readonly extraIds?: readonly string[]
+  readonly projectRoot?: string | null
+}
 
-  const run = (): DbSnapshot => {
-    const db = openReadonlyDb(opts.dbPath)
-    if (!db) return emptyDb(opts.dbPath, "sqlite unavailable")
+export type DbReadPlan<T> = {
+  readonly initial: () => T
+  readonly stages: readonly ((db: SqlDb, state: T) => T)[]
+}
 
-    const now = Date.now()
+export function createDbSnapshotRead(opts: DbSnapshotReadOptions): DbReadPlan<DbSnapshot> {
+  const now = Date.now()
+  const oes = getOes(opts.projectRoot)
+  const loadCurrent = (db: SqlDb, state: DbSnapshot): DbSnapshot => {
     const row = getSessionById(db, opts.sessionId)
     if (!row) {
       return { ...emptyDb(opts.dbPath, "session not in db yet"), present: true }
     }
     const current = toSessionView(row, now)
-    let parent: SessionView | null = null
-    const children = listChildSessions(db, row.id).map((r) => toSessionView(r, now))
-    if (row.parent_id) {
-      const p = getSessionById(db, row.parent_id)
-      if (p) parent = toSessionView(p, now)
-    }
-
-    const main = parent ?? current
-    const extra = getSessionsByIds(db, opts.extraIds ?? []).map((r) =>
-      toSessionView(r, now),
-    )
-    const byId: Record<string, SessionView> = {}
-    const oes = getOes(opts.projectRoot)
-    const recent = listRecentMainSessions(db, {
-      projectId: row.project_id,
-      limit: oes.sessionFetch,
-    }).map((r) => toSessionView(r, now))
-    for (const v of [current, parent, main, ...children, ...extra, ...recent]) {
-      if (v) byId[v.id] = v
-    }
-
     return {
+      ...state,
       present: true,
-      dbPath: opts.dbPath,
       projectId: row.project_id,
       current,
-      main,
-      parent,
-      children,
-      siblings: [],
-      byId,
-      recent,
-      todos: [],
-      tools: listToolEvents(db, row.id, oes.toolFetch),
-      files: listSessionFiles(db, row.id, {
-        skipGitignore: oes.skipGitignore,
-        projectRoot: opts.projectRoot,
-      }),
+      main: current,
+      byId: { [current.id]: current },
       error: null,
     }
   }
 
-  return profile("db.snapshot", () =>
-    withDbRead(run, (e) =>
-      emptyDb(opts.dbPath, e instanceof Error ? e.message : "db read failed"),
-    ),
-  )
+  const loadGraph = (db: SqlDb, state: DbSnapshot): DbSnapshot => {
+    const current = state.current
+    const projectId = state.projectId
+    if (!current || !projectId) return state
+    let parent: SessionView | null = null
+    const children = listChildSessions(db, current.id).map((r) => toSessionView(r, now))
+    if (current.parentId) {
+      const p = getSessionById(db, current.parentId)
+      if (p) parent = toSessionView(p, now)
+    }
+    const main = parent ?? current
+    const extra = getSessionsByIds(db, [...(opts.extraIds ?? [])]).map((r) =>
+      toSessionView(r, now),
+    )
+    const visibleMs = oes.sessionVisibleHours * HOUR_MS
+    const dimMs = oes.sessionDimHours * HOUR_MS
+    const recent = listRecentMainSessions(db, {
+      projectId,
+      limit: oes.sessionFetch,
+    })
+      .map((r) => toSessionView(r, now))
+      .filter((v) => {
+        const keep =
+          v.id === current.id || v.id === main.id || v.status === SESSION_STATUS_RUNNING
+        return sessionAgeTier(v.ageMs, dimMs, visibleMs, keep) !== "hidden"
+      })
+    const byId: Record<string, SessionView> = {}
+    for (const v of [current, parent, main, ...children, ...extra, ...recent]) {
+      if (v) byId[v.id] = v
+    }
+    return {
+      ...state,
+      main,
+      parent,
+      children,
+      byId,
+      recent,
+    }
+  }
+
+  const loadTools = (db: SqlDb, state: DbSnapshot): DbSnapshot => {
+    if (!state.current) return state
+    return {
+      ...state,
+      tools: listToolEvents(db, state.current.id, oes.toolFetch),
+    }
+  }
+
+  const loadFiles = (db: SqlDb, state: DbSnapshot): DbSnapshot => {
+    if (!state.current) return state
+    return {
+      ...state,
+      files: listSessionFiles(db, state.current.id, {
+        skipGitignore: oes.skipGitignore,
+        projectRoot: opts.projectRoot,
+      }),
+    }
+  }
+
+  return {
+    initial: () => emptyDb(opts.dbPath),
+    stages: [loadCurrent, loadGraph, loadTools, loadFiles],
+  }
+}
+
+export function readDbSnapshot(db: SqlDb, opts: DbSnapshotReadOptions): DbSnapshot {
+  const plan = createDbSnapshotRead(opts)
+  return plan.stages.reduce((state, stage) => stage(db, state), plan.initial())
 }
 
 export type ProjectFeed = {
@@ -149,22 +180,44 @@ export function emptyProjectFeed(): ProjectFeed {
 }
 
 /** Lazy read — callers gate on the Sessions tab so the queries never run elsewhere. */
-export function readProjectFeed(opts: {
-  dbPath: string
-  sessionIds: string[]
-  toolLimit: number
-  filter?: FileFilter
-}): ProjectFeed {
-  const empty = emptyProjectFeed()
-  if (!opts.dbPath || opts.sessionIds.length === 0 || !fs.existsSync(opts.dbPath)) return empty
-  return profile("db.feed", () =>
-    withDbRead(() => {
-      const db = openReadonlyDb(opts.dbPath)
-      if (!db) return empty
-      return {
-        tools: listRecentToolEvents(db, opts.sessionIds, opts.toolLimit),
-        files: listRecentSessionFiles(db, opts.sessionIds, opts.filter),
-      }
-    }, () => empty),
+export type ProjectFeedReadOptions = {
+  readonly dbPath: string
+  readonly sessionIds: readonly string[]
+  readonly toolLimit: number
+  readonly filter?: FileFilter
+}
+
+export function createProjectFeedRead(opts: ProjectFeedReadOptions): DbReadPlan<ProjectFeed> {
+  return {
+    initial: emptyProjectFeed,
+    stages: [
+      (db, state) => ({
+        ...state,
+        tools: listRecentToolEvents(db, [...opts.sessionIds], opts.toolLimit),
+      }),
+      (db, state) => ({
+        ...state,
+        files: listRecentSessionFiles(db, [...opts.sessionIds], opts.filter),
+      }),
+    ],
+  }
+}
+
+export function readProjectFeed(db: SqlDb, opts: ProjectFeedReadOptions): ProjectFeed {
+  if (opts.sessionIds.length === 0) return emptyProjectFeed()
+  const plan = createProjectFeedRead(opts)
+  return plan.stages.reduce((state, stage) => stage(db, state), plan.initial())
+}
+
+export function readProjectFeedAsync(opts: ProjectFeedReadOptions): Promise<ProjectFeed> {
+  if (!opts.dbPath || opts.sessionIds.length === 0) return Promise.resolve(emptyProjectFeed())
+  const plan = createProjectFeedRead(opts)
+  return profileAsync("db.feed", () =>
+    readonlyReadGateway.run({
+      dbPath: opts.dbPath,
+      initial: plan.initial,
+      stages: plan.stages,
+      fallback: emptyProjectFeed,
+    }),
   )
 }

@@ -63,6 +63,47 @@ export type SessionView = {
 
 const RUNNING_MS = 2 * 60 * 1000
 
+export const HOUR_MS = 3_600_000
+
+/**
+ * Age tier for a session row: how bright should it render?
+ *
+ * - `keep` (pinned/current) is always full.
+ * - `ageMs` null or NaN (unknown / uncomputed) is treated as full — defensive,
+ *   never hide a row whose age we do not know.
+ * - age < dimMs → full
+ * - age < visibleMs → dim
+ * - otherwise → hidden
+ *
+ * Boundaries: age exactly `dimMs` is `dim`; age exactly `visibleMs` is `hidden`.
+ */
+export function sessionAgeTier(
+  ageMs: number | null,
+  dimMs: number,
+  visibleMs: number,
+  keep: boolean,
+): "full" | "dim" | "hidden" {
+  if (keep) return "full"
+  if (ageMs == null || Number.isNaN(ageMs)) return "full"
+  if (ageMs < dimMs) return "full"
+  if (ageMs < visibleMs) return "dim"
+  return "hidden"
+}
+
+/**
+ * Row opacity is the single decision point: dim rows render at 0.5, everything
+ * else (full, hidden, kept) uses the renderer default. Never hardcode 0.5
+ * elsewhere — callers import this.
+ */
+export function sessionRowOpacity(
+  ageMs: number | null,
+  dimMs: number,
+  visibleMs: number,
+  keep: boolean,
+): number | undefined {
+  return sessionAgeTier(ageMs, dimMs, visibleMs, keep) === "dim" ? 0.5 : undefined
+}
+
 const SESSION_SELECT = `
   id, project_id, parent_id, directory, title, agent, model,
   cost, tokens_input, tokens_output, tokens_reasoning,
@@ -168,20 +209,16 @@ export function listRecentMainSessions(
   opts: { projectId: string; limit?: number },
 ): SessionRow[] {
   const limit = Math.max(1, Math.min(opts.limit ?? RECENT_LIMIT, 20))
-  try {
-    return db.all<SessionRow>(
-      `SELECT ${SESSION_SELECT} FROM session
-       WHERE parent_id IS NULL
-         AND (time_archived IS NULL OR time_archived = 0)
-         AND project_id = ?
-         AND EXISTS (SELECT 1 FROM part WHERE part.session_id = session.id)
-       ORDER BY time_updated DESC
-       LIMIT ${limit}`,
-      opts.projectId,
-    )
-  } catch {
-    return []
-  }
+  return db.all<SessionRow>(
+    `SELECT ${SESSION_SELECT} FROM session
+     WHERE parent_id IS NULL
+       AND (time_archived IS NULL OR time_archived = 0)
+       AND project_id = ?
+       AND EXISTS (SELECT 1 FROM part WHERE part.session_id = session.id)
+     ORDER BY time_updated DESC
+     LIMIT ${limit}`,
+    opts.projectId,
+  )
 }
 
 export function getSessionsByIds(db: SqlDb, ids: string[]): SessionRow[] {

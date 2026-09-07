@@ -11,6 +11,7 @@ import {
   toApprovalItems,
   toDraftDocItems,
   toPlanItems,
+  toPinnedItems,
   toQuestionItems,
   toSessionItems,
   type MyWorkItem,
@@ -172,6 +173,27 @@ describe("toSessionItems", () => {
   })
 })
 
+describe("toPinnedItems", () => {
+  test("joins pinned ids to recent-session rows in pin order, skipping unknown ids", () => {
+    expect(
+      toPinnedItems(
+        ["s2", "gone", "s1"],
+        [
+          { id: "s1", title: "One", status: "idle", timeUpdated: 1_000 },
+          { id: "s2", title: "Two", status: "running", timeUpdated: 2_000 },
+        ],
+      ),
+    ).toEqual([
+      { kind: "pinned", sessionId: "s2", title: "Two", status: "running", timeUpdated: 2_000 },
+      { kind: "pinned", sessionId: "s1", title: "One", status: "idle", timeUpdated: 1_000 },
+    ])
+  })
+
+  test("an empty pinned set yields no rows", () => {
+    expect(toPinnedItems([], [])).toEqual([])
+  })
+})
+
 describe("toDraftDocItems", () => {
   test("maps each leftover draft to the draft-docs variant with name, rel and updatedAt", () => {
     const items = toDraftDocItems([
@@ -310,7 +332,7 @@ describe("toApprovalItems", () => {
 })
 
 describe("groupMyWork", () => {
-  test("orders question kinds, sessions, then approvals and drops empty kinds", () => {
+  test("orders question kinds, sessions, then approvals and drops empty non-pinned kinds", () => {
     const interrupted: MyWorkItem = { ...question, kind: "interrupted", reason: "aborted" }
     const errored: MyWorkItem = { ...question, kind: "error", reason: "boom" }
     const sessions: MyWorkItem = {
@@ -345,8 +367,12 @@ describe("groupMyWork", () => {
       "plans",
       "dismissed",
     ])
-    expect(groupMyWork([question]).map((g) => g.kind)).toEqual(["question"])
-    expect(groupMyWork([])).toEqual([])
+  })
+
+  test("pinned always leads the queue, even when empty", () => {
+    expect(groupMyWork([]).map((g) => g.kind)).toEqual(["pinned"])
+    expect(groupMyWork([])[0]?.items).toEqual([])
+    expect(groupMyWork([question]).map((g) => g.kind)).toEqual(["pinned", "question"])
   })
 
   test("order constant matches the grouped order", () => {

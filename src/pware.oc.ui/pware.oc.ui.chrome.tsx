@@ -5,6 +5,13 @@ import { TextAttributes } from "@opentui/core"
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import type { GlyphSpec, ToneKey } from "../pware.oc.core/pware.oc.core.glyph.js"
 import { CONTEXT_ACTION_COL_WIDTH } from "../pware.oc.core/pware.oc.core.layout.js"
+import {
+  emptyRuntimeConfig,
+  parseRuntimeConfig,
+  pinSession,
+  unpinSession,
+  type RuntimeConfigDto,
+} from "../pware.oc.core/pware.oc.core.runtimeConfig.js"
 import { formatDismissed, parseDismissed } from "../pware.oc.runtime/pware.oc.runtime.mywork.js"
 
 /** One clickable context action in the shared right rail. */
@@ -126,6 +133,41 @@ export function dismissQuestion(api: TuiPluginApi, partId: string): void {
     kv?.set(KV_DISMISSED_QUESTIONS, formatDismissed(ids))
   } catch {
     // no kv in older hosts
+  }
+}
+
+const KV_RUNTIME_CONFIG = "oes.config"
+
+type TuiKv = {
+  get: <T>(key: string, fallback?: T) => T
+  set: (key: string, value: unknown) => void
+}
+
+/** Host kv-backed pinned-sessions manager: pin/unpin mutate the `oes.config` DTO. */
+export function createPinnedSessions(api: TuiPluginApi): {
+  list: () => string[]
+  pin: (sessionId: string) => void
+  unpin: (sessionId: string) => void
+} {
+  const kv = () => (api as TuiPluginApi & { kv?: TuiKv }).kv
+  const read = (): RuntimeConfigDto => {
+    try {
+      return parseRuntimeConfig(kv()?.get(KV_RUNTIME_CONFIG, undefined))
+    } catch {
+      return emptyRuntimeConfig()
+    }
+  }
+  const write = (config: RuntimeConfigDto): void => {
+    try {
+      kv()?.set(KV_RUNTIME_CONFIG, config)
+    } catch {
+      // no kv in older hosts
+    }
+  }
+  return {
+    list: () => read().pinned_sessions,
+    pin: (sessionId) => write(pinSession(read(), sessionId)),
+    unpin: (sessionId) => write(unpinSession(read(), sessionId)),
   }
 }
 

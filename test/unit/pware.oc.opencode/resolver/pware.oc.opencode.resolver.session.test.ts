@@ -1,6 +1,7 @@
 import { afterAll, describe, expect, test } from "bun:test"
 import {
   getSessionsByIds,
+  HOUR_MS,
   inferStatus,
   isRealSession,
   listChildSessions,
@@ -8,6 +9,8 @@ import {
   listSiblingSessions,
   refreshSessionStatus,
   sessionActivityState,
+  sessionAgeTier,
+  sessionRowOpacity,
   sessionScanStamp,
   toSessionView,
   type SessionRow,
@@ -47,6 +50,59 @@ function throwingDb(): SqlDb {
     close: () => {},
   }
 }
+
+describe("sessionAgeTier", () => {
+  const DIM_MS = 172_800_000 // 48 h
+  const VISIBLE_MS = 259_200_000 // 72 h
+
+  test("HOUR_MS is one hour in milliseconds", () => {
+    expect(HOUR_MS).toBe(3_600_000)
+  })
+
+  test("0 and below-dim ages are full", () => {
+    expect(sessionAgeTier(0, DIM_MS, VISIBLE_MS, false)).toBe("full")
+    expect(sessionAgeTier(DIM_MS - 1, DIM_MS, VISIBLE_MS, false)).toBe("full")
+  })
+
+  test("age exactly dimMs is dim", () => {
+    expect(sessionAgeTier(DIM_MS, DIM_MS, VISIBLE_MS, false)).toBe("dim")
+  })
+
+  test("ages between dim and visible are dim", () => {
+    expect(sessionAgeTier(DIM_MS + 1, DIM_MS, VISIBLE_MS, false)).toBe("dim")
+    expect(sessionAgeTier(VISIBLE_MS - 1, DIM_MS, VISIBLE_MS, false)).toBe("dim")
+  })
+
+  test("age exactly visibleMs and above are hidden", () => {
+    expect(sessionAgeTier(VISIBLE_MS, DIM_MS, VISIBLE_MS, false)).toBe("hidden")
+    expect(sessionAgeTier(VISIBLE_MS + 1, DIM_MS, VISIBLE_MS, false)).toBe("hidden")
+  })
+
+  test("null and NaN ages are full", () => {
+    expect(sessionAgeTier(null, DIM_MS, VISIBLE_MS, false)).toBe("full")
+    expect(sessionAgeTier(Number.NaN, DIM_MS, VISIBLE_MS, false)).toBe("full")
+  })
+
+  test("keep overrides dim and hidden", () => {
+    expect(sessionAgeTier(DIM_MS, DIM_MS, VISIBLE_MS, true)).toBe("full")
+    expect(sessionAgeTier(VISIBLE_MS, DIM_MS, VISIBLE_MS, true)).toBe("full")
+  })
+})
+
+describe("sessionRowOpacity", () => {
+  const DIM_MS = 172_800_000 // 48 h
+  const VISIBLE_MS = 259_200_000 // 72 h
+
+  test("returns 0.5 exactly when the tier is dim", () => {
+    expect(sessionRowOpacity(200_000_000, DIM_MS, VISIBLE_MS, false)).toBe(0.5)
+  })
+
+  test("returns undefined on full, hidden, and kept rows", () => {
+    expect(sessionRowOpacity(0, DIM_MS, VISIBLE_MS, false)).toBeUndefined()
+    expect(sessionRowOpacity(VISIBLE_MS, DIM_MS, VISIBLE_MS, false)).toBeUndefined()
+    expect(sessionRowOpacity(200_000_000, DIM_MS, VISIBLE_MS, true)).toBeUndefined()
+  })
+})
 
 describe("inferStatus", () => {
   test("archived / running / idle", () => {
@@ -115,8 +171,8 @@ describe("listRecentMainSessions", () => {
     expect(ids).toEqual(["ses_real"])
   })
 
-  test("soft-fails to empty when the query throws", () => {
-    expect(listRecentMainSessions(throwingDb(), { projectId: "proj_1" })).toEqual([])
+  test("propagates query failures to the request gateway", () => {
+    expect(() => listRecentMainSessions(throwingDb(), { projectId: "proj_1" })).toThrow("boom")
   })
 })
 

@@ -9,15 +9,15 @@
  * job: it composes omo (`.omo/run-continuation`) with opencode (SQLite session
  * activity).
  */
-import fs from "node:fs"
 import {
   sessionActivityState,
   type SessionActivityState,
 } from "../pware.oc.opencode/resolver/pware.oc.opencode.resolver.session.js"
 import { listTodos } from "../pware.oc.opencode/resolver/pware.oc.opencode.resolver.todo.js"
-import { planSessionIndex } from "../pware.oc.omo/resolver/index.js"
-import { openReadonlyDb, withDbRead, type SqlDb } from "../pware.oc.core/pware.oc.core.sqlite.js"
-import { profile } from "../pware.oc.core/pware.oc.core.debug.js"
+import { planSessionIndex, type PlanSessionIndex } from "../pware.oc.omo/resolver/index.js"
+import type { SqlDb } from "../pware.oc.core/pware.oc.core.sqlite.js"
+import { readonlyReadGateway } from "../pware.oc.core/pware.oc.core.sqliteGateway.js"
+import { profileAsync } from "../pware.oc.core/pware.oc.core.debug.js"
 import { basenameOf } from "../pware.oc.core/pware.oc.core.paths.js"
 import { readRunContinuationState } from "../pware.oc.omo/resolver/pware.oc.omo.resolver.approvalState.js"
 import { BACKGROUND_TASK_ACTIVE } from "../pware.oc.omo/constants/pware.oc.omo.constants.backgroundTask.js"
@@ -44,36 +44,44 @@ function sessionTodosDone(db: SqlDb, sessionId: string): boolean {
   return todos.length > 0 && todos.every((t) => t.status === STATUS_COMPLETED)
 }
 
-export function enrichApprovalSessionStates(
+type EnrichmentRead = {
+  readonly index: PlanSessionIndex | null
+  readonly approvals: EnrichedApproval[]
+}
+
+export async function enrichApprovalSessionStates(
   items: readonly ApprovalItem[],
   opts: { dbPath: string | null | undefined; projectRoot: string | null | undefined; now?: number },
-): EnrichedApproval[] {
+): Promise<EnrichedApproval[]> {
   if (items.length === 0) return []
   const dbPath = opts.dbPath
   const projectRoot = opts.projectRoot
-  if (!dbPath || !projectRoot || !fs.existsSync(dbPath)) return blank(items)
-  return profile("mywork.approvals", () =>
-    withDbRead(
-      () => {
-        const db = openReadonlyDb(dbPath)
-        if (!db) return blank(items)
-        // Index once; match writers by basename across all sessions (no
-        // projectId in the opts shape — same scope as sessionForPlanFile).
-        const index = planSessionIndex(db, null, projectRoot)
-        return items.map((item) => {
-          const sessionId = index.fileWriter.get(basenameOf(item.rel))?.sessionId ?? null
-          const sessionState = sessionId
-            ? sessionActivityState(db, sessionId, {
-                backgroundTaskActive:
-                  readRunContinuationState(projectRoot, sessionId) === BACKGROUND_TASK_ACTIVE,
-                now: opts.now,
-              })
-            : null
-          const todosDone = sessionId ? sessionTodosDone(db, sessionId) : false
-          return { ...item, sessionState, todosDone }
+  if (!dbPath || !projectRoot) return blank(items)
+  const itemStages = items.map((item) => (db: SqlDb, state: EnrichmentRead): EnrichmentRead => {
+    const sessionId = state.index?.fileWriter.get(basenameOf(item.rel))?.sessionId ?? null
+    const sessionState = sessionId
+      ? sessionActivityState(db, sessionId, {
+          backgroundTaskActive:
+            readRunContinuationState(projectRoot, sessionId) === BACKGROUND_TASK_ACTIVE,
+          now: opts.now,
         })
-      },
-      () => blank(items),
-    ),
+      : null
+    const todosDone = sessionId ? sessionTodosDone(db, sessionId) : false
+    return {
+      ...state,
+      approvals: [...state.approvals, { ...item, sessionState, todosDone }],
+    }
+  })
+  const result = await profileAsync("mywork.approvals", () =>
+    readonlyReadGateway.run<EnrichmentRead>({
+      dbPath,
+      initial: () => ({ index: null, approvals: [] }),
+      stages: [
+        (db, state) => ({ ...state, index: planSessionIndex(db, null, projectRoot) }),
+        ...itemStages,
+      ],
+      fallback: () => ({ index: null, approvals: blank(items) }),
+    }),
   )
+  return result.approvals
 }

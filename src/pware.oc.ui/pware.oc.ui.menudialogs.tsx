@@ -618,12 +618,12 @@ export function openFileListDialog(
 }
 
 /** Dated column log from opencode.db — writes a sidecar file, then shows it. */
-export function openPerfLog(
+export async function openPerfLog(
   api: TuiPluginApi,
   colors: ThemeColors,
   opts: { dbPath: string; sessionId: string; turns: number; kind: PerfLogKind; now?: number; toolFilter?: string },
-): void {
-  const log = readPerfLog({ ...opts, now: opts.now ?? Date.now(), toolFilter: opts.toolFilter })
+): Promise<void> {
+  const log = await readPerfLog({ ...opts, now: opts.now ?? Date.now(), toolFilter: opts.toolFilter })
   if (!log) {
     toast(api, "No perf stats to log", "warning")
     return

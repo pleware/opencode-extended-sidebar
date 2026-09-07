@@ -18,6 +18,10 @@ export type OesOptions = {
   questionReconcileSec: number
   /** Sessions fetched for the recent-sessions window. */
   sessionFetch: number
+  /** How old (in hours) a session can be before it is dimmed in the recent-sessions window. Always ≤ sessionVisibleHours. */
+  sessionDimHours: number
+  /** How old (in hours) a session can be before it is hidden from the recent-sessions window. */
+  sessionVisibleHours: number
   /** Hide Files that match the project's root .gitignore. Off by default. */
   skipGitignore: boolean
   toolRows: number
@@ -31,7 +35,9 @@ export const OES_DEFAULTS: OesOptions = {
   perfRows: 5,
   perfTurns: 120,
   questionReconcileSec: 15,
-  sessionFetch: 20,
+  sessionDimHours: 48,
+  sessionFetch: 10,
+  sessionVisibleHours: 72,
   skipGitignore: false,
   toolRows: 5,
   toolFetch: 20,
@@ -50,13 +56,17 @@ function clamp(n: unknown, min: number, max: number, fallback: number): number {
 export function pick(raw: Record<string, unknown> | null, base: OesOptions): OesOptions {
   if (!raw) return base
   const toolRows = clamp(raw.toolRows, 3, 20, base.toolRows)
+  const sessionVisibleHours = clamp(raw.sessionVisibleHours, 1, 720, base.sessionVisibleHours)
+  const sessionDimHours = clamp(raw.sessionDimHours, 0, sessionVisibleHours, Math.min(base.sessionDimHours, sessionVisibleHours))
   return {
     fileRows: clamp(raw.fileRows, 3, 20, base.fileRows),
     perfHistory: clamp(raw.perfHistory, 0, 10, base.perfHistory),
     perfRows: clamp(raw.perfRows, 3, 20, base.perfRows),
     perfTurns: clamp(raw.perfTurns, 20, 500, base.perfTurns),
     questionReconcileSec: clamp(raw.questionReconcileSec, 5, 300, base.questionReconcileSec),
+    sessionDimHours,
     sessionFetch: clamp(raw.sessionFetch, 2, 80, base.sessionFetch),
+    sessionVisibleHours,
     skipGitignore: typeof raw.skipGitignore === "boolean" ? raw.skipGitignore : base.skipGitignore,
     toolRows,
     toolFetch: clamp(raw.toolFetch, toolRows, 80, base.toolFetch),

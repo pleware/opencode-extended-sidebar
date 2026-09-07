@@ -6,7 +6,7 @@
  * B — queries: tools/files LIMIT 80, Perf 120 turns without History.
  */
 import { afterAll, describe, expect, test } from "bun:test"
-import { listSessionFiles, listToolEvents, readProjectFeed, sessionScanStamp } from "../../src/pware.oc.opencode/resolver/index.js"
+import { listSessionFiles, listToolEvents, readProjectFeedAsync, sessionScanStamp } from "../../src/pware.oc.opencode/resolver/index.js"
 import { computeFingerprint, readRuntimeSnapshot, resetRuntimeCache } from "../../src/pware.oc.runtime/resolver/index.js"
 import { readPerfSnapshot } from "../../src/pware.oc.perf/pware.oc.perf.reader.js"
 import { openReadonlyDb, resetReadonlyDb } from "../../src/pware.oc.core/pware.oc.core.sqlite.js"
@@ -62,6 +62,12 @@ function elapsed(fn: () => void): number {
   return performance.now() - t0
 }
 
+async function elapsedAsync(fn: () => Promise<void>): Promise<number> {
+  const t0 = performance.now()
+  await fn()
+  return performance.now() - t0
+}
+
 describe("5k-part session budgets", () => {
   test("computeFingerprint stays cheap", () => {
     const ms = elapsed(() => {
@@ -79,10 +85,10 @@ describe("5k-part session budgets", () => {
     expect(ms).toBeLessThan(SCAN_STAMP_MS)
   })
 
-  test("readRuntimeSnapshot miss then hit", () => {
+  test("readRuntimeSnapshot miss then hit", async () => {
     resetRuntimeCache()
-    const miss = elapsed(() => {
-      const snap = readRuntimeSnapshot({
+    const miss = await elapsedAsync(async () => {
+      const snap = await readRuntimeSnapshot({
         sessionId: "ses_bench",
         projectRoot: null,
         dbPath: fix.dbPath,
@@ -91,8 +97,8 @@ describe("5k-part session budgets", () => {
     })
     expect(miss).toBeLessThan(SNAP_MISS_MS)
 
-    const hit = elapsed(() => {
-      const snap = readRuntimeSnapshot({
+    const hit = await elapsedAsync(async () => {
+      const snap = await readRuntimeSnapshot({
         sessionId: "ses_bench",
         projectRoot: null,
         dbPath: fix.dbPath,
@@ -112,9 +118,9 @@ describe("5k-part session budgets", () => {
     expect(ms).toBeLessThan(TOOLS_FILES_MS)
   })
 
-  test("readProjectFeed across 3 fat sessions", () => {
-    const ms = elapsed(() => {
-      const feed = readProjectFeed({
+  test("readProjectFeed across 3 fat sessions", async () => {
+    const ms = await elapsedAsync(async () => {
+      const feed = await readProjectFeedAsync({
         dbPath: feedFix.dbPath,
         sessionIds: ["ses_feed_a", "ses_feed_b", "ses_feed_c"],
         toolLimit: 8,
@@ -128,9 +134,9 @@ describe("5k-part session budgets", () => {
     expect(ms).toBeLessThan(PROJECT_FEED_MS)
   })
 
-  test("readPerfSnapshot 120 turns without History", () => {
-    const ms = elapsed(() => {
-      const snap = readPerfSnapshot({
+  test("readPerfSnapshot 120 turns without History", async () => {
+    const ms = await elapsedAsync(async () => {
+      const snap = await readPerfSnapshot({
         dbPath: fix.dbPath,
         sessionId: "ses_bench",
         turns: 120,

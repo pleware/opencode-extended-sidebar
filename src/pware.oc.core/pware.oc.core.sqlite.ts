@@ -9,6 +9,7 @@ import { dbg, profile, pushScreenLine } from "./pware.oc.core.debug.js"
 export type SqlRow = Record<string, unknown>
 
 export type SqlDb = {
+  readonly path?: string
   all: <T extends SqlRow = SqlRow>(sql: string, ...params: unknown[]) => T[]
   get: <T extends SqlRow = SqlRow>(sql: string, ...params: unknown[]) => T | null
   close: () => void
@@ -35,7 +36,7 @@ export function isBusyError(e: unknown): boolean {
 
 /**
  * Run a query, logging a `sql.busy` debug line when the DB is locked. The
- * error still propagates so `withDbRead` can retry once and then soft-fail.
+ * error still propagates so the readonly request gateway can retry the whole request.
  */
 function guardQuery<T>(sql: string, fn: () => T): T {
   try {
@@ -46,7 +47,7 @@ function guardQuery<T>(sql: string, fn: () => T): T {
   }
 }
 
-function wrapBun(db: {
+function wrapBun(dbPath: string, db: {
   query: (sql: string) => { all: (...p: unknown[]) => SqlRow[]; get: (...p: unknown[]) => SqlRow | null }
   exec: (sql: string) => void
   close: () => void
@@ -58,6 +59,7 @@ function wrapBun(db: {
     // older / restricted
   }
   return {
+    path: dbPath,
     all: <T extends SqlRow>(sql: string, ...params: unknown[]) =>
       profile("sql", () => guardQuery(sql, () => db.query(sql).all(...params) as T[]), () => ({ q: sqlLabel(sql) })),
     get: <T extends SqlRow>(sql: string, ...params: unknown[]) =>
@@ -72,7 +74,7 @@ function wrapBun(db: {
   }
 }
 
-function wrapNodeSync(db: {
+function wrapNodeSync(dbPath: string, db: {
   prepare: (sql: string) => {
     all: (...p: unknown[]) => SqlRow[]
     get: (...p: unknown[]) => SqlRow | undefined
@@ -87,6 +89,7 @@ function wrapNodeSync(db: {
     // ignore
   }
   return {
+    path: dbPath,
     all: <T extends SqlRow>(sql: string, ...params: unknown[]) =>
       profile("sql", () => guardQuery(sql, () => db.prepare(sql).all(...params) as T[]), () => ({ q: sqlLabel(sql) })),
     get: <T extends SqlRow>(sql: string, ...params: unknown[]) =>
@@ -111,9 +114,9 @@ function openFresh(dbPath: string): SqlDb | null {
         Database: new (
           path: string,
           opts?: { readonly?: boolean; create?: boolean },
-        ) => Parameters<typeof wrapBun>[0]
+        ) => Parameters<typeof wrapBun>[1]
       }
-      return wrapBun(new Database(dbPath, { readonly: true, create: false }))
+      return wrapBun(dbPath, new Database(dbPath, { readonly: true, create: false }))
     }
   } catch {
     // try node next
@@ -123,10 +126,10 @@ function openFresh(dbPath: string): SqlDb | null {
       DatabaseSync: new (
         path: string,
         opts?: { readOnly?: boolean },
-      ) => Parameters<typeof wrapNodeSync>[0]
+      ) => Parameters<typeof wrapNodeSync>[1]
     }
     if (!mod?.DatabaseSync) return null
-    return wrapNodeSync(new mod.DatabaseSync(dbPath, { readOnly: true }))
+    return wrapNodeSync(dbPath, new mod.DatabaseSync(dbPath, { readOnly: true }))
   } catch {
     return null
   }
@@ -146,20 +149,6 @@ export function resetReadonlyDb(): void {
     // ignore
   }
   hold = null
-}
-
-/** Retry a read after dropping a stale handle. */
-export function withDbRead<T>(run: () => T, fallback: (err: unknown) => T): T {
-  try {
-    return run()
-  } catch (e) {
-    resetReadonlyDb()
-    try {
-      return run()
-    } catch {
-      return fallback(e)
-    }
-  }
 }
 
 /** Open opencode.db readonly. Reuses one handle per path. Never throws — returns null on failure. */

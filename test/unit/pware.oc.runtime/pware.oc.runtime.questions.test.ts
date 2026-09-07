@@ -1,11 +1,25 @@
 import { afterAll, describe, expect, test } from "bun:test"
 import { Database } from "bun:sqlite"
 import { createQuestionCache, mergeQuestions } from "../../../src/pware.oc.runtime/pware.oc.runtime.questions.js"
-import type { OpenQuestion } from "../../../src/pware.oc.opencode/resolver/pware.oc.opencode.resolver.question.js"
-import { resetReadonlyDb } from "../../../src/pware.oc.core/pware.oc.core.sqlite.js"
+import {
+  listOpenQuestions,
+  listSessionQuestions,
+  type OpenQuestion,
+} from "../../../src/pware.oc.opencode/resolver/pware.oc.opencode.resolver.question.js"
+import { openReadonlyDb, resetReadonlyDb } from "../../../src/pware.oc.core/pware.oc.core.sqlite.js"
 import { createFixtureDb } from "../../helpers/sqlite.js"
 
 const t0 = 1_700_000_000_000
+
+function projectQuestions(dbPath: string): OpenQuestion[] {
+  const db = openReadonlyDb(dbPath)
+  return db ? listOpenQuestions(db, "proj_1") : []
+}
+
+function sessionQuestions(dbPath: string, sessionId: string): OpenQuestion[] {
+  const db = openReadonlyDb(dbPath)
+  return db ? listSessionQuestions(db, sessionId, "proj_1") : []
+}
 
 /** Open the fixture writable, run one statement, close, and drop the readonly
  *  cache so the next read reopens and sees the change. */
@@ -49,7 +63,7 @@ describe("QuestionCache.seed → get", () => {
 
   test("returns this project's questions, sorted startedAt DESC", () => {
     const cache = createQuestionCache()
-    cache.seed(fix.dbPath, "proj_1")
+    cache.seed(projectQuestions(fix.dbPath))
     const out = cache.get()
     expect(out.map((q) => q.partId)).toEqual(["p_b", "p_a"])
     expect(out.map((q) => q.sessionId)).toEqual(["ses_b", "ses_a"])
@@ -57,7 +71,7 @@ describe("QuestionCache.seed → get", () => {
 
   test("excludes other-project questions", () => {
     const cache = createQuestionCache()
-    cache.seed(fix.dbPath, "proj_1")
+    cache.seed(projectQuestions(fix.dbPath))
     expect(cache.get().some((q) => q.partId === "p_other")).toBe(false)
   })
 })
@@ -73,7 +87,7 @@ describe("QuestionCache.touch", () => {
     })
     try {
       const cache = createQuestionCache()
-      cache.seed(fix.dbPath, "proj_1")
+      cache.seed(projectQuestions(fix.dbPath))
       expect(cache.get().map((q) => q.partId)).toEqual(["p_b"])
 
       write(
@@ -86,7 +100,7 @@ describe("QuestionCache.touch", () => {
         t0 + 500,
         JSON.stringify(runningQuestion("p_a", "ses_a", t0 + 500).data),
       )
-      cache.touch(fix.dbPath, "proj_1", "ses_a")
+      cache.touch("ses_a", sessionQuestions(fix.dbPath, "ses_a"))
       expect(cache.get().map((q) => q.partId).sort()).toEqual(["p_a", "p_b"])
     } finally {
       fix.dispose()
@@ -103,7 +117,7 @@ describe("QuestionCache.touch", () => {
     })
     try {
       const cache = createQuestionCache()
-      cache.seed(fix.dbPath, "proj_1")
+      cache.seed(projectQuestions(fix.dbPath))
       expect(cache.get().map((q) => q.partId)).toEqual(["p_b"])
 
       write(
@@ -117,7 +131,7 @@ describe("QuestionCache.touch", () => {
         }),
         "p_b",
       )
-      cache.touch(fix.dbPath, "proj_1", "ses_b")
+      cache.touch("ses_b", sessionQuestions(fix.dbPath, "ses_b"))
       expect(cache.get()).toEqual([])
     } finally {
       fix.dispose()
@@ -125,7 +139,7 @@ describe("QuestionCache.touch", () => {
   })
 })
 
-describe("QuestionCache.reconcile", () => {
+describe("QuestionCache.seed replacement", () => {
   const fix1 = createFixtureDb({
     sessions: [{ id: "ses_1", project_id: "proj_1", title: "1", time_created: t0 }],
     parts: [runningQuestion("p1", "ses_1", t0 + 100)],
@@ -142,10 +156,10 @@ describe("QuestionCache.reconcile", () => {
 
   test("re-seeds from the current DB and drops gone sessions", () => {
     const cache = createQuestionCache()
-    cache.seed(fix1.dbPath, "proj_1")
+    cache.seed(projectQuestions(fix1.dbPath))
     expect(cache.get().map((q) => q.partId)).toEqual(["p1"])
 
-    cache.reconcile(fix2.dbPath, "proj_1")
+    cache.seed(projectQuestions(fix2.dbPath))
     expect(cache.get().map((q) => q.partId)).toEqual(["p2"])
     expect(cache.get().some((q) => q.partId === "p1")).toBe(false)
   })
@@ -161,7 +175,7 @@ describe("QuestionCache.reset", () => {
 
   test("clears the cache", () => {
     const cache = createQuestionCache()
-    cache.seed(fix.dbPath, "proj_1")
+    cache.seed(projectQuestions(fix.dbPath))
     expect(cache.get()).toHaveLength(1)
     cache.reset()
     expect(cache.get()).toEqual([])

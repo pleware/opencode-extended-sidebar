@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { composeRow } from "../../../src/pware.oc.ui/pware.oc.ui.sections.js"
+import { composeRow, rowChrome } from "../../../src/pware.oc.ui/pware.oc.ui.sections.js"
 
 describe("composeRow", () => {
   test("a short row is not truncated and keeps no suffix", () => {
@@ -13,7 +13,7 @@ describe("composeRow", () => {
     const out = composeRow({ kind: "agent", name: "a-very-long-agent-name-that-will-not-fit" }, 20)
     expect(out.truncated).toBe(true)
     expect(out.body.endsWith("…")).toBe(true)
-    expect(out.body.length).toBeLessThanOrEqual(20 - 2)
+    expect(out.body.length).toBeLessThanOrEqual(20)
   })
 
   test("the suffix is clipped to its own budget and rendered separately", () => {
@@ -22,7 +22,7 @@ describe("composeRow", () => {
       24,
     )
     expect(out.suffix.endsWith("…")).toBe(true)
-    expect(out.suffix.length).toBeLessThanOrEqual(Math.floor((24 - 2) * 0.4))
+    expect(out.suffix.length).toBeLessThanOrEqual(Math.floor(24 * 0.4))
     expect(out.body).toContain("plan")
   })
 
@@ -42,8 +42,15 @@ describe("composeRow", () => {
 
   test("wide-char names are clipped to the column budget, not code units", () => {
     const out = composeRow({ kind: "agent", name: "这是一个非常长的代理名称需要被截断显示" }, 14)
-    // 14 columns of row minus 2 chrome = 12 columns; 2-col chars must not wrap.
+    // 14 columns of text budget; 2-col chars must not wrap.
     expect(out.truncated).toBe(true)
     expect([...out.body].every((c) => c !== "\n")).toBe(true)
+  })
+
+  test("rowChrome counts the fixed glyph slots and pin link", () => {
+    expect(rowChrome({})).toBe(2) // state glyph + space, always
+    expect(rowChrome({ dirSlot: true })).toBe(4)
+    expect(rowChrome({ dirSlot: true, link: { label: "P", onPick: () => {} } })).toBe(6)
+    expect(rowChrome({ indent: true, glyph2: { char: "·", tone: "textMuted" } })).toBe(6)
   })
 })

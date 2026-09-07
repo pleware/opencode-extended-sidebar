@@ -284,14 +284,15 @@ export function PerfPanel(props: PerfPanelProps): JSX.Element {
     props.perf.trend.length > 1 &&
     (trendWait().some((v) => v != null) || trendRate().some((v) => v != null))
 
-  const openLog = (kind: PerfLogKind, toolFilter?: string) =>
-    openPerfLog(props.api, props.colors, {
+  const openLog = (kind: PerfLogKind, toolFilter?: string) => {
+    void openPerfLog(props.api, props.colors, {
       dbPath: props.dbPath,
       sessionId: props.currentSessionId,
       turns: props.turns,
       kind,
       toolFilter,
     })
+  }
 
   const openCharts = () =>
     openPerfCharts(props.api, props.colors, {

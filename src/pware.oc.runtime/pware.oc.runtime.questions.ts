@@ -13,21 +13,13 @@
  * and dedupes it. The two read functions below already soft-fail to `[]`, so
  * this cache only holds/merges their results and needs no try/catch of its own.
  */
-import {
-  listOpenQuestions,
-  listSessionQuestions,
-  type OpenQuestion,
-} from "../pware.oc.opencode/resolver/pware.oc.opencode.resolver.question.js"
+import type { OpenQuestion } from "../pware.oc.opencode/resolver/pware.oc.opencode.resolver.question.js"
 
 export type QuestionCache = {
   /** Project-wide open questions, deduped by partId, sorted `startedAt` DESC (nulls last). */
   get: () => OpenQuestion[]
-  /** Full `listOpenQuestions` scan; replaces the whole map (drop gone sessions). */
-  seed: (dbPath: string, projectId: string | null) => void
-  /** One session's `listSessionQuestions`; merges in, or removes on empty. */
-  touch: (dbPath: string, projectId: string | null, sessionId: string) => void
-  /** Full `listOpenQuestions` scan — semantic alias of `seed` for the backstop call site. */
-  reconcile: (dbPath: string, projectId: string | null) => void
+  seed: (questions: readonly OpenQuestion[]) => void
+  touch: (sessionId: string, questions: readonly OpenQuestion[]) => void
   /** Drop every cached session. */
   reset: () => void
 }
@@ -63,9 +55,9 @@ export function mergeQuestions(
 export function createQuestionCache(): QuestionCache {
   let bySession = new Map<string, OpenQuestion[]>()
 
-  function refill(dbPath: string, projectId: string | null): void {
+  function refill(questions: readonly OpenQuestion[]): void {
     const next = new Map<string, OpenQuestion[]>()
-    for (const q of listOpenQuestions({ dbPath, projectId })) {
+    for (const q of questions) {
       const bucket = next.get(q.sessionId)
       if (bucket) bucket.push(q)
       else next.set(q.sessionId, [q])
@@ -77,16 +69,12 @@ export function createQuestionCache(): QuestionCache {
     get() {
       return mergeQuestions(bySession)
     },
-    seed(dbPath, projectId) {
-      refill(dbPath, projectId)
+    seed(questions) {
+      refill(questions)
     },
-    touch(dbPath, projectId, sessionId) {
-      const result = listSessionQuestions({ dbPath, sessionId, projectId })
-      if (result.length > 0) bySession.set(sessionId, result)
+    touch(sessionId, questions) {
+      if (questions.length > 0) bySession.set(sessionId, [...questions])
       else bySession.delete(sessionId)
-    },
-    reconcile(dbPath, projectId) {
-      refill(dbPath, projectId)
     },
     reset() {
       bySession = new Map()

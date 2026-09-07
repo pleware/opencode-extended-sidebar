@@ -45,8 +45,8 @@ describe("computeFingerprint", () => {
 })
 
 describe("readRuntimeSnapshot", () => {
-  test("an empty session id yields a no-session empty db without touching a real db", () => {
-    const snap = readRuntimeSnapshot({ sessionId: "", projectRoot: null })
+test("an empty session id yields a no-session empty db without touching a real db", async () => {
+  const snap = await readRuntimeSnapshot({ sessionId: "", projectRoot: null })
     expect(snap.db.present).toBe(false)
     expect(snap.db.error).toBe("no session")
     expect(snap.db.current).toBeNull()
@@ -56,7 +56,7 @@ describe("readRuntimeSnapshot", () => {
     expect(snap.omoConfig).toEqual({ present: false, path: null, teamMode: null, agents: [] })
   })
 
-  test("reads the session graph from the fixture db (main session, no parent)", () => {
+test("reads the session graph from the fixture db (main session, no parent)", async () => {
     proj = createFixtureProject({})
     fix = createFixtureDb({
       sessions: [
@@ -72,7 +72,7 @@ describe("readRuntimeSnapshot", () => {
         },
       ],
     })
-    const snap = readRuntimeSnapshot({
+    const snap = await readRuntimeSnapshot({
       sessionId: "ses_main",
       projectRoot: proj!.root,
       dbPath: fix!.dbPath,
@@ -88,7 +88,7 @@ describe("readRuntimeSnapshot", () => {
     expect(Array.isArray(snap.openQuestions)).toBe(true)
   })
 
-  test("a child session surfaces its parent and main", () => {
+test("a child session surfaces its parent and main", async () => {
     proj = createFixtureProject({})
     fix = createFixtureDb({
       sessions: [
@@ -96,7 +96,7 @@ describe("readRuntimeSnapshot", () => {
         { id: "ses_child", project_id: "proj_a", title: "worker", parent_id: "ses_main", time_updated: NOW - 1_000 },
       ],
     })
-    const snap = readRuntimeSnapshot({
+    const snap = await readRuntimeSnapshot({
       sessionId: "ses_child",
       projectRoot: proj!.root,
       dbPath: fix!.dbPath,
@@ -107,7 +107,7 @@ describe("readRuntimeSnapshot", () => {
     expect(snap.db.children).toEqual([])
   })
 
-  test("a cache hit refreshes ages without re-reading (withAges, no hint)", () => {
+test("a cache hit refreshes ages without re-reading (withAges, no hint)", async () => {
     proj = createFixtureProject({})
     fix = createFixtureDb({
       sessions: [
@@ -116,12 +116,12 @@ describe("readRuntimeSnapshot", () => {
         { id: "ses_old", project_id: "proj_a", title: "earlier", parent_id: null, time_updated: NOW - 60_000 },
       ],
     })
-    const first = readRuntimeSnapshot({
+    const first = await readRuntimeSnapshot({
       sessionId: "ses_main",
       projectRoot: proj!.root,
       dbPath: fix!.dbPath,
     })
-    const second = readRuntimeSnapshot({
+    const second = await readRuntimeSnapshot({
       sessionId: "ses_main",
       projectRoot: proj!.root,
       dbPath: fix!.dbPath,
@@ -134,7 +134,7 @@ describe("readRuntimeSnapshot", () => {
     expect(typeof second.db.current?.ageMs).toBe("number")
   })
 
-  test("a cache hit with a questionHint touches the question cache", () => {
+test("a cache hit with a questionHint touches the question cache", async () => {
     proj = createFixtureProject({})
     fix = createFixtureDb({
       sessions: [
@@ -155,14 +155,14 @@ describe("readRuntimeSnapshot", () => {
         },
       ],
     })
-    const first = readRuntimeSnapshot({
+    const first = await readRuntimeSnapshot({
       sessionId: "ses_main",
       projectRoot: proj!.root,
       dbPath: fix!.dbPath,
     })
     expect(first.openQuestions.map((q) => q.sessionId)).toEqual(["ses_main"])
 
-    const second = readRuntimeSnapshot({
+    const second = await readRuntimeSnapshot({
       sessionId: "ses_main",
       projectRoot: proj!.root,
       dbPath: fix!.dbPath,
@@ -172,7 +172,7 @@ describe("readRuntimeSnapshot", () => {
     expect(second.openQuestions.map((q) => q.sessionId)).toEqual(["ses_main"])
   })
 
-  test("switching projects resets the question cache", () => {
+test("switching projects resets the question cache", async () => {
     proj = createFixtureProject({})
     fix = createFixtureDb({
       sessions: [
@@ -204,14 +204,14 @@ describe("readRuntimeSnapshot", () => {
         },
       ],
     })
-    const first = readRuntimeSnapshot({
+    const first = await readRuntimeSnapshot({
       sessionId: "ses_a",
       projectRoot: proj!.root,
       dbPath: fix!.dbPath,
     })
     expect(first.openQuestions.map((q) => q.partId)).toEqual(["prt_a"])
 
-    const second = readRuntimeSnapshot({
+    const second = await readRuntimeSnapshot({
       sessionId: "ses_b",
       projectRoot: proj!.root,
       dbPath: fix!.dbPath,
@@ -220,7 +220,7 @@ describe("readRuntimeSnapshot", () => {
     expect(second.openQuestions.map((q) => q.partId)).toEqual(["prt_b"])
   })
 
-  test("a questionHint on a fresh read touches the hint without a full reconcile", () => {
+test("a questionHint on a fresh read touches the hint without a full reconcile", async () => {
     proj = createFixtureProject({})
     fix = createFixtureDb({
       sessions: [
@@ -252,7 +252,7 @@ describe("readRuntimeSnapshot", () => {
         },
       ],
     })
-    const snap = readRuntimeSnapshot({
+    const snap = await readRuntimeSnapshot({
       sessionId: "ses_main",
       projectRoot: proj!.root,
       dbPath: fix!.dbPath,
@@ -261,7 +261,7 @@ describe("readRuntimeSnapshot", () => {
     expect(snap.openQuestions.map((q) => q.sessionId)).toEqual(["ses_other"])
   })
 
-  test("enriches delegates from an omo boulder present on disk", () => {
+test("enriches delegates from an omo boulder present on disk", async () => {
     proj = createFixtureProject({
       boulder: { status: "in_progress", agent: "oracle", plan_name: "plan", task_sessions: { task_1: { task_key: "task_1", task_title: "work", session_id: "ses_child", status: "running" } } },
     })
@@ -271,7 +271,7 @@ describe("readRuntimeSnapshot", () => {
         { id: "ses_child", project_id: "proj_a", title: "worker", parent_id: "ses_main", time_updated: NOW - 1_000 },
       ],
     })
-    const snap = readRuntimeSnapshot({
+    const snap = await readRuntimeSnapshot({
       sessionId: "ses_main",
       projectRoot: proj!.root,
       dbPath: fix!.dbPath,
@@ -282,19 +282,19 @@ describe("readRuntimeSnapshot", () => {
 })
 
 describe("resetRuntimeCache", () => {
-  test("clears the live cache so the next read is a fresh load", () => {
+test("clears the live cache so the next read is a fresh load", async () => {
     proj = createFixtureProject({})
     fix = createFixtureDb({
       sessions: [{ id: "ses_main", project_id: "proj_a", title: "main", parent_id: null, time_updated: NOW }],
     })
-    const first = readRuntimeSnapshot({
+    const first = await readRuntimeSnapshot({
       sessionId: "ses_main",
       projectRoot: proj!.root,
       dbPath: fix!.dbPath,
     })
     expect(first.db.present).toBe(true)
     resetRuntimeCache()
-    const second = readRuntimeSnapshot({
+    const second = await readRuntimeSnapshot({
       sessionId: "ses_main",
       projectRoot: proj!.root,
       dbPath: fix!.dbPath,

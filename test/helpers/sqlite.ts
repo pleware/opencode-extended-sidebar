@@ -78,6 +78,13 @@ CREATE TABLE part (
   time_updated INTEGER,
   data TEXT
 );
+CREATE TABLE todo (
+  session_id TEXT,
+  content TEXT,
+  status TEXT,
+  priority TEXT,
+  position INTEGER
+);
 CREATE INDEX part_session_created ON part (session_id, time_created);
 CREATE INDEX message_session_created ON message (session_id, time_created);
 `

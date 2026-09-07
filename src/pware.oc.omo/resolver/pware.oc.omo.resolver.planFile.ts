@@ -267,7 +267,8 @@ export function planSessionIndex(
   projectId: string | null | undefined,
   projectRoot: string | null | undefined,
 ): PlanSessionIndex {
-  return planIndexCache.get(planIndexStamp(db, projectId), () =>
+  const key = `${db.path ?? ""}|${projectRoot ?? ""}|${planIndexStamp(db, projectId)}`
+  return planIndexCache.get(key, () =>
     buildPlanSessionIndex(db, projectId, projectRoot),
   )
 }
@@ -296,7 +297,8 @@ export function omoFileIndex(
   projectRoot: string | null | undefined,
   kind: OmoFileKind,
 ): OmoFileIndex {
-  return omoIndexCache.get(omoFileStamp(db, projectId, kind), () =>
+  const key = `${db.path ?? ""}|${projectRoot ?? ""}|${omoFileStamp(db, projectId, kind)}`
+  return omoIndexCache.get(key, () =>
     buildOmoFileIndex(db, projectId, projectRoot, kind),
   )
 }

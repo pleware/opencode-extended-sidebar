@@ -1,6 +1,6 @@
 # Constraints
 
-Last reviewed: 2026-09-04 by @pleware
+Last reviewed: 2026-09-04 by pawel@pware.ai
 
 Quality bar for `opencode-extended-sidebar`. Read this file before writing
 code. Do not weaken it to make a change pass.
@@ -44,4 +44,4 @@ working coverage, not a reason to lower the bar.
 
 | ID | Rule | Path | Reason | Owner | Expires |
 |----|------|------|--------|-------|---------|
-| X1 | coverage ignore | `src/pware.oc.ui.tsx`, `src/pware.oc.ui/**`, `src/pware.oc.perf/pware.oc.perf.view.tsx`, `src/pware.oc.runtime/pware.oc.runtime.{monitor,source,worker}.ts` | Thin TUI / glue layers tested via snapshot fixtures, not mounted (see `.cursor/rules/try-testable.mdc` + `tests-sync.mdc`) | @pleware | never (design rule) |
+| X1 | coverage ignore | `src/pware.oc.ui.tsx`, `src/pware.oc.ui/**`, `src/pware.oc.perf/pware.oc.perf.view.tsx`, `src/pware.oc.runtime/pware.oc.runtime.{monitor,source,worker}.ts` | Thin TUI / glue layers tested via snapshot fixtures, not mounted (see `.cursor/rules/try-testable.mdc` + `tests-sync.mdc`) | pawel@pware.ai | never (design rule) |

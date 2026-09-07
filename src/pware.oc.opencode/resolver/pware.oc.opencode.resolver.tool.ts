@@ -161,13 +161,7 @@ function listToolRows(db: SqlDb, where: string, params: string[], limit: number)
 
 /** Newest tool parts of one session — the Current tab feed. */
 export function listToolEvents(db: SqlDb, sessionId: string, limit = TOOL_ROWS): ToolView[] {
-  let rows: ToolEventRow[] = []
-  try {
-    rows = listToolRows(db, "session_id = ?", [sessionId], limit)
-  } catch {
-    return []
-  }
-  return toolViewsFromRows(rows, limit)
+  return toolViewsFromRows(listToolRows(db, "session_id = ?", [sessionId], limit), limit)
 }
 
 /** Newest tool parts across the given sessions — the Sessions tab feed. */
@@ -175,13 +169,7 @@ export function listRecentToolEvents(db: SqlDb, sessionIds: string[], limit = TO
   const clean = uniqueIds(sessionIds)
   if (clean.length === 0) return []
   const placeholders = clean.map(() => "?").join(",")
-  let rows: ToolEventRow[] = []
-  try {
-    rows = listToolRows(db, `session_id IN (${placeholders})`, clean, limit)
-  } catch {
-    return []
-  }
-  return toolViewsFromRows(rows, limit)
+  return toolViewsFromRows(listToolRows(db, `session_id IN (${placeholders})`, clean, limit), limit)
 }
 
 export function mergeTools(

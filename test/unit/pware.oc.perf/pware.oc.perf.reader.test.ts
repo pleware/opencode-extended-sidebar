@@ -333,15 +333,15 @@ describe("readPerfLog", () => {
     })
   }
 
-  test("returns null when the db file is missing", () => {
-    const out = readPerfLog({ dbPath: path.join(os.tmpdir(), `oes-nope-${Date.now()}.db`), sessionId: "s", turns: 10, kind: "tool", now: T0 })
+  test("returns null when the db file is missing", async () => {
+    const out = await readPerfLog({ dbPath: path.join(os.tmpdir(), `oes-nope-${Date.now()}.db`), sessionId: "s", turns: 10, kind: "tool", now: T0 })
     expect(out).toBeNull()
   })
 
-  test("writes a dated sidecar and folds tool hints from state.input", () => {
+  test("writes a dated sidecar and folds tool hints from state.input", async () => {
     const fix = makePerfFixture()
     const logDir = fs.mkdtempSync(path.join(os.tmpdir(), "oes-perf-log-"))
-    const doc = readPerfLog({ dbPath: fix.dbPath, sessionId: "ses_main", turns: 120, kind: "tool", now: T0, logDir })
+    const doc = await readPerfLog({ dbPath: fix.dbPath, sessionId: "ses_main", turns: 120, kind: "tool", now: T0, logDir })
     expect(doc).not.toBeNull()
     expect(doc!.text).toContain("bash")
     expect(doc!.text).toContain("bun test")
@@ -353,10 +353,10 @@ describe("readPerfLog", () => {
     fs.rmSync(logDir, { recursive: true, force: true })
   })
 
-  test("toolFilter keeps only the matching tool and labels the title", () => {
+  test("toolFilter keeps only the matching tool and labels the title", async () => {
     const fix = makePerfFixture()
     const logDir = fs.mkdtempSync(path.join(os.tmpdir(), "oes-perf-log-"))
-    const doc = readPerfLog({ dbPath: fix.dbPath, sessionId: "ses_main", turns: 120, kind: "tool", now: T0, toolFilter: "bash", logDir })
+    const doc = await readPerfLog({ dbPath: fix.dbPath, sessionId: "ses_main", turns: 120, kind: "tool", now: T0, toolFilter: "bash", logDir })
     expect(doc).not.toBeNull()
     expect(doc!.text).toContain("tools · bash")
     expect(doc!.text).toContain("bash")
@@ -388,10 +388,10 @@ describe("readPerfSnapshot", () => {
     })
   }
 
-  test("loads a snapshot with per-session history, skipping self and empty sessions", () => {
+  test("loads a snapshot with per-session history, skipping self and empty sessions", async () => {
     resetPerfCache()
     const fix = makePerfFixture()
-    const snap = readPerfSnapshot({
+    const snap = await readPerfSnapshot({
       dbPath: fix.dbPath,
       sessionId: "ses_main",
       turns: 120,
@@ -410,41 +410,41 @@ describe("readPerfSnapshot", () => {
     fix.dispose()
   })
 
-  test("a second read within the TTL reuses the cached history", () => {
+  test("a second read within the TTL reuses the cached history", async () => {
     resetPerfCache()
     const fix = makePerfFixture()
     const opts = { dbPath: fix.dbPath, sessionId: "ses_main", turns: 120, history: [{ id: "ses_hist", title: "history" }] }
-    const first = readPerfSnapshot(opts)
-    const second = readPerfSnapshot(opts)
+    const first = await readPerfSnapshot(opts)
+    const second = await readPerfSnapshot(opts)
     expect(first.history).toHaveLength(1)
     expect(second.history).toHaveLength(1)
     fix.dispose()
   })
 
-  test("missing db reports db missing without throwing", () => {
+  test("missing db reports db missing without throwing", async () => {
     resetPerfCache()
-    const snap = readPerfSnapshot({ dbPath: path.join(os.tmpdir(), `oes-none-${Date.now()}.db`), sessionId: "s", turns: 10 })
+    const snap = await readPerfSnapshot({ dbPath: path.join(os.tmpdir(), `oes-none-${Date.now()}.db`), sessionId: "s", turns: 10 })
     expect(snap.present).toBe(false)
     expect(snap.error).toBe("db missing")
   })
 
-  test("a non-database path reports sqlite unavailable", () => {
+  test("a non-database path reports sqlite unavailable", async () => {
     resetPerfCache()
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "oes-dir-"))
-    const snap = readPerfSnapshot({ dbPath: dir, sessionId: "s", turns: 10 })
+    const snap = await readPerfSnapshot({ dbPath: dir, sessionId: "s", turns: 10 })
     expect(snap.present).toBe(false)
     expect(snap.error).toBe("sqlite unavailable")
     fs.rmSync(dir, { recursive: true, force: true })
   })
 
-  test("a db without the message table soft-fails with an error string", () => {
+  test("a db without the message table soft-fails with an error string", async () => {
     resetPerfCache()
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "oes-bad-"))
     const dbPath = path.join(dir, "bad.db")
     const db = new Database(dbPath)
     db.exec("CREATE TABLE other (id TEXT)")
     db.close()
-    const snap = readPerfSnapshot({ dbPath, sessionId: "s", turns: 10 })
+    const snap = await readPerfSnapshot({ dbPath, sessionId: "s", turns: 10 })
     expect(snap.present).toBe(false)
     expect(typeof snap.error).toBe("string")
     expect(snap.error!.length).toBeGreaterThan(0)
@@ -452,12 +452,12 @@ describe("readPerfSnapshot", () => {
     fs.rmSync(dir, { recursive: true, force: true })
   })
 
-  test("cacheKey returns a present snapshot on the cache path", () => {
+  test("cacheKey returns a present snapshot on the cache path", async () => {
     resetPerfCache()
     const fix = makePerfFixture()
     const opts = { dbPath: fix.dbPath, sessionId: "ses_main", turns: 120, cacheKey: "perf-key-1" }
-    const a = readPerfSnapshot(opts)
-    const b = readPerfSnapshot(opts)
+    const a = await readPerfSnapshot(opts)
+    const b = await readPerfSnapshot(opts)
     expect(a.present).toBe(true)
     expect(a.totals.turns).toBe(1)
     expect(b.present).toBe(true)

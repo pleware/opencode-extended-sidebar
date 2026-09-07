@@ -146,11 +146,14 @@ export function startWorkCommand(mode: StartWorkMode, planName?: string | null):
   return base
 }
 
+/** Group the My work queue. Pinned always leads — even when empty — as a placeholder. */
 export function groupMyWork(
   items: readonly MyWorkItem[],
 ): { kind: MyWorkKind; items: MyWorkItem[] }[] {
   const out: { kind: MyWorkKind; items: MyWorkItem[] }[] = []
+  out.push({ kind: MY_WORK_GROUP_PINNED, items: items.filter((i) => i.kind === MY_WORK_GROUP_PINNED) })
   for (const kind of MY_WORK_ORDER) {
+    if (kind === MY_WORK_GROUP_PINNED) continue
     const bucket = items.filter((i) => i.kind === kind)
     if (bucket.length > 0) out.push({ kind, items: bucket })
   }
@@ -218,6 +221,32 @@ export function toSessionItems(
     status: s.status,
     timeUpdated: s.timeUpdated,
   }))
+}
+
+/** Build pinned items from pinned session ids joined to their recent-session rows, in pin order; ids missing from `recent` are skipped. */
+export function toPinnedItems(
+  pinnedIds: readonly string[],
+  recent: readonly {
+    id: string
+    title: string
+    status: AgentStatus
+    timeUpdated: number | null
+  }[],
+): MyWorkItem[] {
+  const byId = new Map(recent.map((s) => [s.id, s] as const))
+  const out: MyWorkItem[] = []
+  for (const id of pinnedIds) {
+    const s = byId.get(id)
+    if (!s) continue
+    out.push({
+      kind: MY_WORK_GROUP_PINNED,
+      sessionId: s.id,
+      title: s.title,
+      status: s.status,
+      timeUpdated: s.timeUpdated,
+    })
+  }
+  return out
 }
 
 /** Parse the persisted dismissed-question set (a JSON array of part ids) from the kv store. */

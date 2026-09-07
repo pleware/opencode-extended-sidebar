@@ -4,7 +4,9 @@
   "perfRows": 5,
   "perfTurns": 120,
   "questionReconcileSec": 15,
-  "sessionFetch": 20,
+  "sessionDimHours": 48,
+  "sessionFetch": 10,
+  "sessionVisibleHours": 72,
   "skipGitignore": false,
   "toolRows": 5,
   "toolFetch": 20

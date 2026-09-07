@@ -24,14 +24,15 @@ type WorkerScope = {
 
 const scope = self as unknown as WorkerScope
 
-scope.onmessage = (event) => {
+scope.onmessage = async (event) => {
   const msg = event.data
   if (msg.type === "shutdown") {
     scope.close()
     return
   }
   try {
-    scope.postMessage({ type: "snapshot:done", id: msg.id, ok: true, snap: readRuntimeSnapshot(msg.opts) })
+    const snap = await readRuntimeSnapshot(msg.opts)
+    scope.postMessage({ type: "snapshot:done", id: msg.id, ok: true, snap })
   } catch (err) {
     scope.postMessage({
       type: "snapshot:done",

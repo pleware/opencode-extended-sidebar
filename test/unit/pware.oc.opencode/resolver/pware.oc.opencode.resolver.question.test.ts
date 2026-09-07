@@ -5,7 +5,18 @@ import {
   listSessionQuestions,
   type OpenQuestionRow,
 } from "../../../../src/pware.oc.opencode/resolver/pware.oc.opencode.resolver.question.js"
+import { openReadonlyDb } from "../../../../src/pware.oc.core/pware.oc.core.sqlite.js"
 import { createFixtureDb, toolPartData } from "../../../helpers/sqlite.js"
+
+function openQuestions(dbPath: string, projectId: string | null) {
+  const db = openReadonlyDb(dbPath)
+  return db ? listOpenQuestions(db, projectId) : []
+}
+
+function sessionQuestions(dbPath: string, sessionId: string, projectId: string | null) {
+  const db = openReadonlyDb(dbPath)
+  return db ? listSessionQuestions(db, sessionId, projectId) : []
+}
 
 describe("listOpenQuestions", () => {
   const t0 = 1_700_000_000_000
@@ -127,7 +138,7 @@ describe("listOpenQuestions", () => {
   afterAll(() => fix.dispose())
 
   test("returns open question parts of this project, with title and start", () => {
-    const out = listOpenQuestions({ dbPath: fix.dbPath, projectId: "proj_1" })
+    const out = openQuestions(fix.dbPath, "proj_1")
     expect(out.filter((q) => q.kind === "question").map((q) => q.sessionId)).toEqual(["ses_q1"])
     const q = out.find((x) => x.kind === "question")
     expect(q?.title).toBe("Q1")
@@ -138,7 +149,7 @@ describe("listOpenQuestions", () => {
   })
 
   test("an interrupted question without an end time stays in the queue with its reason", () => {
-    const out = listOpenQuestions({ dbPath: fix.dbPath, projectId: "proj_1" })
+    const out = openQuestions(fix.dbPath, "proj_1")
     const q = out.find((x) => x.kind === "interrupted")
     expect(q?.partId).toBe("prt_interrupted")
     expect(q?.sessionId).toBe("ses_q1")
@@ -146,12 +157,12 @@ describe("listOpenQuestions", () => {
   })
 
   test("an interrupted question that terminated is resolved and dropped", () => {
-    const out = listOpenQuestions({ dbPath: fix.dbPath, projectId: "proj_1" })
+    const out = openQuestions(fix.dbPath, "proj_1")
     expect(out.some((q) => q.partId === "prt_interrupted_ended")).toBe(false)
   })
 
   test("a genuinely failed question is its own error kind with the error text", () => {
-    const out = listOpenQuestions({ dbPath: fix.dbPath, projectId: "proj_1" })
+    const out = openQuestions(fix.dbPath, "proj_1")
     const q = out.find((x) => x.kind === "error")
     expect(q?.sessionId).toBe("ses_q2")
     expect(q?.reason).toBe("Invalid question payload")
@@ -159,19 +170,19 @@ describe("listOpenQuestions", () => {
   })
 
   test("a question in another project stays out of this queue", () => {
-    const out = listOpenQuestions({ dbPath: fix.dbPath, projectId: "proj_2" })
+    const out = openQuestions(fix.dbPath, "proj_2")
     expect(out.map((q) => q.sessionId)).toEqual(["ses_other"])
   })
 
   test("an open question in an archived session is dropped", () => {
-    const out = listOpenQuestions({ dbPath: fix.dbPath, projectId: "proj_1" })
+    const out = openQuestions(fix.dbPath, "proj_1")
     expect(out.some((q) => q.sessionId === "ses_archived")).toBe(false)
   })
 
   test("missing db, unknown project or null projectId all yield []", () => {
-    expect(listOpenQuestions({ dbPath: fix.dbPath, projectId: null })).toEqual([])
-    expect(listOpenQuestions({ dbPath: fix.dbPath, projectId: "proj_nope" })).toEqual([])
-    expect(listOpenQuestions({ dbPath: "C:/nope/missing.db", projectId: "proj_1" })).toEqual([])
+    expect(openQuestions(fix.dbPath, null)).toEqual([])
+    expect(openQuestions(fix.dbPath, "proj_nope")).toEqual([])
+    expect(openQuestions("C:/nope/missing.db", "proj_1")).toEqual([])
   })
 })
 
@@ -286,22 +297,22 @@ describe("listSessionQuestions", () => {
   afterAll(() => fix.dispose())
 
   test("returns only that session's questions, DESC by created", () => {
-    const out = listSessionQuestions({ dbPath: fix.dbPath, sessionId: "ses_a", projectId: "proj_1" })
+    const out = sessionQuestions(fix.dbPath, "ses_a", "proj_1")
     expect(out.map((q) => q.partId)).toEqual(["p_a2", "p_a1"])
   })
 
   test("respects projectId — wrong project yields []", () => {
-    expect(listSessionQuestions({ dbPath: fix.dbPath, sessionId: "ses_a", projectId: "proj_2" })).toEqual([])
+    expect(sessionQuestions(fix.dbPath, "ses_a", "proj_2")).toEqual([])
   })
 
   test("archived session is dropped even when its question is open", () => {
-    expect(listSessionQuestions({ dbPath: fix.dbPath, sessionId: "ses_arch", projectId: "proj_1" })).toEqual([])
+    expect(sessionQuestions(fix.dbPath, "ses_arch", "proj_1")).toEqual([])
   })
 
   test("missing db, null projectId or unknown session all yield []", () => {
-    expect(listSessionQuestions({ dbPath: fix.dbPath, sessionId: "ses_a", projectId: null })).toEqual([])
-    expect(listSessionQuestions({ dbPath: fix.dbPath, sessionId: "ses_nope", projectId: "proj_1" })).toEqual([])
-    expect(listSessionQuestions({ dbPath: "C:/nope/missing.db", sessionId: "ses_a", projectId: "proj_1" })).toEqual([])
+    expect(sessionQuestions(fix.dbPath, "ses_a", null)).toEqual([])
+    expect(sessionQuestions(fix.dbPath, "ses_nope", "proj_1")).toEqual([])
+    expect(sessionQuestions("C:/nope/missing.db", "ses_a", "proj_1")).toEqual([])
   })
 
   test("respects LIMIT 20", () => {
@@ -316,7 +327,7 @@ describe("listSessionQuestions", () => {
       parts,
     })
     try {
-      const out = listSessionQuestions({ dbPath: fx.dbPath, sessionId: "ses_lim", projectId: "proj_1" })
+      const out = sessionQuestions(fx.dbPath, "ses_lim", "proj_1")
       expect(out).toHaveLength(20)
     } finally {
       fx.dispose()

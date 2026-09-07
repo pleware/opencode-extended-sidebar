@@ -31,7 +31,7 @@ afterEach(() => {
 })
 
 describe("no .omo — SQLite only", () => {
-  test("panel loads agents, sessions, tools, files; delegates stay empty", () => {
+test("panel loads agents, sessions, tools, files; delegates stay empty", async () => {
     projFix = createFixtureProject({ oesignore: "tmp/\n" })
     dbFix = createFixtureDb({
       sessions: [
@@ -79,7 +79,7 @@ describe("no .omo — SQLite only", () => {
       ],
     })
     expect(readOmo(projFix.root).present).toBe(false)
-    const snap = readRuntimeSnapshot({
+    const snap = await readRuntimeSnapshot({
       sessionId: "ses_main",
       projectRoot: projFix.root,
       dbPath: dbFix.dbPath,
@@ -98,7 +98,7 @@ describe("no .omo — SQLite only", () => {
 })
 
 describe("ghost sessions", () => {
-  test("empty shell sessions are excluded from the recent list", () => {
+test("empty shell sessions are excluded from the recent list", async () => {
     projFix = createFixtureProject({})
     dbFix = createFixtureDb({
       sessions: [
@@ -114,7 +114,7 @@ describe("ghost sessions", () => {
         },
       ],
     })
-    const snap = readRuntimeSnapshot({
+    const snap = await readRuntimeSnapshot({
       sessionId: "ses_real",
       projectRoot: projFix.root,
       dbPath: dbFix.dbPath,
@@ -125,7 +125,7 @@ describe("ghost sessions", () => {
 })
 
 describe("foreign boulder parent", () => {
-  test("Session tab does not inherit another run's tasks", () => {
+test("Session tab does not inherit another run's tasks", async () => {
     projFix = createFixtureProject({
       boulder: boulderWithTask({ taskSessionId: "ses_foreign" }),
     })
@@ -143,7 +143,7 @@ describe("foreign boulder parent", () => {
       ],
     })
     expect(readOmo(projFix.root).present).toBe(true)
-    const snap = readRuntimeSnapshot({
+    const snap = await readRuntimeSnapshot({
       sessionId: "ses_current",
       projectRoot: projFix.root,
       dbPath: dbFix.dbPath,
@@ -154,7 +154,7 @@ describe("foreign boulder parent", () => {
 })
 
 describe("finished child vs leftover boulder running", () => {
-  test("Session and Project tabs drop the spinner once SQLite is idle", () => {
+test("Session and Project tabs drop the spinner once SQLite is idle", async () => {
     projFix = createFixtureProject({
       boulder: boulderWithTask({
         taskSessionId: "ses_child",
@@ -185,7 +185,7 @@ describe("finished child vs leftover boulder running", () => {
         },
       ],
     })
-    const snap = readRuntimeSnapshot({
+    const snap = await readRuntimeSnapshot({
       sessionId: "ses_main",
       projectRoot: projFix.root,
       dbPath: dbFix.dbPath,
@@ -200,7 +200,7 @@ describe("finished child vs leftover boulder running", () => {
 })
 
 describe("boulder schema v2 views", () => {
-  test("works list the runs, boulder mirrors the active one, nothing leaks", () => {
+test("works list the runs, boulder mirrors the active one, nothing leaks", async () => {
     projFix = createFixtureProject({
       boulder: {
         schema_version: 2,
@@ -252,7 +252,7 @@ describe("boulder schema v2 views", () => {
         },
       ],
     })
-    const snap = readRuntimeSnapshot({
+    const snap = await readRuntimeSnapshot({
       sessionId: "ses_main",
       projectRoot: projFix.root,
       dbPath: dbFix.dbPath,
@@ -328,7 +328,7 @@ describe("tools and files views", () => {
 })
 
 describe("My work queue", () => {
-  test("open question + awaiting-approval draft surface without leaking content", () => {
+test("open question + awaiting-approval draft surface without leaking content", async () => {
     projFix = createFixtureProject({
       files: {
         ".omo/drafts/oes-v2-hardening.md":
@@ -359,7 +359,7 @@ describe("My work queue", () => {
       ],
     })
 
-    const questions = listOpenQuestions({ dbPath: dbFix.dbPath, projectId: "proj_a" })
+    const questions = listOpenQuestions(openReadonlyDb(dbFix.dbPath)!, "proj_a")
     expect(questions.map((q) => q.sessionId)).toEqual(["ses_main"])
     expect(questions[0]?.title).toBe("main")
     expect(questions[0]?.startedAt).toBe(NOW - 1_000)
@@ -367,7 +367,7 @@ describe("My work queue", () => {
     assertPrivacy({ questions })
 
     // The snapshot read (worker path) carries the same open-question list.
-    const snap = readRuntimeSnapshot({
+    const snap = await readRuntimeSnapshot({
       sessionId: "ses_main",
       projectRoot: projFix.root,
       dbPath: dbFix.dbPath,
@@ -400,10 +400,10 @@ describe("My work queue", () => {
       ],
     })
     expect(listApprovals(projFix.root)).toEqual({ drafting: [], readyReview: [], readyStart: [], finished: [], draftDocs: [], plans: [] })
-    expect(listOpenQuestions({ dbPath: dbFix.dbPath, projectId: "proj_a" })).toHaveLength(1)
+    expect(listOpenQuestions(openReadonlyDb(dbFix.dbPath)!, "proj_a")).toHaveLength(1)
   })
 
-  test("a questionHint touch merges the hinted session without a full reconcile", () => {
+test("a questionHint touch merges the hinted session without a full reconcile", async () => {
     projFix = createFixtureProject({})
     dbFix = createFixtureDb({
       sessions: [
@@ -425,7 +425,7 @@ describe("My work queue", () => {
       ],
     })
 
-    const first = readRuntimeSnapshot({
+    const first = await readRuntimeSnapshot({
       sessionId: "ses_main",
       projectRoot: projFix.root,
       dbPath: dbFix.dbPath,
@@ -454,7 +454,7 @@ describe("My work queue", () => {
     }
     resetReadonlyDb()
 
-    const second = readRuntimeSnapshot({
+    const second = await readRuntimeSnapshot({
       sessionId: "ses_main",
       projectRoot: projFix.root,
       dbPath: dbFix.dbPath,
@@ -463,7 +463,7 @@ describe("My work queue", () => {
     expect(second.openQuestions.map((q) => q.sessionId).sort()).toEqual(["ses_main", "ses_other"])
   })
 
-  test("a questionHint touch updates openQuestions on an unchanged fingerprint (cache hit)", () => {
+test("a questionHint touch updates openQuestions on an unchanged fingerprint (cache hit)", async () => {
     projFix = createFixtureProject({})
     dbFix = createFixtureDb({
       sessions: [
@@ -501,7 +501,7 @@ describe("My work queue", () => {
     const pinned = new Date(Math.floor(Date.now() / 1000) * 1000)
     fs.utimesSync(dbFix.dbPath, pinned, pinned)
 
-    const first = readRuntimeSnapshot({
+    const first = await readRuntimeSnapshot({
       sessionId: "ses_main",
       projectRoot: projFix.root,
       dbPath: dbFix.dbPath,
@@ -528,7 +528,7 @@ describe("My work queue", () => {
     resetReadonlyDb()
     fs.utimesSync(dbFix.dbPath, pinned, pinned)
 
-    const second = readRuntimeSnapshot({
+    const second = await readRuntimeSnapshot({
       sessionId: "ses_main",
       projectRoot: projFix.root,
       dbPath: dbFix.dbPath,
@@ -538,7 +538,7 @@ describe("My work queue", () => {
     expect(second.openQuestions.map((q) => q.partId).sort()).toEqual(["prt_q", "prt_q2"])
   })
 
-  test("switching projectId does not leak the previous project's questions", () => {
+test("switching projectId does not leak the previous project's questions", async () => {
     projFix = createFixtureProject({})
     dbFix = createFixtureDb({
       sessions: [
@@ -571,14 +571,14 @@ describe("My work queue", () => {
       ],
     })
 
-    const first = readRuntimeSnapshot({
+    const first = await readRuntimeSnapshot({
       sessionId: "ses_a",
       projectRoot: projFix.root,
       dbPath: dbFix.dbPath,
     })
     expect(first.openQuestions.map((q) => q.partId)).toEqual(["prt_a"])
 
-    const second = readRuntimeSnapshot({
+    const second = await readRuntimeSnapshot({
       sessionId: "ses_b",
       projectRoot: projFix.root,
       dbPath: dbFix.dbPath,

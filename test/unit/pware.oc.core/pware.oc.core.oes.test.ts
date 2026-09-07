@@ -36,12 +36,32 @@ describe("pick", () => {
   })
 
   test("sessionFetch is a fetch window, clamped to [2, 80]", () => {
-    expect(OES_DEFAULTS.sessionFetch).toBe(20)
+    expect(OES_DEFAULTS.sessionFetch).toBe(10)
     expect(pick({ sessionFetch: 1 }, OES_DEFAULTS).sessionFetch).toBe(2)
     expect(pick({ sessionFetch: 999 }, OES_DEFAULTS).sessionFetch).toBe(80)
     expect(pick({ sessionFetch: "nope" } as Record<string, unknown>, OES_DEFAULTS).sessionFetch).toBe(
       OES_DEFAULTS.sessionFetch,
     )
+  })
+
+  test("session window ages default to visible 72, dim 48, fetch 10", () => {
+    expect(OES_DEFAULTS.sessionVisibleHours).toBe(72)
+    expect(OES_DEFAULTS.sessionDimHours).toBe(48)
+    expect(OES_DEFAULTS.sessionFetch).toBe(10)
+  })
+
+  test("sessionVisibleHours is clamped to [1, 720] and falls back to 72 on a non-number", () => {
+    expect(pick({ sessionVisibleHours: 0 }, OES_DEFAULTS).sessionVisibleHours).toBe(1)
+    expect(pick({ sessionVisibleHours: 9999 }, OES_DEFAULTS).sessionVisibleHours).toBe(720)
+    expect(pick({ sessionVisibleHours: "x" } as Record<string, unknown>, OES_DEFAULTS).sessionVisibleHours).toBe(72)
+    expect(pick({}, OES_DEFAULTS).sessionVisibleHours).toBe(72)
+  })
+
+  test("sessionDimHours is clamped to [0, sessionVisibleHours] — dim ⊆ visible", () => {
+    expect(pick({ sessionDimHours: -5 }, OES_DEFAULTS).sessionDimHours).toBe(0)
+    expect(pick({ sessionDimHours: 100 }, OES_DEFAULTS).sessionDimHours).toBe(72)
+    expect(pick({ sessionVisibleHours: 10, sessionDimHours: 50 }, OES_DEFAULTS).sessionDimHours).toBe(10)
+    expect(pick({}, OES_DEFAULTS).sessionDimHours).toBe(48)
   })
 
   test("questionReconcileSec defaults to 15 and is clamped to [5, 300]", () => {

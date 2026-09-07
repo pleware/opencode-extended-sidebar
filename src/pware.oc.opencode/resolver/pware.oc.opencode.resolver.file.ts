@@ -134,13 +134,7 @@ function listFileRows(db: SqlDb, where: string, params: string[]): SessionFileRo
 
 /** Patch `files[]` + edit metadata +/- for one session. No bodies. */
 export function listSessionFiles(db: SqlDb, sessionId: string, filter?: FileFilter): FileView[] {
-  let rows: SessionFileRow[] = []
-  try {
-    rows = listFileRows(db, "session_id = ?", [sessionId])
-  } catch {
-    return []
-  }
-  return fileViewsFromRows(rows, filter)
+  return fileViewsFromRows(listFileRows(db, "session_id = ?", [sessionId]), filter)
 }
 
 /** Files touched by any of the given sessions, aggregated — the Sessions tab feed. */
@@ -152,11 +146,5 @@ export function listRecentSessionFiles(
   const clean = uniqueIds(sessionIds)
   if (clean.length === 0) return []
   const placeholders = clean.map(() => "?").join(",")
-  let rows: SessionFileRow[] = []
-  try {
-    rows = listFileRows(db, `session_id IN (${placeholders})`, clean)
-  } catch {
-    return []
-  }
-  return fileViewsFromRows(rows, filter)
+  return fileViewsFromRows(listFileRows(db, `session_id IN (${placeholders})`, clean), filter)
 }

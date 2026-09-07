@@ -20,12 +20,15 @@ alwaysApply: true
 | `pware.oc.ui` | anything below |
 | `pware.oc.perf` | core + ui (view) |
 | `pware.oc.runtime` | opencode, omo, core |
-| `pware.oc.opencode`, `pware.oc.omo` | core |
+| `pware.oc.opencode` | core |
+| `pware.oc.omo` | opencode, core |
 | `pware.oc.core` | nothing |
 
 - `core` never imports a domain or the UI.
-- A domain = one data source: `opencode` (SQLite + host events) vs `omo` (`.omo/` / `.sisyphus/` files). Neither reads the other's data.
-- `runtime` is the only place that composes the two domains into one snapshot.
+- OpenCode is the required host: `opencode` owns generic SQLite reads and host events.
+- OMO is an optional OpenCode plugin integration: `omo` owns OMO-specific artifacts and may read `opencode` data to correlate them with host sessions, parts, todos, or events.
+- The dependency is one-way: `opencode` never imports OMO or interprets `.omo/` / `.sisyphus/` artifacts.
+- `runtime` composes the always-present OpenCode snapshot with optional OMO-aware capabilities.
 - Keep the import graph acyclic. A file that needs a dependency from a higher layer moves up a layer instead of importing down.
 
 ## Keep the map honest

@@ -10,10 +10,9 @@
  * soft-fails to [] on a missing/locked DB. The question text and options stay
  * in the `part.data` blob — never read, never shown.
  */
-import fs from "node:fs"
 import { str } from "../../pware.oc.core/pware.oc.core.paths.js"
 import { toEpochMs } from "../../pware.oc.core/pware.oc.core.pulse.js"
-import { openReadonlyDb, withDbRead } from "../../pware.oc.core/pware.oc.core.sqlite.js"
+import type { SqlDb } from "../../pware.oc.core/pware.oc.core.sqlite.js"
 import { toToolStatus } from "../../pware.oc.core/pware.oc.core.status.js"
 import { PART_TYPE_TOOL } from "../../pware.oc.core/constants/pware.oc.core.constants.partType.js"
 import {
@@ -97,43 +96,42 @@ export function classifyQuestionRow(row: OpenQuestionRow): OpenQuestion | null {
   }
 }
 
-export function listOpenQuestions(opts: {
-  dbPath: string
-  projectId: string | null
-}): OpenQuestion[] {
-  if (!opts.dbPath || !opts.projectId || !fs.existsSync(opts.dbPath)) return []
-  return withDbRead(() => {
-    const db = openReadonlyDb(opts.dbPath)
-    if (!db) return []
-    let rows: OpenQuestionRow[] = []
-    try {
-      rows = db.all<OpenQuestionRow>(
-        `SELECT p.id AS id,
-                p.session_id,
-                s.title AS title,
-                p.time_created,
-                json_extract(p.data,'$.state.status') AS status,
-                json_extract(p.data,'$.state.time.start') AS tstart,
-                json_extract(p.data,'$.state.time.end') AS tend,
-                json_extract(p.data,'$.state.error') AS error,
-                json_extract(p.data,'$.state.metadata.interrupted') AS interrupted
-         FROM part p
-         JOIN session s ON s.id = p.session_id
-         WHERE json_extract(p.data,'$.type') = '${PART_TYPE_TOOL}'
-           AND json_extract(p.data,'$.tool') = '${TOOL_QUESTION}'
-           AND (s.time_archived IS NULL OR s.time_archived = 0)
-           AND s.project_id = ?
-         ORDER BY p.time_created DESC
-         LIMIT 80`,
-        opts.projectId,
-      )
-    } catch {
-      return []
-    }
-    return rows
-      .map(classifyQuestionRow)
-      .filter((q): q is OpenQuestion => q != null)
-  }, () => [])
+function queryQuestions(
+  db: SqlDb,
+  scope: "project" | "session",
+  projectId: string,
+  sessionId?: string,
+): OpenQuestion[] {
+  const sessionFilter = scope === "session" ? "p.session_id = ? AND" : ""
+  const params = scope === "session" && sessionId ? [sessionId, projectId] : [projectId]
+  const limit = scope === "session" ? 20 : 80
+  return db.all<OpenQuestionRow>(
+    `SELECT p.id AS id,
+            p.session_id,
+            s.title AS title,
+            p.time_created,
+            json_extract(p.data,'$.state.status') AS status,
+            json_extract(p.data,'$.state.time.start') AS tstart,
+            json_extract(p.data,'$.state.time.end') AS tend,
+            json_extract(p.data,'$.state.error') AS error,
+            json_extract(p.data,'$.state.metadata.interrupted') AS interrupted
+     FROM part p
+     JOIN session s ON s.id = p.session_id
+     WHERE ${sessionFilter}
+       json_extract(p.data,'$.type') = '${PART_TYPE_TOOL}'
+       AND json_extract(p.data,'$.tool') = '${TOOL_QUESTION}'
+       AND (s.time_archived IS NULL OR s.time_archived = 0)
+       AND s.project_id = ?
+     ORDER BY p.time_created DESC
+     LIMIT ${limit}`,
+    ...params,
+  )
+    .map(classifyQuestionRow)
+    .filter((question): question is OpenQuestion => question != null)
+}
+
+export function listOpenQuestions(db: SqlDb, projectId: string | null): OpenQuestion[] {
+  return projectId ? queryQuestions(db, "project", projectId) : []
 }
 
 /**
@@ -142,44 +140,10 @@ export function listOpenQuestions(opts: {
  * for a cheap targeted re-read. Foundation for later event-driven invalidation
  * of the "My work" queue.
  */
-export function listSessionQuestions(opts: {
-  dbPath: string
-  sessionId: string
-  projectId: string | null
-}): OpenQuestion[] {
-  if (!opts.dbPath || !opts.sessionId || !opts.projectId || !fs.existsSync(opts.dbPath)) return []
-  return withDbRead(() => {
-    const db = openReadonlyDb(opts.dbPath)
-    if (!db) return []
-    let rows: OpenQuestionRow[] = []
-    try {
-      rows = db.all<OpenQuestionRow>(
-        `SELECT p.id AS id,
-                p.session_id,
-                s.title AS title,
-                p.time_created,
-                json_extract(p.data,'$.state.status') AS status,
-                json_extract(p.data,'$.state.time.start') AS tstart,
-                json_extract(p.data,'$.state.time.end') AS tend,
-                json_extract(p.data,'$.state.error') AS error,
-                json_extract(p.data,'$.state.metadata.interrupted') AS interrupted
-         FROM part p
-         JOIN session s ON s.id = p.session_id
-         WHERE p.session_id = ?
-           AND json_extract(p.data,'$.type') = '${PART_TYPE_TOOL}'
-           AND json_extract(p.data,'$.tool') = '${TOOL_QUESTION}'
-           AND (s.time_archived IS NULL OR s.time_archived = 0)
-           AND s.project_id = ?
-         ORDER BY p.time_created DESC
-         LIMIT 20`,
-        opts.sessionId,
-        opts.projectId,
-      )
-    } catch {
-      return []
-    }
-    return rows
-      .map(classifyQuestionRow)
-      .filter((q): q is OpenQuestion => q != null)
-  }, () => [])
+export function listSessionQuestions(
+  db: SqlDb,
+  sessionId: string,
+  projectId: string | null,
+): OpenQuestion[] {
+  return sessionId && projectId ? queryQuestions(db, "session", projectId, sessionId) : []
 }

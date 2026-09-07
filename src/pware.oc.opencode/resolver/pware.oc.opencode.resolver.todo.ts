@@ -13,14 +13,10 @@ export type TodoRow = {
 }
 
 export function listTodos(db: SqlDb, sessionId: string): TodoRow[] {
-  try {
-    return db.all<TodoRow>(
-      `SELECT content, status, priority, position
-       FROM todo WHERE session_id = ?
-       ORDER BY position ASC LIMIT 40`,
-      sessionId,
-    )
-  } catch {
-    return []
-  }
+  return db.all<TodoRow>(
+    `SELECT content, status, priority, position
+     FROM todo WHERE session_id = ?
+     ORDER BY position ASC LIMIT 40`,
+    sessionId,
+  )
 }

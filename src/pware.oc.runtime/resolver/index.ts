@@ -8,11 +8,12 @@ import { createStampCache } from "../../pware.oc.core/pware.oc.core.cache.js"
 import { gitignoreStamp } from "../../pware.oc.core/git/pware.oc.core.gitignore.js"
 import { oesStamp, getOes } from "../../pware.oc.core/pware.oc.core.oes.js"
 import { dbStamp, getOpenCodeDbPath } from "../../pware.oc.core/pware.oc.core.paths.js"
-import { openReadonlyDb, withDbRead, type SqlDb } from "../../pware.oc.core/pware.oc.core.sqlite.js"
-import { profile } from "../../pware.oc.core/pware.oc.core.debug.js"
+import { profileAsync } from "../../pware.oc.core/pware.oc.core.debug.js"
 import {
+  createDbSnapshotRead,
   emptyDb,
-  readDbSnapshot,
+  listOpenQuestions,
+  listSessionQuestions,
   refreshSessionStatus,
   sessionScanStamp,
   type DbSnapshot,
@@ -20,6 +21,7 @@ import {
   type SessionView,
 } from "../../pware.oc.opencode/resolver/index.js"
 import { createQuestionCache } from "../pware.oc.runtime.questions.js"
+import { readonlyReadGateway } from "../../pware.oc.core/pware.oc.core.sqliteGateway.js"
 import {
   emptyOmo,
   omoStamp,
@@ -60,63 +62,49 @@ export function computeFingerprint(opts: {
   ].join("::")
 }
 
-/**
- * Visible-session-graph stamp: the current session row + its parts + its
- * children + any non-archived main session. Covers everything readDbSnapshot
- * displays, so the live cache only misses when shown data actually changed
- * (sessionScanStamp alone would miss delegate/recent rows).
- */
-function snapshotGraphStamp(db: SqlDb, sessionId: string): { scan: string; graph: string } {
-  const scan = sessionScanStamp(db, sessionId)
-  const kids = db.get<{ m: number }>(
-    `SELECT MAX(time_updated) AS m FROM session WHERE parent_id = ?`,
-    sessionId,
-  )
-  const mains = db.get<{ m: number }>(
-    `SELECT MAX(time_updated) AS m FROM session
-     WHERE parent_id IS NULL AND (time_archived IS NULL OR time_archived = 0)`,
-  )
-  return { scan, graph: `${scan}|${kids?.m ?? 0}|${mains?.m ?? 0}` }
+type RuntimeDbRead = {
+  readonly ok: boolean
+  readonly db: DbSnapshot
+  readonly scanStamp: string
+  readonly questions: readonly OpenQuestion[] | null
+  readonly questionSessionId: string | null
+  readonly fullQuestionScan: boolean
 }
 
-export function readRuntimeSnapshot(opts: {
+export async function readRuntimeSnapshot(opts: {
   sessionId: string
   projectRoot: string | null
   dbPath?: string
   questionHint?: string
-}): RuntimeSnapshot {
+}): Promise<RuntimeSnapshot> {
   const dbPath = opts.dbPath || getOpenCodeDbPath(process.env, undefined, opts.projectRoot)
   const cheap = computeFingerprint({
     dbPath,
     projectRoot: opts.projectRoot,
     sessionId: opts.sessionId,
   })
-  let scan = "0"
-  let graph = "0"
-  if (opts.sessionId) {
-    const stamps = withDbRead(() => {
-      const handle = openReadonlyDb(dbPath)
-      return handle ? snapshotGraphStamp(handle, opts.sessionId) : null
-    }, () => null)
-    if (stamps) {
-      scan = stamps.scan
-      graph = stamps.graph
-    }
-  }
-
-  const cacheId = `${cheap}::${graph}`
-  const hit = liveCache.peek(cacheId)
+  const hit = liveCache.peek(cheap)
   if (hit) {
     const now = Date.now()
     const questionHint = opts.questionHint
     const projectId = hit.db.projectId
     if (questionHint && projectId) {
-      profile("db.questions", () => questionCache.touch(dbPath, projectId, questionHint))
+      const questionRead = await profileAsync("db.questions", () =>
+        readonlyReadGateway.run<{ readonly ok: boolean; readonly questions: OpenQuestion[] }>({
+          dbPath,
+          initial: () => ({ ok: true, questions: [] }),
+          stages: [(db) => ({
+            ok: true,
+            questions: listSessionQuestions(db, questionHint, projectId),
+          })],
+          fallback: () => ({ ok: false, questions: [] }),
+        }),
+      )
+      if (questionRead.ok) questionCache.touch(questionHint, questionRead.questions)
       return {
         ...hit,
         generatedAt: now,
-        fingerprint: cacheId,
-        scanStamp: scan,
+        fingerprint: cheap,
         db: withAges(hit.db, now),
         openQuestions: questionCache.get(),
       }
@@ -124,8 +112,7 @@ export function readRuntimeSnapshot(opts: {
     return {
       ...hit,
       generatedAt: now,
-      fingerprint: cacheId,
-      scanStamp: scan,
+      fingerprint: cheap,
       db: withAges(hit.db, now),
     }
   }
@@ -134,52 +121,109 @@ export function readRuntimeSnapshot(opts: {
   const extraIds = omo.delegates
     .map((d) => d.sessionId)
     .filter((id): id is string => Boolean(id))
-  const db = withDbRead(
-    () =>
-      opts.sessionId
-        ? readDbSnapshot({
-            dbPath,
-            sessionId: opts.sessionId,
-            extraIds,
-            projectRoot: opts.projectRoot,
-          })
-        : emptyDb(dbPath, "no session"),
-    () =>
-      lastGood && lastGood.db.current?.id === opts.sessionId
-        ? lastGood.db
-        : emptyDb(dbPath, "db read failed"),
+  if (!opts.sessionId) {
+    return {
+      generatedAt: Date.now(),
+      fingerprint: cheap,
+      scanStamp: "0",
+      db: emptyDb(dbPath, "no session"),
+      omo,
+      omoConfig: readOmoConfig(),
+      delegates: [],
+      openQuestions: [],
+    }
+  }
+
+  const plan = createDbSnapshotRead({
+    dbPath,
+    sessionId: opts.sessionId,
+    extraIds,
+    projectRoot: opts.projectRoot,
+  })
+  const reconcileQuestions =
+    Date.now() - questionLastReconcile >= getOes(opts.projectRoot).questionReconcileSec * 1000
+  const initial = (): RuntimeDbRead => ({
+    ok: true,
+    db: plan.initial(),
+    scanStamp: "0",
+    questions: null,
+    questionSessionId: opts.questionHint ?? null,
+    fullQuestionScan: false,
+  })
+  const snapshotStages = plan.stages.map((stage) =>
+    (db: Parameters<typeof stage>[0], state: RuntimeDbRead): RuntimeDbRead => ({
+      ...state,
+      db: stage(db, state.db),
+    }))
+  const read = await profileAsync("db.snapshot", () =>
+    readonlyReadGateway.run({
+      dbPath,
+      initial,
+      stages: [
+        ...snapshotStages,
+        (db, state) => ({ ...state, scanStamp: sessionScanStamp(db, opts.sessionId) }),
+        (db, state) => {
+          const projectId = state.db.projectId
+          if (!projectId) return state
+          if (opts.questionHint) {
+            return {
+              ...state,
+              questions: listSessionQuestions(db, opts.questionHint, projectId),
+            }
+          }
+          if (projectId === questionProjectId && !reconcileQuestions) return state
+          return {
+            ...state,
+            questions: listOpenQuestions(db, projectId),
+            fullQuestionScan: true,
+          }
+        },
+      ],
+      fallback: () => ({
+        ok: false,
+        db:
+          lastGood?.db.current?.id === opts.sessionId
+            ? lastGood.db
+            : emptyDb(dbPath, "db read failed"),
+        scanStamp: lastGood?.scanStamp ?? "0",
+        questions: null,
+        questionSessionId: null,
+        fullQuestionScan: false,
+      }),
+    }),
   )
 
-  const projectId = db.projectId
-  const questionHint = opts.questionHint
-  let openQuestions: OpenQuestion[] = []
-  if (projectId) {
-    if (projectId !== questionProjectId) {
-      questionCache.reset()
-      questionProjectId = projectId
-      questionLastReconcile = 0
-    }
-    if (questionHint) {
-      profile("db.questions", () => questionCache.touch(dbPath, projectId, questionHint))
-    } else if (Date.now() - questionLastReconcile >= getOes(opts.projectRoot).questionReconcileSec * 1000) {
-      profile("db.questions", () => questionCache.reconcile(dbPath, projectId))
+  if (!read.ok && lastGood?.db.current?.id === opts.sessionId) {
+    return { ...lastGood, generatedAt: Date.now(), db: withAges(lastGood.db, Date.now()) }
+  }
+
+  const projectId = read.db.projectId
+  if (projectId && projectId !== questionProjectId) {
+    questionCache.reset()
+    questionProjectId = projectId
+    questionLastReconcile = 0
+  }
+  if (read.questions) {
+    if (read.questionSessionId) questionCache.touch(read.questionSessionId, read.questions)
+    else if (read.fullQuestionScan) {
+      questionCache.seed(read.questions)
       questionLastReconcile = Date.now()
     }
-    openQuestions = questionCache.get()
   }
+  const openQuestions = projectId ? questionCache.get() : []
 
   const snap: RuntimeSnapshot = {
     generatedAt: Date.now(),
-    fingerprint: cacheId,
-    scanStamp: scan,
-    db,
+    fingerprint: cheap,
+    scanStamp: read.scanStamp,
+    db: read.db,
     omo,
     omoConfig: readOmoConfig(),
-    delegates: enrichDelegates(omo, db),
+    delegates: enrichDelegates(omo, read.db),
     openQuestions,
   }
   lastGood = snap
-  liveCache.set(cacheId, snap)
+  liveCache.set(cheap, snap)
   return snap
 }
 
