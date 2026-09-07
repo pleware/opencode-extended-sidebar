@@ -175,8 +175,8 @@ Rules:
 
 ### `pware.oc.ui.tsx` — entry
 
-Plugin registration: `id = "opencode-extended-sidebar"`, load toast,
-`sidebar_content` slot (order 320) rendering `<SidebarPanel/>`. Referenced by
+Plugin registration: `id = "opencode-extended-sidebar"`, `sidebar_content`
+slot (order 320) rendering `<SidebarPanel/>`. Referenced by
 `package.json` → `exports: { "./tui": "./src/pware.oc.ui.tsx" }`.
 
 ### `pware.oc.core` — shared infrastructure
@@ -331,7 +331,8 @@ Plugin registration: `id = "opencode-extended-sidebar"`, load toast,
 - `test/snapshot/sidebar.test.ts` — SQLite + `.omo` fixtures through
   `readRuntimeSnapshot` / `delegatesForSession`.
 - `test/bench/scan.test.ts` — 5k-part budgets (fingerprint, snapshot, tools/files, Perf).
-- `test/helpers/` — shared fixtures (`project.ts`, `sqlite.ts`) + `assertPrivacy`.
+- `test/helpers/` — shared fixtures (`project.ts`, `sqlite.ts`) and
+  `privacy.ts` (exports `assertPrivacy`).
 
 `bun test` runs unit + snapshot; `bun run typecheck` is `tsc --noEmit`; `bun run bench`
 runs the scan budgets.
@@ -349,47 +350,7 @@ runs the scan budgets.
 | `scripts/`, `.githooks/` | commit-bump + docs tooling |
 | `test/` | unit / snapshot / bench / helpers |
 
-## Migration (current → target)
+## Migration complete
 
-The current flat `src/` tree maps 1:1 onto the module map. Content moves
-verbatim; the only intended content changes are `SPARK_FRAMES` returning from
-`pware.oc.ui.glyphs.tsx` to `pulse.ts` (removes the core→ui edge) and the
-full-consistency rename of the runtime symbols to `RuntimeSnapshot`,
-`readRuntimeSnapshot`, `resetRuntimeCache`.
-
-| Current | Target |
-|---|---|
-| `tui.tsx` | `pware.oc.ui.tsx` |
-| `cache.ts` | `pware.oc.core/pware.oc.core.cache.ts` |
-| `clipboard.ts` | `pware.oc.core/pware.oc.core.clipboard.ts` |
-| `debug.ts` | `pware.oc.core/pware.oc.core.debug.ts` |
-| `events.ts` | `pware.oc.core/pware.oc.core.events.ts` |
-| `layout.ts` | `pware.oc.core/pware.oc.core.layout.ts` |
-| `oes.ts` | `pware.oc.core/pware.oc.core.oes.ts` |
-| `paths.ts` | `pware.oc.core/pware.oc.core.paths.ts` |
-| `preview.ts` | `pware.oc.core/pware.oc.core.preview.ts` |
-| `pulse.ts` | `pware.oc.core/pware.oc.core.pulse.ts` |
-| `sqlite.ts` | `pware.oc.core/pware.oc.core.sqlite.ts` |
-| `status.ts` | `pware.oc.core/pware.oc.core.status.ts` |
-| `git.ts` | `pware.oc.core/git/pware.oc.core.git.ts` |
-| `gitignore.ts` | `pware.oc.core/git/pware.oc.core.gitignore.ts` |
-| `files.ts` | `pware.oc.opencode/pware.oc.opencode.files.ts` |
-| `monitor.ts` | `pware.oc.runtime/pware.oc.runtime.monitor.ts` |
-| `resolvers/mywork.resolver.ts` | `pware.oc.runtime/pware.oc.runtime.mywork.ts` |
-| `resolvers/live/index.ts` | `pware.oc.runtime/resolver/index.ts` |
-| `resolvers/live/delegate.resolver.ts` | `pware.oc.runtime/resolver/pware.oc.runtime.resolver.delegate.ts` |
-| `resolvers/opencode/index.ts` | `pware.oc.opencode/resolver/index.ts` |
-| `resolvers/opencode/*.resolver.ts` | `pware.oc.opencode/resolver/pware.oc.opencode.resolver.*.ts` |
-| `resolvers/omo/index.ts` | `pware.oc.omo/resolver/index.ts` |
-| `resolvers/omo/approvalState.resolver.ts` | `pware.oc.omo/resolver/pware.oc.omo.resolver.approvalState.ts` |
-| `resolvers/omo/*.resolver.ts` | `pware.oc.omo/resolver/pware.oc.omo.resolver.*.ts` |
-| `perf.ts` | `pware.oc.perf/pware.oc.perf.reader.ts` |
-| `perfview.tsx` | `pware.oc.perf/pware.oc.perf.view.tsx` |
-| `chrome.tsx` | `pware.oc.ui/pware.oc.ui.chrome.tsx` |
-| `sidebar.tsx` | `pware.oc.ui/pware.oc.ui.sidebar.tsx` |
-| `pware.oc.ui.menudialogs.tsx` | `pware.oc.ui/pware.oc.ui.menudialogs.tsx` |
-| `pware.oc.ui.glyphs.tsx` | `pware.oc.ui/pware.oc.ui.glyphs.tsx` |
-| — (new module) | `pware.oc.ui/pware.oc.ui.sections.tsx` — shared primitives (`useFold`, `FoldSection`, `GroupSection`, `TabColumn`) extracted from `sidebar.tsx` + `perfview.tsx`; no flat-tree counterpart |
-
-All relative imports in `src/` and `test/` are updated in the same move
-(`tests-sync`), and `package.json` `exports` repoints at the new entry.
+`src/` is fully namespaced as `pware.oc.*`. The old flat names (`tui.tsx`,
+`cache.ts`, `src/resolvers/`, …) are gone. There is no leftover move plan.

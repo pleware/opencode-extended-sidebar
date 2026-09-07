@@ -1,6 +1,4 @@
-<p align="center">
-  <img src="https://raw.githubusercontent.com/pleware/opencode-extended-sidebar/main/assets/branding.png" alt="OpenCode Extended Sidebar" width="720" />
-</p>
+![OpenCode Extended Sidebar](https://raw.githubusercontent.com/pleware/opencode-extended-sidebar/main/assets/branding.png)
 
 # OpenCode Extended Sidebar | TUI Plugin
 
@@ -8,119 +6,38 @@
 
 Switch sessions, watch tools run live, see which files changed, and where the time went. No browser, no dashboard, four tiny dependencies.
 
-![OpenCode plugin](https://img.shields.io/badge/OpenCode-TUI%20plugin-000?style=flat-square) ![CI](https://github.com/pleware/opencode-extended-sidebar/actions/workflows/ci.yml/badge.svg) [![npm](https://img.shields.io/npm/v/opencode-extended-sidebar)](https://www.npmjs.com/package/opencode-extended-sidebar) [![codecov](https://codecov.io/gh/pleware/opencode-extended-sidebar/branch/main/graph/badge.svg)](https://codecov.io/gh/pleware/opencode-extended-sidebar) ![Runtime deps](https://img.shields.io/badge/runtime%20deps-4-brightgreen?style=flat-square) ![Read only](https://img.shields.io/badge/database-read--only-blue?style=flat-square) ![License](https://img.shields.io/badge/license-MIT-lightgrey?style=flat-square)
+![OpenCode plugin](https://img.shields.io/badge/OpenCode-TUI%20plugin-000?style=flat-square) ![CI](https://github.com/pleware/opencode-extended-sidebar/actions/workflows/ci.yml/badge.svg) ![npm](https://img.shields.io/npm/v/opencode-extended-sidebar) ![codecov](https://codecov.io/gh/pleware/opencode-extended-sidebar/branch/main/graph/badge.svg) ![Runtime deps](https://img.shields.io/badge/runtime%20deps-4-brightgreen?style=flat-square) ![Read only](https://img.shields.io/badge/database-read--only-blue?style=flat-square) ![License](https://img.shields.io/badge/license-MIT-lightgrey?style=flat-square)
 
----
+OpenCode shows one conversation at a time. This panel puts the rest of the work on screen. It reads OpenCode's own database — nothing to sync, no daemon.
 
-## Demo
+## Features
 
-**[ demo recording goes here ]**
 
-*A short GIF showing session switching, live tool activity and file diffs.*
+| Feature             | What you get                                                                              |
+| ------------------- | ----------------------------------------------------------------------------------------- |
+| **My work**         | Questions, recent sessions, and (with OMO) plan queues waiting on you                     |
+| **Sessions**        | Title, age, live mark, `[C]` current. Header `switch` / `new`; palette `nw` / slash `/nw` |
+| **Live pulse**      | State + direction glyphs (working, queued, failed, streaming, waiting)                    |
+| **Tool calls**      | Named rows with duration; click for metadata — never args or output                       |
+| **Files**           | `+N −M` and git letters; Markdown preview; `view all` picker                              |
+| **Delegates**       | Tokens, status, pulse; click to jump                                                      |
+| **Stats**           | Wait / think / stream / tools, plus a tok/s bar and charts popup (`C`)                    |
+| **Privacy**         | Read-only database. No prompts, tool I/O, patches, or absolute paths                      |
+| **Fits the window** | `oes.json` counts are ceilings; lists end in `… +N more`                                  |
 
----
 
-## Why
+Four tabs: **My work** · **Session** · **Project** · **Stats**. Glyphs, colours, and per-row behaviour: [docs/panel.md](docs/panel.md).
 
-OpenCode gives you one conversation at a time. Real work looks different: an orchestrator, delegates, tool calls, and a trail of edited files. Extended Sidebar puts that back on screen. It reads OpenCode's own database — nothing to sync, no daemon. Open the TUI and the panel is there.
 
-## ⇄ Session switcher
+| Tab         | Shows                                                                                                |
+| ----------- | ---------------------------------------------------------------------------------------------------- |
+| **My work** | Open questions, recent sessions (`switch` / `new`), OMO plan queues, `Draft docs` + `Plans` archives |
+| **Session** | This agent, its delegates, tools, files, and (with OMO) drafts it wrote                              |
+| **Project** | Tools and files every recent session touched                                                         |
+| **Stats**   | Timing                                                                                               |
 
-> Recent sessions, one click away, now live in the **My work** tab as the `Sessions` group. Title, age, and whether it is still alive. The current session is tagged `[C]`. The group header keeps two right-rail labels: `switch` opens the host session switcher (the same `/sessions` command) and `new` jumps to the home prompt — the native new-session composer with `/` slash autocomplete, `@` mentions and the agent/model picker; Enter creates the session and sends it. The command palette exposes `nw`, and slash autocomplete exposes `/nw` (alias `/new`); both jump to that same home prompt. Empty sessions that were never prompted are hidden from the list. A trimmed group ends in a clickable `… +N more`. **Project** still rolls up the tools and files from those same recent sessions.
 
-## ⊚ Live activity pulse
-
-> Two glyphs per live row: a **state** glyph first — the braille spinner while working, `•` idle, `⧗` queued, `×` failed — then a **direction** glyph while one is active: **→** while a tool call is in flight, **←** while tokens stream in, **◷** while waiting on the model — blinking about twice a second and coloured by what is happening: green receiving tokens, yellow waiting on the model, accent a tool in flight. Idle rows keep the slot blank so the list stays aligned. Colours come from your OpenCode theme.
-
-## ≡ Tool Calls feed that names things
-
-> Each row is labelled with what actually ran — command, file, pattern, or task — plus how long it took. Running calls tick live; failures show `×`. Click a tool for a metadata sheet (never args or output). **Project** carries the same feed rolled up from the recent sessions. The feed shows the latest `toolRows` (default 5) and ends in a `… +N more` control that reveals the next batch with each click, up to `toolFetch` (default 20) rows of history.
-
-## ± File changes with diff stats
-
-> Files this session touched, with `+N −M` and git letters (`M` `A` `D` `R` `C` `U` `T` `?`). **V** means viewed — a session read with no git status. Click Markdown for a scrollable preview; other files open a native picker — **Preview** or **Copy relative path**. **Project** merges the same list across the recent sessions. A file list's header carries a `view all` action that opens a searchable picker of every file.
->
-> Scratch dirs (`tmp/`, `.tmp/`, `.omo/`) and boilerplate filenames are hidden via the plugin's default `.oesignore`. The project's own `.oesignore` (gitignore format) is honoured automatically when present; set `skipGitignore` to also honour the project's `.gitignore`.
-
-## ⋔ Delegates and sub-agents
-
-> When an orchestrator hands work off, delegates appear as their own rows — tokens, status, pulse, click to jump. **Project** lists the project's boulder. **Session** lists only this session's children.
-
-## ? My work — what is waiting on you
-
-> One queue of things that need **your** action, shown first in the core group. Open `question` tools anywhere in the project appear as rows. Three states: `?` **Awaiting answer** (the agent is live and waiting — click to jump to the session and answer), `⊘` **Interrupted** (the question was aborted — answer never came, the reason shows on a muted line under the session name; once an interrupted question has terminated it is treated as resolved and hidden), and `×` **Errors** (the question tool genuinely failed — collapsed by default, expand for the error text on a muted line under the session name). Interrupted and Errors rows open a picker with **Navigate to session** and **Dismiss** — dismissing hides the row and is remembered for the project. Then a **Sessions** group (`◔`) — every recent session, live or idle, each showing the title, its live status mark and the `[C]` current tag, click to jump straight back in. A `Pinned` group (empty for now) sits ahead of the queue for sessions you pin. OMO plans and drafts appear in six foldable groups — four action queues plus two archives. Click a group header to fold it to its count line, and a trimmed group ends in a clickable `… +N more`: `Ready to review` (`!`, plans genuinely waiting for your sign-off), `Ready to start` (`▶`, approved plans you can launch), `Finished` (`✓`, done plans — an approved plan is auto-reconciled to Finished when its boulder work completed, or the writer session's todos are all done) and `Drafting` (`…` rows, drafts still being written — click for a picker: **Navigate to session** jumps to the session that wrote the draft, **Preview plan file** opens it as a preview) and `Draft docs` (`•` rows — draft files no action queue shows and whose plan file does not exist yet (a draft superseded by a plan of the same name is hidden entirely): approved or done drafts, unknown-status drafts, or notes with no status at all; click opens the file as a preview) and `Plans` (`▸` rows — plan files that no action queue shows: plans with an unknown or absent status). Clicking an archived plan opens the native, searchable picker: **Navigate to session** jumps to the session that wrote the plan (a muted reason is shown when no session is found), **Preview plan file** opens it as a preview, and the three **start work** rows (`start work`, `start work --make-pr`, `start work --ship`) launch the OMO plan in the current session. An archived plan can be started directly, not only previewed, and the archive offers no **Approve**. Rows are names only — no per-row age or session-status clutter; the right rail carries the review state when present. Review-required plans add the ulw-plan review state `R<round> <momus><independent>`, with per-lane glyphs `✓` approved, `!` changes requested, `?` inconclusive, `…` review live, `·` waiting. A session row carries a clickable `P` pin link (placeholder until the pinned backend is wired). When `.omo/` is absent the approval section is simply gone; the question queue works on OpenCode alone.
-
-## ◴ Where the time actually goes
-
-> **Perf** splits the wall clock into wait, think, stream and tools, then ranks models and slow calls. Click a phase, a section title, or a tool row for a dated column log. The scan runs only while this tab is open.
->
-> The top row is the **OES bar**: a braille spinner while a tab loads or a session switch is in flight and `×` on a real error (with the message). When the status is quiet it shows an 8-column block bar plus an integer **tok/s** estimate from streaming deltas (≈ code points ÷ 4 over a 5 s window) — the same live reading the old bar used before the realtime widget. The bar is an inline trend, so it renders at 30% opacity; the number beside it takes full contrast only while tokens are actually moving, and fades with the bar at `0 tok/s`. A **`C`** link on the right opens the **charts** popup: Tok / Cache / Proc / Net category tabs, row selectors, and one 8-row ASCII trend at a time (sized to the dialog, live on the shared timeline); dismiss with **esc** or the header link, same as native OpenCode dialogs. The sidebar itself no longer carries inline category tabs or a braille chart. On a cold start the first line is briefly taken by a one-row `engage` boot line — a braille spinner plus a block fill that completes in about a second — which ends when the first snapshot lands and hands over to the `Loaded. Engage!` success toast. No prompt or output text ever leaves the panel — only the count.
->
-> A muted **self** line above the tab row — `self 0.4ms/ev · 1.2ms/sc · 59fps` — shows what the plugin itself costs: average event-handler ms, average scan (fingerprint + snapshot) ms, and the TUI renderer's FPS. It measures the plugin's own runtime, not the model's. The line is diagnostic: it renders — and its timing runs — only while `OES_DEBUG_OPENCODE` or `OES_DEBUG_PROFILE` is active, so a normal session pays nothing for it. `OES_DEBUG_OPENCODE=1` additionally writes `self`-tagged JSON lines to the debug log.
-
-## ▣ One group, four views
-
-> ```
-> • My work  • Session  • Project  • Stats
-> ```
->
-> **Session** is this agent, its delegates, tools, files and — with OMO — the drafts this session wrote (last five inline behind a `view all` picker). **My work** is the queue of things waiting on you — open questions, the recent sessions list (with `switch`/`new`), OMO plan approvals grouped by the action they need, and the `Draft docs` + `Plans` archives of leftover draft/plan files. **Project** is the project-wide view — the tools and files every recent session touched. **Stats** is timing. Each tab is led by a status light in place of a separator: `Session`, `Project` and `Stats` always show a muted `•`, while the **My work** light turns into `?` / `×` / `!` / `▶` / `⊘` whenever something is waiting on you **right now** — a live open question, a still-open failed question, a plan to review or start, an interrupted question. An *ended* failure is history (the Errors group still lists it once My work is open) and never lights the tab. The scan is project-wide and re-runs whenever the DB snapshot changes (≈1 s) with a 5-second periodic floor, so a freshly asked question lights the tab almost immediately. Tabs and folds are remembered. Clickable labels underline on hover. While a tab waits for its data a transient status row sits at its top — a braille spinner with `switching · <id>` while a session switch is in flight, `loading` on a cold tab, or an error/empty note (`no turns yet` on Stats) — and disappears the moment the data lands, so a switch never reads as a broken panel.
-
-## ⇕ Rows that fit the window
-
-> `oes.json` row counts are ceilings. A short terminal trims live activity last, then Files, then Delegates. Every list ends in a clickable `… +N more`: the Tool Calls feed reveals another `toolRows` per click (up to `toolFetch`); My work groups and Delegates reveal more with each click too. File lists (Files, Drafts) drop the inline revealer for a header `view all` that opens a searchable picker of the full list.
->
-> Row text is clipped to the measured column width (wcwidth), not to code units — a wide glyph (CJK, emoji) is cut off cleanly instead of wrapping the line to a second row.
-
-## ⊘ Privacy first
-
-> The panel never shows prompts, tool arguments, outputs, patch bodies, or absolute paths. The database is opened read-only. What you see is names, counts, statuses and durations.
-
-## ∅ Four dependencies
-
-> Four runtime packages — [`ignore`](https://www.npmjs.com/package/ignore), [`asciichart`](https://www.npmjs.com/package/asciichart), [`simple-statistics`](https://www.npmjs.com/package/simple-statistics), [`@crafter/charts`](https://www.npmjs.com/package/@crafter/charts) — each with zero transitive dependencies. SQLite comes from `bun:sqlite` or `node:sqlite`; everything else is an OpenCode peer you already have.
-
-## Legend
-
-The glyph says *what* is happening; the colour says *how fresh* it is. Both come from your OpenCode theme.
-
-**Glyphs**
-
-| Glyph                           | Meaning                                                       |
-| ------------------------------- | ------------------------------------------------------------- |
-| `⠋ ⠙ ⠹ ⠸ ⠼ …`                   | working — the same braille spinner OpenCode uses for thinking |
-| `◷`                             | waiting on the model (direction glyph — blinks)              |
-| `→`                             | tool in flight (direction glyph — blinks)                     |
-| `←`                             | tokens streaming in (direction glyph — blinks)                |
-| `•`                             | idle — finished or archived                                  |
-| `⧗`                             | queued — waiting for a concurrency slot                       |
-| `▾`                             | group header (`▼` is the section fold)                       |
-| `×`                             | failed                                                        |
-| `?` `⊘` `×` `◔` `!` `…` `•` `▸` `▶` `✓` | My work: awaiting an answer / interrupted / errors / running / ready to review / drafting / draft docs (muted document rows) / plans (muted document rows) / ready to start / finished |
-| `✓` `!` `?` `·`                 | Review lanes: approved / changes requested / inconclusive / waiting |
-| `M` `A` `D` `R` `C` `U` `T` `?` | Files: git status — same letters as `git status --short`      |
-| `V`                             | Files: viewed (session read only)                             |
-| `[C]`                           | Sessions: the current session label                           |
-| `∴`                             | Perf: thinking                                                 |
-| `█░`                            | Perf: share of the wall clock — `@crafter/charts` bar, filled `█` + partial blocks, space-empty |
-| `▁▂▃▄▅▆▇█`                      | Perf: trend line chart — `asciichart`, nulls interpolated |
-
-The working spinner animates on a separate fast glyph tick (80 ms) while rows and ages stay on the coarse 50 ms / 1 s clocks, and a direction glyph fades in and out on the tick cadence, expiring on its own — it stops after ~2 s receiving tokens, ~15 s waiting on the model, ~30 s after a tool call — unless the session is still busy. The state glyph shows `×` on a failed row and `•` on a finished one; the direction slot shows the glyph only while it is active, staying blank otherwise so every row aligns. A queued delegate shows `⧗` in warning yellow — it is waiting for a slot, not done.
-
-**Colours**
-
-| Colour                 | Theme key                   | Meaning                                          |
-| ---------------------- | --------------------------- | ------------------------------------------------ |
-| green                  | `success`                   | receiving tokens, or active within the last 5 s  |
-| yellow                 | `warning`                   | waiting on the model, queued work, or last seen 5–10 s ago |
-| accent                 | `primary`                   | tool in flight — also the current row            |
-| red                    | `error`                     | failed                                           |
-| muted                  | `textMuted`                 | idle, done or archived                           |
-| green `+N` / red `−M`  | `diffAdded` / `diffRemoved` | added and removed lines                          |
-| `A` green / `D` red / `M` yellow | `success` / `error` / `warning` | Files: git-status letter by state; other letters muted |
-| accent `∴`             | `primary`                   | Perf: thinking                                   |
-
-While an arrow is lit it drives the colour. The current session is **bold** and tagged `[C]` in the Sessions list. Clickable labels **underline on hover**. On Perf the same arrows mean measured time: wait, stream, tools.
+OMO (Oh My OpenAgent) is optional. Without `.omo/` the plan groups are gone; questions and sessions still work.
 
 ## Install
 
@@ -139,17 +56,11 @@ Or add the npm name in `~/.config/opencode/tui.json`:
 }
 ```
 
-Restart the OpenCode TUI. OpenCode installs the package from npm and the panel starts reading your existing session history.
-
-For local development, point `plugin` at a `file:///` path to this checkout instead.
+Restart the OpenCode TUI. OpenCode installs the package from npm. For local development, point `plugin` at a `file:///` path to this checkout.
 
 ## Configuration
 
-Later files win:
-
-1. the plugin's own `oes.json` (defaults)
-2. `~/.config/opencode/oes.json` (respects `XDG_CONFIG_HOME`)
-3. `<project>/oes.json`
+Later files win: plugin defaults → `~/.config/opencode/oes.json` → `<project>/oes.json`.
 
 ```json
 {
@@ -158,35 +69,38 @@ Later files win:
   "perfRows": 5,
   "perfTurns": 120,
   "questionReconcileSec": 15,
-  "sessionFetch": 20,
+  "sessionDimHours": 48,
+  "sessionFetch": 10,
+  "sessionVisibleHours": 72,
   "skipGitignore": false,
   "toolRows": 5,
   "toolFetch": 20
 }
 ```
 
-| Key                      | Default                          | What it controls                                      |
-| ------------------------ | -------------------------------- | ----------------------------------------------------- |
-| `fileRows`               | `8`                              | most file rows shown                                  |
-| `perfHistory`            | `3`                              | sessions under Perf → History; `0` hides it          |
-| `perfRows`               | `5`                              | rows per Perf section                                  |
-| `perfTurns`              | `120`                            | recent turns Perf measures                            |
-| `questionReconcileSec`   | `15`                             | seconds between full open-question rescans when no live hint arrives |
-| `sessionFetch`           | `20`                             | recent sessions fetched for the My work `Sessions` group |
-| `skipGitignore`          | `false`                          | also honour the project's root `.gitignore` (`.oesignore` is always honoured) |
-| `toolRows`               | `5`                              | most tool-call rows shown; the `… +N more` control reveals another `toolRows` per click |
-| `toolFetch`              | `20`                             | tool-call history kept behind the `… +N more` revealer; distinct from `toolRows` |
 
-Row counts are ceilings: a short terminal trims below them. Changes apply on the next refresh — no restart.
+| Key                    | Default | What it controls                                    |
+| ---------------------- | ------- | --------------------------------------------------- |
+| `fileRows`             | `8`     | most file rows shown                                |
+| `perfHistory`          | `3`     | sessions under Perf → History; `0` hides it         |
+| `perfRows`             | `5`     | rows per Perf section                               |
+| `perfTurns`            | `120`   | recent turns Perf measures                          |
+| `questionReconcileSec` | `15`    | seconds between full open-question rescans          |
+| `sessionDimHours`      | `48`    | hours after which a still-visible session is dimmed |
+| `sessionFetch`         | `10`    | recent sessions in the My work `Sessions` group     |
+| `sessionVisibleHours`  | `72`    | hours a session stays visible after its last update |
+| `skipGitignore`        | `false` | also honour the project's root `.gitignore`         |
+| `toolRows`             | `5`     | most tool-call rows shown                           |
+| `toolFetch`            | `20`    | tool-call history behind `… +N more`                |
 
-Ignored files come from `.oesignore` and, when enabled, `.gitignore` — both at the project root, both in gitignore format. The plugin ships a default `.oesignore`.
+
+Row counts are ceilings. Changes apply on the next refresh. Hidden files come from `.oesignore` (always) and, when enabled, `.gitignore`.
 
 ## Debug
 
-Set `OES_DEBUG_OPENCODE` in the environment **before** starting OpenCode, then restart the TUI. While either logger is active the sidebar shows the muted `self` cost line with a yellow flag row above it — `debug mode` and/or `profile` — plus a second muted row that prints the **resolved log directory** (`logs <path>`) so you can see exactly where files are being written. Below everything the panel then also draws a read-only **debug console**: short event labels (`db open`, …) newest first, only 5 visible rows over a 200-line in-memory ring that wheel-scrolls to older events. The console is fed only while a logger is on — with no logger active the `self` line, its measurement, and the console are off entirely.
+Set the variable **before** starting OpenCode, then restart the TUI.
 
 ```bash
-# writes to <plugin>/logs/oes-debug-YYYY-MM-DD.log
 OES_DEBUG_OPENCODE=1 opencode
 ```
 
@@ -195,24 +109,29 @@ $env:OES_DEBUG_OPENCODE = "1"
 opencode
 ```
 
-`1`, `true`, `yes`, or `on` use the plugin's `logs/` directory. Any other non-empty value is treated as a directory path. `0`, `false`, `no`, or `off` turns it off. Lines are JSON (`ts`, `tag`, `msg`, optional `data`) — path resolution, monitor emits, Perf reads, and the `self` tag logs the plugin's own measured latencies. Logging never crashes the panel.
 
-SQLite reads fail fast: `busy_timeout` is 100 ms, so a transient WAL lock no longer freezes the panel — the previous snapshot is kept on screen and a `sql.busy` debug line (with the SQL in `data.q`) is appended so lock contention is visible in the log.
+| Variable             | Role                                                                                                                                               |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `OES_DEBUG_OPENCODE` | `1` / `true` / `yes` / `on` writes to the plugin `logs/` directory. Any other non-empty value is a path. `0` / `false` / `no` / `off` turns it off |
+| `OES_DEBUG_PROFILE`  | Times plugin entry points; writes `oes-profile-YYYY-MM-DD.log`                                                                                     |
 
-The same semantics power `OES_DEBUG_PROFILE`, which times **every plugin entry point and hotspot** and writes one line per call to `<plugin>/logs/oes-profile-YYYY-MM-DD.log`: `{ ts, tag, ms, data? }`. In this local repo checkout, `<plugin>/logs` means `./logs` at the repository root (not `./src/logs`). Tags: `event` (per event type), `tick`, `render` (the re-render trigger), `requestRender`, `row` (per row built), `scan`, `monitor.emit` (fingerprint + snapshot), `db.snapshot` / `db.feed` / `db.questions` / `perf.read`, `sql` (every query, with its SQL in `data.q`), `omo.read` / `omo.stamp` / `omo.config` / `omo.approvals` / `omo.docs`, `mywork.approvals` (the per-approval session lookup), `files.decorate` (git marks), `git`, `remount`, `hydrate`, and the async host calls `rpc.diff` / `rpc.selectSession` / `rpc.startWork` / `rpc.approve`. When the panel unmounts, one `summary` line with per-tag `{ n, total, avg, max }` is appended — the whole wall-clock split in a single line.
+
+While a logger is on, the sidebar shows a `self` cost line and a short debug console. Logging never crashes the panel.
 
 ## How it works
 
-The panel is a read-only view of data OpenCode already stores.
+A read-only view of data OpenCode already stores.
 
-| Source          | Path                                                          | Used for                         |
-| --------------- | ------------------------------------------------------------- | -------------------------------- |
-| OpenCode SQLite | `~/.local/share/opencode/opencode.db` (or `OPENCODE_DB`) | sessions, tools, files, timings  |
+
+| Source          | Path                                                         | Used for                            |
+| --------------- | ------------------------------------------------------------ | ----------------------------------- |
+| OpenCode SQLite | `~/.local/share/opencode/opencode.db` (or `OPENCODE_DB`)     | sessions, tools, files, timings     |
 | OMO             | `<project>/.omo/`                                            | plan approvals (My work) — optional |
-| `oes.json`      | plugin / user config / project                                 | display limits                    |
-| ignore files    | `<project>/.oesignore` (always) · `.gitignore` (with `skipGitignore`) | files hidden from the panel     |
+| `oes.json`      | plugin / user config / project                               | display limits                      |
+| ignore files    | `<project>/.oesignore` · `.gitignore` (with `skipGitignore`) | files hidden from the panel         |
 
-It refreshes from database stamps, file watches, and OpenCode events. The always-on runtime snapshot is read off the TUI main thread in a Bun worker (with a synchronous fallback if the worker is unavailable), so SQLite reads never block the UI. Cost is shown only when the provider reports it. The `self` line measures the plugin's own runtime with `performance.now()` and the TUI renderer's native frame stats — no extra data source — and it runs only while a debug or profile logger is active.
+
+Runtime snapshot runs in a Bun worker so SQLite reads do not block the UI. Four runtime packages — `[ignore](https://www.npmjs.com/package/ignore)`, `[asciichart](https://www.npmjs.com/package/asciichart)`, `[simple-statistics](https://www.npmjs.com/package/simple-statistics)`, `[@crafter/charts](https://www.npmjs.com/package/@crafter/charts)` — each with zero transitive dependencies. Everything else is an OpenCode peer.
 
 ## Contributing
 
@@ -220,16 +139,12 @@ Issues and pull requests are welcome. Constraints: read-only OpenCode data, no p
 
 Every commit patch-bumps `package.json` and prepends one English sentence to [CHANGELOG.md](CHANGELOG.md). Write that sentence as the first line of the commit message. A green CI run on `main` publishes that version to npm.
 
-`bun test` runs unit and fixture tests. `bun run typecheck` checks types with `tsc --noEmit`. `bun run bench` times the 5k-part scan.
+`bun test` runs unit and fixture tests. `bun run typecheck` checks types. `bun run bench` times the 5k-part scan.
 
 ## License
 
-MIT. Copyright © 2026 [pleware](https://github.com/pleware).
-
-<p>
-  <a href="https://github.com/pleware"><img src="https://raw.githubusercontent.com/pleware/opencode-extended-sidebar/main/assets/branding.pware.png" alt="pware" width="72" /></a>
-</p>
+MIT. Copyright © 2026 [pleware](https://github.com/pleware) | pware.ai
 
 ## Acknowledgements
 
-This plugin started as a TUI take on the same idea as [Phrouros](https://github.com/disaeye/phrouros) — a live view of OpenCode agents, delegates and session activity, only inside the sidebar instead of a browser. Thank you to [disaeye](https://github.com/disaeye) for Phrouros.
+This plugin started as a TUI take on the same idea as [Phrouros](https://github.com/disaeye/phrouros). Thank you to [disaeye](https://github.com/disaeye).

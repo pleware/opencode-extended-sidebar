@@ -88,9 +88,10 @@ Recent sessions live in **My work** as the `Sessions` group.
 | Open `question` tools anywhere in the project appear as rows |
 | Three states: `?` **Awaiting answer**, `⊘` **Interrupted**, `×` **Errors** |
 | Interrupted and Errors rows open a picker: **Navigate to session** / **Dismiss** |
+| Dismissed questions have their own group |
 | `Sessions` group (`◔`) — every recent session, live or idle |
 | Sessions idle 48–72 hours render dimmed; past 72 hours they are hidden |
-| `Pinned` sits ahead of the queue — `P` pins a session up, `U` sends it back |
+| `Pinned` sits ahead of the queue — `P` pins a session up, `U` sends it back. Pins live in kv `oes.config`, not `oes.json` |
 | OMO groups: `Ready to review`, `Ready to start`, `Finished`, `Drafting`, `Draft docs`, `Plans` |
 | When `.omo/` is absent the approval section is gone; the question queue works on OpenCode alone |
 
@@ -189,7 +190,8 @@ Later files win:
 | `toolRows` | `5` | most tool-call rows shown |
 | `toolFetch` | `20` | tool-call history behind `… +N more` |
 
-Row counts are ceilings. Changes apply on the next refresh — no restart.
+Row counts are ceilings. Numeric `oes.json` values are clamped (for example
+`fileRows` is 3–20). Changes apply on the next refresh — no restart.
 
 ## Debug
 

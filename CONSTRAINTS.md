@@ -1,6 +1,6 @@
 # Constraints
 
-Last reviewed: 2026-09-04 by pawel@pware.ai
+Last reviewed: 2026-09-07 by pawel@pware.ai
 
 Quality bar for `opencode-extended-sidebar`. Read this file before writing
 code. Do not weaken it to make a change pass.
@@ -30,15 +30,15 @@ Coverage is measured on the `coverage/lcov.info` that `bun test --coverage
 monitor/source/worker glue). The upload uses Codecov OIDC
 (`use_oidc: true` in `.github/workflows/ci.yml`) — no repository secret.
 
-## Measured, en route to the bar
+## Measured against the bar
 
 | Metric | Today | Bar | Direction |
 |--------|-------|-----|-----------|
-| Project coverage | 86.29% | 95% | must rise |
+| Project coverage | 99.57% | 95% | hold (do not drop) |
 
-The gate is already set to the bar: the Codecov project status will report
-failure until project coverage reaches 95%. Closing the ~9-point gap is
-working coverage, not a reason to lower the bar.
+Local `bun test --coverage` (after `bunfig.toml` ignores) measured 99.57%
+lines on 2026-09-07. The Codecov project gate stays at 95%. Surplus above
+the bar is not a reason to lower it.
 
 ## Exceptions
 

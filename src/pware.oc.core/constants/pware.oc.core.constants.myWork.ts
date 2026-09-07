@@ -8,8 +8,8 @@
  */
 
 /**
- * My work group: sessions the user pinned to the top of the queue. Empty for
- * now — the pin affordance is a placeholder until the backend is wired.
+ * My work group: sessions the user pinned to the top of the queue (`P` / `U`).
+ * Pins persist in kv `oes.config` via `pinSession` / `unpinSession`.
  */
 export const MY_WORK_GROUP_PINNED = "pinned"
 
