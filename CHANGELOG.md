@@ -1,5 +1,6 @@
 # Changelog
 
+- **0.2.90** (2026-09-07) Publish the sidebar to npm so OpenCode can install it by package name.
 - **0.2.89** (2026-09-07) Rewrite the panel reference as per-feature tables so each sidebar capability is one scannable row.
 - **0.2.88** (2026-09-05) Offer start work from the Plans archive picker so an archived plan can be launched directly and the archive drops Approve.
 - **0.2.87** (2026-09-05) Reconcile a plan with no parseable status against its boulder work so a completed plan lands in Finished instead of the Plans archive.

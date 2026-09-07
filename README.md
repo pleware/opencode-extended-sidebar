@@ -8,7 +8,7 @@
 
 Switch sessions, watch tools run live, see which files changed, and where the time went. No browser, no dashboard, four tiny dependencies.
 
-![OpenCode plugin](https://img.shields.io/badge/OpenCode-TUI%20plugin-000?style=flat-square) ![CI](https://github.com/pleware/opencode-extended-sidebar/actions/workflows/ci.yml/badge.svg) [![codecov](https://codecov.io/gh/pleware/opencode-extended-sidebar/branch/main/graph/badge.svg)](https://codecov.io/gh/pleware/opencode-extended-sidebar) ![Runtime deps](https://img.shields.io/badge/runtime%20deps-4-brightgreen?style=flat-square) ![Read only](https://img.shields.io/badge/database-read--only-blue?style=flat-square) ![License](https://img.shields.io/badge/license-MIT-lightgrey?style=flat-square)
+![OpenCode plugin](https://img.shields.io/badge/OpenCode-TUI%20plugin-000?style=flat-square) ![CI](https://github.com/pleware/opencode-extended-sidebar/actions/workflows/ci.yml/badge.svg) [![npm](https://img.shields.io/npm/v/opencode-extended-sidebar)](https://www.npmjs.com/package/opencode-extended-sidebar) [![codecov](https://codecov.io/gh/pleware/opencode-extended-sidebar/branch/main/graph/badge.svg)](https://codecov.io/gh/pleware/opencode-extended-sidebar) ![Runtime deps](https://img.shields.io/badge/runtime%20deps-4-brightgreen?style=flat-square) ![Read only](https://img.shields.io/badge/database-read--only-blue?style=flat-square) ![License](https://img.shields.io/badge/license-MIT-lightgrey?style=flat-square)
 
 ---
 
@@ -124,18 +124,24 @@ While an arrow is lit it drives the colour. The current session is **bold** and 
 
 ## Install
 
-Add the plugin to `~/.config/opencode/tui.json`:
+This is a TUI plugin. It belongs in `tui.json`, not `opencode.json`.
+
+```sh
+opencode plugin opencode-extended-sidebar --global
+```
+
+Or add the npm name in `~/.config/opencode/tui.json`:
 
 ```json
 {
   "$schema": "https://opencode.ai/tui.json",
-  "plugin": ["file:///path/to/opencode-extended-sidebar"]
+  "plugin": ["opencode-extended-sidebar"]
 }
 ```
 
-Restart the OpenCode TUI. The panel appears in the sidebar and starts reading your existing session history.
+Restart the OpenCode TUI. OpenCode installs the package from npm and the panel starts reading your existing session history.
 
-> **Note:** TUI plugins are loaded from `tui.json`, not from a project's `opencode.json`.
+For local development, point `plugin` at a `file:///` path to this checkout instead.
 
 ## Configuration
 
@@ -212,7 +218,7 @@ It refreshes from database stamps, file watches, and OpenCode events. The always
 
 Issues and pull requests are welcome. Constraints: read-only OpenCode data, no prompts or tool I/O in the UI, every row must survive a narrow terminal.
 
-Every commit patch-bumps `package.json` and prepends one English sentence to [CHANGELOG.md](CHANGELOG.md). Write that sentence as the first line of the commit message.
+Every commit patch-bumps `package.json` and prepends one English sentence to [CHANGELOG.md](CHANGELOG.md). Write that sentence as the first line of the commit message. A green CI run on `main` publishes that version to npm.
 
 `bun test` runs unit and fixture tests. `bun run typecheck` checks types with `tsc --noEmit`. `bun run bench` times the 5k-part scan.
 
