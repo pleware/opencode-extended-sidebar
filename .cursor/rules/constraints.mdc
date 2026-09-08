@@ -1,3 +1,8 @@
+---
+description: Read CONSTRAINTS.md before code; never weaken the quality bar to pass
+alwaysApply: true
+---
+
 # Constraints gate
 
 `CONSTRAINTS.md` at the repo root is the quality bar: the floor plus the
