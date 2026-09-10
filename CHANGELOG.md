@@ -1,5 +1,6 @@
 # Changelog
 
+- **0.2.98** (2026-09-10) Rename generated rules to agentize.auto.generated.*; stop committing them (per-instance).
 - **0.2.97** (2026-09-10) Plant the shared cascade/ rules.
 - **0.2.96** (2026-09-10) Reduce architecture.mdc to a pointer; ARCHITECTURE.md stays the single source.
 - **0.2.95** (2026-09-10) Promote universal rules into cascade/ (dry, tests, open-source, ci-logs, chat-style, docs-layout, drafts).
