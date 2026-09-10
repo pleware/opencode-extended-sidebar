@@ -1,0 +1,28 @@
+---
+description: Read `mani.yaml` for sibling roles, contracts, and clone flags; servers live in `sake.yaml`
+alwaysApply: true
+---
+
+# Workspace manifest (`mani.yaml`)
+
+The `mani.yaml` at a workspace root is the canonical registry of that
+workspace's siblings. At the environment root it lists workspace folders only;
+each workspace's own `mani.yaml` lists its products. Servers and hosts are not
+registry rows — they live in that workspace's `sake.yaml`.
+
+Ignite bootstrap and the mani CLI (`list` / `exec`) both consume this file.
+
+- **`desc`** — why the sibling exists. Read it before exploring the tree.
+- **`sync`** — whether to clone/junction the sibling. `sync: true` clones it;
+  the `required` tag makes a clone failure fail the bootstrap. Until a product
+  is actively cloned, leave it `sync: false`.
+- **`contracts`** — producer → consumer. Editing a producer means coordinating
+  its consumers; deploy groups are producer-first.
+- **`sync_gitignore: false`** — never let `mani sync` rewrite a whitelist
+  `.gitignore`.
+- Extra keys (`role`, `toolchain_root`, `visibility`, `deploy`, `legacy_path`,
+  `notes`) are for ignite and agents — the mani CLI ignores unknown fields.
+
+- Do not recreate `.settings.shared.yaml`.
+- A new sibling folder requires a `mani.yaml` entry in the same turn, committed
+  to the repository that owns the manifest.

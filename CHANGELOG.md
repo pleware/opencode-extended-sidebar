@@ -1,5 +1,6 @@
 # Changelog
 
+- **0.2.97** (2026-09-10) Plant the shared cascade/ rules.
 - **0.2.96** (2026-09-10) Reduce architecture.mdc to a pointer; ARCHITECTURE.md stays the single source.
 - **0.2.95** (2026-09-10) Promote universal rules into cascade/ (dry, tests, open-source, ci-logs, chat-style, docs-layout, drafts).
 - **0.2.94** (2026-09-10) Unify shared rules into the cascade/ source.

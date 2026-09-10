@@ -1,0 +1,20 @@
+---
+description: Commit each change to the repo that owns it; the owning `mani.yaml` lists the remotes
+alwaysApply: true
+---
+
+# Where to commit
+
+The `mani.yaml` at the workspace root is the registry: every repository is a
+`projects[]` row with a `path` and a `url`. A file under a `path` belongs to
+that row's `url`; the row with `path: .` is the workspace itself. Servers and
+hosts are not repositories — they live in `sake.yaml`.
+
+- Route each change to the repository that owns the file, before commit or push.
+- Enter the owning tree before `git add` / `git commit`. Do not stage a sibling
+  from another root.
+- One commit cannot span two remotes: two changes to two repos → two commits.
+- MassTrade products stay on Bitbucket; pware products stay on GitHub. Do not
+  move a repository across hosts.
+- Do not duplicate this mapping in a rule or doc — `mani.yaml` is the single
+  source of truth for where each repository lives.
