@@ -72,4 +72,7 @@ opencode.json
 .devtools.*.yaml
 /scripts/development/
 graphify-out/
-.cursor/rules/auto.mt.*
+.cursor/rules/agentize.auto.generated.mt.*
+
+# agentize-generated rules: per-instance, never commit.
+.cursor/rules/agentize.auto.generated*
