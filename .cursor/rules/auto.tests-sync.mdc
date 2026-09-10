@@ -1,0 +1,19 @@
+---
+description: Run tests in the owning workspace, not at a registry root
+alwaysApply: true
+---
+
+# Tests live in the owning sibling
+
+A registry root has no product test suite. After a behavior change, test
+inside the workspace that owns the code.
+
+| Area | Gate |
+| --- | --- |
+| `masstrade-ops/tofu/` | `tofu validate` / `tofu plan` only when the remote URL is set; never apply as a "test" |
+| MassTrade PHP | that product's PHPUnit / PHPStan — see the MassTrade `AGENTS.md` |
+| OpenCode sidebar | that repo's npm/bun tests |
+| Registry-only docs/rules | no test run |
+
+Skip tests only for docs, comments, or formatting. Do not invent a new
+analyzer gate at a registry root until a kit exists.

@@ -1,0 +1,23 @@
+---
+description: Check CI in the owning remote; read the failed logs before calling it done
+alwaysApply: true
+---
+
+# CI belongs to the sibling remote
+
+After you change CI in a sibling, wait for that remote's run — do not assume
+green from a local smoke test.
+
+| Change | Where to look |
+| --- | --- |
+| MassTrade Bitbucket Pipelines | the Bitbucket repo named in the MassTrade `mani.yaml` |
+| pware GitHub Actions | that product's `.github/workflows/` (`gh` from that clone) |
+
+```sh
+gh run list --limit 5
+gh run view <run-id> --log-failed
+```
+
+Do not mark pipeline work done without reading the failed logs. Do not
+weaken a workflow to get green. Do not add GitHub Actions for MassTrade —
+MassTrade stays on Bitbucket.

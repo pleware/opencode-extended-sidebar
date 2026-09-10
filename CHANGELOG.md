@@ -1,5 +1,6 @@
 # Changelog
 
+- **0.2.95** (2026-09-10) Promote universal rules into cascade/ (dry, tests, open-source, ci-logs, chat-style, docs-layout, drafts).
 - **0.2.94** (2026-09-10) Unify shared rules into the cascade/ source.
 - **0.2.93** (2026-09-10) Plant the generated leave-alone Cursor rule.
 - **0.2.92** (2026-09-08) rules: add missing frontmatter to constraints gate.

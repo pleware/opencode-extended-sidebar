@@ -1,0 +1,39 @@
+---
+description: Products keep README+LICENSE+CHANGELOG plus an optional AGENTS.md pointer; workspaces hold the rest
+alwaysApply: true
+---
+
+# Markdown: product vs workspace vs binder
+
+Workspaces are **always private**. That is where the extra Markdown lives.
+
+| Remote | Commit these Markdown files |
+| --- | --- |
+| **Product** (public or private) | `README.md`, `LICENSE` (or `LICENSE.md`), `CHANGELOG.md`, optional short `AGENTS.md` pointer |
+| **Workspace** | the full tree below |
+| **Binder** | `README.md`, `AGENTS.md`, `docs/` (cross-company only). No drafts. No `vendor/`. |
+
+A product may ship a short `AGENTS.md` agent-contract pointer (to
+`CONSTRAINTS.md` and the parent workspace's `drafts/` and `docs/`). Do not
+put `backlog.md`, `drafts/`, or `docs/` in a product git — `gitignore`
+those paths. A leftover file is scratch — move it up in the same turn.
+
+## Workspace tree (same names everywhere)
+
+| Path | Role |
+| --- | --- |
+| `README.md` | workspace face |
+| `LICENSE` | licence; omit if none |
+| `CHANGELOG.md` | hook owns it |
+| `AGENTS.md` | agent contract |
+| `backlog.md` | queue |
+| `readme.start.md` | install notes |
+| `drafts/00.DRAFT.INDEX.md` | index |
+| `drafts/NN.DRAFT.*.md` | one topic |
+| `drafts/99.NEEDS-ATTENTION.md` | status index |
+| `docs/*.md` | settled; `SCREAMING-KEBAB.md` |
+
+Product contracts live in the company workspace (`docs/STOREFRONT-PLAN.md`,
+…). Do not invent `README.*.md` or `plan.md` at any root. Brand mark
+filenames are fixed and documented in the owning `docs/BRAND-MARKS.md`; do
+not put `masstrade_` or `pleware_` in a filename.
