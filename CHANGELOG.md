@@ -1,5 +1,6 @@
 # Changelog
 
+- **0.2.94** (2026-09-10) Unify shared rules into the cascade/ source.
 - **0.2.93** (2026-09-10) Plant the generated leave-alone Cursor rule.
 - **0.2.92** (2026-09-08) rules: add missing frontmatter to constraints gate.
 - **0.2.91** (2026-09-07) Align architecture, constraints, and panel docs with the namespaced tree and measured coverage.
