@@ -1,44 +1,16 @@
 ---
-description: ARCHITECTURE.md is the canonical module map — every new, moved, or renamed module must follow it
+description: ARCHITECTURE.md is the canonical module map — follow it and keep it in sync
 alwaysApply: true
 ---
 
 # Code follows ARCHITECTURE.md
 
-`ARCHITECTURE.md` at the repo root is the single source of truth for the project structure: the module map, the layer rules, and the migration table. A file that does not fit one of the modules in the map is misplaced — extend the map first.
+`ARCHITECTURE.md` at the repo root is the single source of truth for the
+project structure: the module map, the layer rules, and the migration table.
 
-## Where things live
-
-- The module map in `ARCHITECTURE.md` decides placement and naming. Every module file carries the full dotted prefix (`pware.oc.<layer>.<name>`); barrels are `index.ts`.
-- A new module goes into the layer the map says. A moved or renamed module changes its name and imports in the same turn.
-- `test/` mirrors `src/` one file per module.
-
-## Layer rules
-
-| Layer | May import |
-| --- | --- |
-| `pware.oc.ui` | anything below |
-| `pware.oc.perf` | core + ui (view) |
-| `pware.oc.runtime` | opencode, omo, core |
-| `pware.oc.opencode` | core |
-| `pware.oc.omo` | opencode, core |
-| `pware.oc.core` | nothing |
-
-- `core` never imports a domain or the UI.
-- OpenCode is the required host: `opencode` owns generic SQLite reads and host events.
-- OMO is an optional OpenCode plugin integration: `omo` owns OMO-specific artifacts and may read `opencode` data to correlate them with host sessions, parts, todos, or events.
-- The dependency is one-way: `opencode` never imports OMO or interprets `.omo/` / `.sisyphus/` artifacts.
-- `runtime` composes the always-present OpenCode snapshot with optional OMO-aware capabilities.
-- Keep the import graph acyclic. A file that needs a dependency from a higher layer moves up a layer instead of importing down.
-
-## Keep the map honest
-
-- After any `src/` move, rename, or new module, update `ARCHITECTURE.md` in the same turn.
-- After a public export documented in the map is renamed, update the map's "Key exports".
-
-## Do not
-
-- Create a file that does not fit the module map — extend the map first.
-- Duplicate the module map in another doc (README, backlog) — `ARCHITECTURE.md` is the one.
-- Import upward: a `pware.oc.core` file importing `pware.oc.ui` or a domain is a bug.
-- Duplicate the "update docs in the same turn" rule — that is `docs-sync.mdc`.
+- Place every module where the map says; extend the map first if a file does
+  not fit.
+- Update `ARCHITECTURE.md` in the same turn as any `src/` move, rename, or new
+  module, and after a renamed public export.
+- Do not duplicate the module map or layer rules in README, backlog, or other
+  rules — `ARCHITECTURE.md` is the one.
