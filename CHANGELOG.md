@@ -1,5 +1,6 @@
 # Changelog
 
+- **0.2.93** (2026-09-10) Plant the generated leave-alone Cursor rule.
 - **0.2.92** (2026-09-08) rules: add missing frontmatter to constraints gate.
 - **0.2.91** (2026-09-07) Align architecture, constraints, and panel docs with the namespaced tree and measured coverage.
 - **0.2.90** (2026-09-07) Publish the sidebar to npm so OpenCode can install it by package name.
