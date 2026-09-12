@@ -1,5 +1,6 @@
 # Changelog
 
+- **0.2.100** (2026-09-12) Ignore agentize-generated rules and skills (agentize.auto.generated*).
 - **0.2.99** (2026-09-10) Point stale auto.mt.* gitignore at agentize.auto.generated.mt.*.
 - **0.2.98** (2026-09-10) Rename generated rules to agentize.auto.generated.*; stop committing them (per-instance).
 - **0.2.97** (2026-09-10) Plant the shared cascade/ rules.
